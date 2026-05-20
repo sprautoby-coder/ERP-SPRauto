@@ -1,0 +1,582 @@
+<script>
+var App = {
+  currentPage: 'dashboard',
+  brand: null,
+  config: null,
+  employees: [],
+  settings: {},
+  pendingLogoDataUrl: null,
+  _theme: localStorage.getItem('sprauto-theme') || 'dark',
+  _toastTimer: null,
+  _editingId: null,
+  _editingIdx: null
+};
+
+document.body.setAttribute('data-theme', App._theme);
+
+/* ===== ТЕМА ===== */
+function toggleTheme() {
+  App._theme = App._theme === 'dark' ? 'light' : 'dark';
+  document.body.setAttribute('data-theme', App._theme);
+  localStorage.setItem('sprauto-theme', App._theme);
+  var lbl = document.getElementById('theme-label');
+  if (lbl) lbl.textContent = App._theme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
+}
+
+/* ===== НАВИГАЦИЯ ===== */
+var PAGE_TITLES = {
+  dashboard:'Дашборд', orders:'Заказы', clients:'Клиенты',
+  finance:'Финансы', expenses:'Расходы', team:'Сотрудники',
+  services:'Услуги', inventory:'Склад', settings:'Настройки'
+};
+
+function goPage(name) {
+  App.currentPage = name;
+  document.querySelectorAll('.page').forEach(function(el){ el.classList.remove('active'); });
+  var t = document.getElementById('page-' + name);
+  if (t) t.classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(function(el){
+    el.classList.toggle('active', el.dataset.page === name);
+  });
+  var h = document.getElementById('topbar-title');
+  if (h) h.textContent = PAGE_TITLES[name] || name;
+  window.scrollTo(0,0);
+  loadCurrentPage();
+}
+
+document.querySelectorAll('.nav-item').forEach(function(el){
+  el.addEventListener('click', function(e){ e.preventDefault(); goPage(el.dataset.page); });
+});
+
+/* ===== СИНХРОНИЗАЦИЯ ===== */
+function refreshSync() {
+  var n = new Date();
+  var p = function(x){ return String(x).padStart(2,'0'); };
+  var el = document.getElementById('sync-time');
+  if (el) el.textContent = 'Обновлено: '+p(n.getDate())+'.'+p(n.getMonth()+1)+' '+p(n.getHours())+':'+p(n.getMinutes());
+}
+
+/* ===== ТОСТ ===== */
+function toast(msg, type) {
+  var t = document.getElementById('toast');
+  if (!t) return;
+  t.textContent = msg;
+  t.className = 'toast show ' + (type || '');
+  clearTimeout(App._toastTimer);
+  App._toastTimer = setTimeout(function(){ t.classList.remove('show'); }, 3500);
+}
+
+/* ===== МОДАЛКИ ===== */
+function openModal(id) {
+  var el = document.getElementById(id);
+  if (el){ el.classList.add('open'); document.body.style.overflow = 'hidden'; }
+}
+function closeModal(id) {
+  var el = document.getElementById(id);
+  if (el){ el.classList.remove('open'); document.body.style.overflow = ''; }
+}
+function closeModalOnOverlay(e) {
+  if (e.target === e.currentTarget) closeModal(e.currentTarget.id);
+}
+
+/* ===== БРЕНД ===== */
+function applyBrand(brand) {
+  if (!brand) return;
+  App.brand = brand;
+  var logo = document.getElementById('brand-logo');
+  if (logo && brand.logoDataUrl) logo.src = brand.logoDataUrl;
+  var nm = document.getElementById('brand-name');
+  if (nm) nm.textContent = brand.companyName || 'SPRauto';
+  var sl = document.getElementById('brand-slogan');
+  if (sl) sl.textContent = brand.companySlogan || 'Детейлинг';
+  if (brand.accentColor) {
+    document.documentElement.style.setProperty('--accent', brand.accentColor);
+    document.documentElement.style.setProperty('--accent-soft', brand.accentColor + '20');
+    document.documentElement.style.setProperty('--accent-glow', brand.accentColor + '45');
+  }
+  document.title = (brand.companyName || 'SPRauto') + ' ERP';
+}
+
+/* ===== ЗАПОЛНЕНИЕ ДОЛЖНОСТЕЙ ===== */
+function fillPositions(positions) {
+  // Заполняем ОБА селекта — для добавления и для редактирования
+  var selIds = ['emp-position', 'edit-emp-position'];
+  selIds.forEach(function(selId) {
+    var sel = document.getElementById(selId);
+    if (!sel || !positions) return;
+    var current = sel.value; // запомним текущее значение
+    sel.innerHTML = '<option value="">— Выбери должность —</option>';
+    positions.forEach(function(p){
+      var o = document.createElement('option');
+      o.value = p; o.textContent = p;
+      sel.appendChild(o);
+    });
+    if (current) sel.value = current; // восстанавливаем
+  });
+}
+
+/* ===== ЗАГРУЗКА СТРАНИЦ ===== */
+function loadCurrentPage() {
+  refreshSync();
+  if (App.currentPage === 'dashboard') renderDashboard();
+  if (App.currentPage === 'team') loadTeam();
+  if (App.currentPage === 'settings') loadSettings();
+}
+
+/* ===== ДАШБОРД ===== */
+function renderDashboard() {
+  var grid = document.getElementById('dash-kpi');
+  if (!grid) return;
+  var c = App.employees ? App.employees.length : 0;
+  grid.innerHTML =
+    kpi('👥 Сотрудников', c, 'активных') +
+    kpi('📋 Заказов', '—', 'след. этап') +
+    kpi('💰 Выручка', '—', 'след. этап') +
+    kpi('🧾 Дебиторка', '—', 'след. этап');
+}
+
+function kpi(label, value, sub) {
+  return '<div class="kpi-card">' +
+    '<div class="kpi-label">'+label+'</div>' +
+    '<div class="kpi-value">'+value+'</div>' +
+    '<div class="kpi-sub">'+sub+'</div>' +
+    '</div>';
+}
+
+/* ===== СОТРУДНИКИ: ЗАГРУЗКА ===== */
+function loadTeam() {
+  var grid = document.getElementById('team-grid');
+  var err = document.getElementById('team-error');
+  if (!grid) return;
+  grid.innerHTML = '<div class="skeleton-card" style="min-height:200px;grid-column:1/-1;"></div>';
+  if (err) err.style.display = 'none';
+
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) {
+        grid.innerHTML = '';
+        if (err) {
+          err.style.display = 'flex';
+          var txt = document.getElementById('team-error-text');
+          if (txt) txt.textContent = 'Ошибка: ' + (resp ? resp.error : 'нет данных');
+        }
+        return;
+      }
+      App.employees = resp.data || [];
+      renderTeam(App.employees);
+    })
+    .withFailureHandler(function(e){
+      grid.innerHTML = '';
+      if (err) {
+        err.style.display = 'flex';
+        var txt = document.getElementById('team-error-text');
+        if (txt) txt.textContent = 'Ошибка: ' + e.message;
+      }
+    })
+    .getEmployees(false);
+}
+
+/* ===== СОТРУДНИКИ: РЕНДЕР ===== */
+function renderTeam(employees) {
+  var grid = document.getElementById('team-grid');
+  if (!grid) return;
+
+  if (!employees || !employees.length) {
+    grid.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text3);grid-column:1/-1;">' +
+      '<div style="font-size:48px;margin-bottom:12px;">👥</div>' +
+      '<div style="font-size:15px;font-weight:600;">Нет сотрудников</div>' +
+      '</div>';
+    return;
+  }
+
+  grid.innerHTML = employees.map(function(e, idx) {
+    var fio     = e['ФИО'] || '—';
+    var status  = e['Статус'] || '—';
+    var pos     = e['Основная должность'] || '—';
+    var salary  = e['Базовая ставка'] || 0;
+    var bonus   = e['% бонуса'] || 0;
+    var phone   = e['Телефон'] || '';
+
+    var ini = fio.split(' ').slice(0,2).map(function(s){
+      return (s && s[0] ? s[0].toUpperCase() : '');
+    }).join('');
+
+    var isActive = (status === 'Работает');
+    var sc = isActive ? 'status-work' : status === 'Отпуск' ? 'status-vacation' : 'status-off';
+
+    return '<div class="team-card">' +
+      '<div class="team-status ' + sc + '">' + status + '</div>' +
+      '<div class="team-head">' +
+        '<div class="team-avatar">' + ini + '</div>' +
+        '<div>' +
+          '<div class="team-name">' + fio + '</div>' +
+          '<div class="team-role">' + pos + '</div>' +
+          (phone ? '<div class="team-role" style="margin-top:2px;">' + phone + '</div>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="team-stats">' +
+        '<div class="team-stat">' +
+          '<div class="team-stat-label">Ставка</div>' +
+          '<div class="team-stat-value">' + Number(salary).toLocaleString('ru') + ' Br</div>' +
+        '</div>' +
+        '<div class="team-stat">' +
+          '<div class="team-stat-label">% бонуса</div>' +
+          '<div class="team-stat-value">' + bonus + '%</div>' +
+        '</div>' +
+      '</div>' +
+      '<div style="display:flex;gap:6px;margin-top:10px;">' +
+        '<button class="btn btn-secondary btn-sm" style="flex:1;" ' +
+          'onclick="openEditEmployee(' + idx + ')">✏️ Изменить</button>' +
+        '<button class="btn btn-sm" ' +
+          'style="flex:1;background:' + (isActive ? 'var(--red-soft)' : 'var(--green-soft)') + ';' +
+          'color:' + (isActive ? 'var(--red)' : 'var(--green)') + ';' +
+          'border:1px solid ' + (isActive ? 'rgba(231,76,60,0.2)' : 'rgba(46,204,113,0.2)') + ';" ' +
+          'onclick="toggleEmployeeStatus(' + idx + ')">' +
+          (isActive ? '🔴 Отключить' : '🟢 Восстановить') +
+        '</button>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+/* ===== ДОБАВИТЬ СОТРУДНИКА ===== */
+function submitNewEmployee() {
+  var fio = document.getElementById('emp-fio').value.trim();
+  var pos = document.getElementById('emp-position').value;
+  if (!fio) { toast('Укажи ФИО','error'); return; }
+  if (!pos) { toast('Выбери должность','error'); return; }
+
+  var btn = document.getElementById('emp-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
+  toast('Сохраняем в Google Sheets...','info');
+
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      if (!resp || !resp.ok) {
+        toast('Ошибка: ' + (resp ? resp.error : 'нет ответа'), 'error');
+        return;
+      }
+      toast('✅ ' + (resp.data ? resp.data['ФИО'] : fio) + ' добавлен','success');
+      closeModal('modal-new-employee');
+      ['emp-fio','emp-phone','emp-email','emp-salary','emp-bonus','emp-notes'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      document.getElementById('emp-position').value = '';
+      if (App.currentPage === 'team') loadTeam();
+    })
+    .withFailureHandler(function(e){
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .createEmployee({
+      fio:        fio,
+      phone:      document.getElementById('emp-phone').value.trim(),
+      email:      document.getElementById('emp-email').value.trim(),
+      position:   pos,
+      baseSalary: Number(document.getElementById('emp-salary').value) || 0,
+      bonusPct:   Number(document.getElementById('emp-bonus').value) || 0,
+      notes:      document.getElementById('emp-notes').value.trim()
+    });
+}
+
+/* ===== РЕДАКТИРОВАТЬ СОТРУДНИКА ===== */
+function openEditEmployee(idx) {
+  var e = App.employees[idx];
+  if (!e) return;
+  App._editingIdx = idx;
+  App._editingId = e['ID'];
+
+  // Заполняем форму текущими данными
+  document.getElementById('edit-emp-fio').value    = e['ФИО'] || '';
+  document.getElementById('edit-emp-phone').value  = e['Телефон'] || '';
+  document.getElementById('edit-emp-email').value  = e['Email'] || '';
+  document.getElementById('edit-emp-salary').value = e['Базовая ставка'] || '';
+  document.getElementById('edit-emp-bonus').value  = e['% бонуса'] || '';
+  document.getElementById('edit-emp-notes').value  = e['Заметки'] || '';
+
+  // Выставляем должность — нужно подождать пока список заполнен
+  var sel = document.getElementById('edit-emp-position');
+  if (sel) {
+    // Если список пуст — заполним из App.config
+    if (sel.options.length <= 1 && App.config && App.config.positions) {
+      fillPositions(App.config.positions);
+    }
+    sel.value = e['Основная должность'] || '';
+  }
+
+  openModal('modal-edit-employee');
+}
+
+function submitEditEmployee() {
+  var id = App._editingId;
+  if (!id) { toast('Ошибка: нет ID сотрудника', 'error'); return; }
+
+  var fio = document.getElementById('edit-emp-fio').value.trim();
+  var pos = document.getElementById('edit-emp-position').value;
+  if (!fio) { toast('Укажи ФИО', 'error'); return; }
+  if (!pos) { toast('Выбери должность', 'error'); return; }
+
+  var btn = document.getElementById('edit-emp-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
+  toast('Сохраняем...', 'info');
+
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      if (!resp || !resp.ok) {
+        toast('Ошибка: ' + (resp ? resp.error : 'нет ответа'), 'error');
+        return;
+      }
+      toast('✅ Данные обновлены', 'success');
+      closeModal('modal-edit-employee');
+      if (App.currentPage === 'team') loadTeam();
+    })
+    .withFailureHandler(function(e){
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .updateEmployee(id, {
+      fio:        fio,
+      phone:      document.getElementById('edit-emp-phone').value.trim(),
+      email:      document.getElementById('edit-emp-email').value.trim(),
+      position:   pos,
+      baseSalary: Number(document.getElementById('edit-emp-salary').value) || 0,
+      bonusPct:   Number(document.getElementById('edit-emp-bonus').value) || 0,
+      notes:      document.getElementById('edit-emp-notes').value.trim()
+    });
+}
+
+/* ===== ОТКЛЮЧИТЬ / ВОССТАНОВИТЬ СОТРУДНИКА ===== */
+function toggleEmployeeStatus(idx) {
+  var e = App.employees[idx];
+  if (!e) return;
+  var id = e['ID'];
+  var fio = e['ФИО'] || '?';
+  var currentStatus = e['Статус'];
+  var newStatus = (currentStatus === 'Работает') ? 'Не работает' : 'Работает';
+
+  var msg = currentStatus === 'Работает'
+    ? 'Отключить сотрудника «' + fio + '»?\n\nИстория и данные сохранятся, он просто скроется из активных.'
+    : 'Восстановить сотрудника «' + fio + '»?';
+
+  if (!confirm(msg)) return;
+
+  toast('Обновляем статус...', 'info');
+
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) {
+        toast('Ошибка: ' + (resp ? resp.error : 'нет ответа'), 'error');
+        return;
+      }
+      toast('✅ Статус изменён', 'success');
+      if (App.currentPage === 'team') loadTeam();
+    })
+    .withFailureHandler(function(err){
+      toast('Ошибка: ' + err.message, 'error');
+    })
+    .updateEmployeeStatus(id, newStatus);
+}
+
+/* ===== НАСТРОЙКИ ===== */
+function loadSettings() {
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (resp && resp.ok) {
+        App.settings = resp.data || {};
+        fillSettingsForm(App.settings);
+      }
+    })
+    .withFailureHandler(function(e){ toast('Ошибка настроек: ' + e.message, 'error'); })
+    .getSettings();
+}
+
+function fillSettingsForm(s) {
+  var set = function(id, key) {
+    var el = document.getElementById(id);
+    if (el && s[key] !== undefined) el.value = s[key];
+  };
+  set('set-company-name',   'company_name');
+  set('set-company-slogan', 'company_slogan');
+  set('set-unp',            'unp');
+  set('set-address',        'address');
+  set('set-phone',          'phone');
+  set('set-email',          'email');
+  set('set-iban',           'iban');
+  set('set-bank',           'bank');
+  set('set-bic',            'bic');
+  set('set-director',       'director');
+  set('set-currency',       'currency');
+  set('set-bonus-pool',     'bonus_pool_pct');
+  set('set-manager-bonus',  'manager_bonus_pct');
+  set('set-cycle-1',        'cycle_day_1');
+  set('set-cycle-2',        'cycle_day_2');
+
+  var color = s['accent_color'] || '#00B8D4';
+  var ci = document.getElementById('set-accent-color');
+  var ch = document.getElementById('set-accent-hex');
+  if (ci) ci.value = color;
+  if (ch) ch.value = color;
+
+  if (s['logo_dataurl']) {
+    var prev = document.getElementById('settings-logo-preview');
+    if (prev) prev.src = s['logo_dataurl'];
+  }
+  var nameEl = document.getElementById('settings-logo-name');
+  if (nameEl) nameEl.textContent = s['company_name'] || 'SPRauto';
+}
+
+function saveAllSettings() {
+  var settings = {};
+  var get = function(id, key) {
+    var el = document.getElementById(id);
+    if (el) settings[key] = el.value;
+  };
+  get('set-company-name',   'company_name');
+  get('set-company-slogan', 'company_slogan');
+  get('set-unp',            'unp');
+  get('set-address',        'address');
+  get('set-phone',          'phone');
+  get('set-email',          'email');
+  get('set-iban',           'iban');
+  get('set-bank',           'bank');
+  get('set-bic',            'bic');
+  get('set-director',       'director');
+  get('set-currency',       'currency');
+  get('set-bonus-pool',     'bonus_pool_pct');
+  get('set-manager-bonus',  'manager_bonus_pct');
+  get('set-cycle-1',        'cycle_day_1');
+  get('set-cycle-2',        'cycle_day_2');
+
+  var ch = document.getElementById('set-accent-hex');
+  if (ch) settings['accent_color'] = ch.value;
+  if (App.pendingLogoDataUrl) settings['logo_dataurl'] = App.pendingLogoDataUrl;
+
+  toast('Сохраняем настройки...', 'info');
+
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Ошибка', 'error'); return; }
+      toast('✅ Настройки сохранены', 'success');
+      App.pendingLogoDataUrl = null;
+      if (App.brand) {
+        App.brand.companyName   = settings['company_name']   || App.brand.companyName;
+        App.brand.companySlogan = settings['company_slogan'] || App.brand.companySlogan;
+        App.brand.accentColor   = settings['accent_color']   || App.brand.accentColor;
+        if (settings['logo_dataurl']) App.brand.logoDataUrl = settings['logo_dataurl'];
+      }
+      applyBrand(App.brand);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .saveSettings(settings);
+}
+
+/* ===== ЗАГРУЗКА ЛОГОТИПА ===== */
+function handleLogoUpload(input) {
+  var file = input.files[0];
+  if (!file) return;
+  if (file.size > 512 * 1024) {
+    toast('Файл больше 500 КБ — уменьши размер', 'error');
+    input.value = '';
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    App.pendingLogoDataUrl = e.target.result;
+    var prev = document.getElementById('settings-logo-preview');
+    if (prev) prev.src = e.target.result;
+    var sb = document.getElementById('brand-logo');
+    if (sb) sb.src = e.target.result;
+    toast('Логотип загружен. Нажми «Сохранить»', 'info');
+  };
+  reader.readAsDataURL(file);
+}
+
+function previewAccentColor(c) {
+  document.documentElement.style.setProperty('--accent', c);
+  document.documentElement.style.setProperty('--accent-soft', c + '20');
+  document.documentElement.style.setProperty('--accent-glow', c + '45');
+  var h = document.getElementById('set-accent-hex');
+  if (h) h.value = c;
+}
+function syncColorPicker(hex) {
+  if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
+    previewAccentColor(hex);
+    var p = document.getElementById('set-accent-color');
+    if (p) p.value = hex;
+  }
+}
+function setAccentColor(c) {
+  previewAccentColor(c);
+  var p = document.getElementById('set-accent-color');
+  var h = document.getElementById('set-accent-hex');
+  if (p) p.value = c;
+  if (h) h.value = c;
+}
+
+/* ===== ИНИЦИАЛИЗАЦИЯ ===== */
+function init() {
+  refreshSync();
+
+  var lbl = document.getElementById('theme-label');
+  if (lbl) lbl.textContent = App._theme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      var loader = document.getElementById('app-loading');
+      if (loader) loader.classList.add('hidden');
+
+      var dash = document.getElementById('page-dashboard');
+      if (dash) dash.classList.add('active');
+
+      console.log('initApp response:', resp);
+
+      if (!resp) {
+        toast('Сервер не вернул данные. Обнови страницу.', 'error');
+        return;
+      }
+
+      var data;
+      if (resp.ok === true && resp.data) {
+        data = resp.data;
+      } else if (resp.brand || resp.config || resp.employees) {
+        data = resp;
+      } else if (resp.ok === false) {
+        toast('Ошибка сервера: ' + (resp.error || 'unknown'), 'error');
+        return;
+      } else {
+        toast('Неизвестный формат ответа', 'error');
+        return;
+      }
+
+      if (data.brand) applyBrand(data.brand);
+      App.config    = data.config;
+      App.employees = data.employees || [];
+
+      if (data.config && data.config.positions) {
+        fillPositions(data.config.positions);
+      }
+
+      renderDashboard();
+      refreshSync();
+    })
+    .withFailureHandler(function(err) {
+      var loader = document.getElementById('app-loading');
+      if (loader) loader.classList.add('hidden');
+      var dash = document.getElementById('page-dashboard');
+      if (dash) dash.classList.add('active');
+
+      console.error('initApp FAILED:', err);
+      toast('Ошибка: ' + err.message, 'error');
+    })
+    .initApp();
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>

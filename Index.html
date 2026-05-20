@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPRauto ERP</title>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<?!= include('Styles') ?>
+</head>
+<body data-theme="dark">
+
+<!-- FAB -->
+<div class="fab-wrap">
+  <button class="fab-main" onclick="openModal('modal-new-order')">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+  </button>
+  <div class="fab-label">Новый заказ</div>
+</div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon-placeholder" id="brand-logo-wrap">
+      <span class="logo-icon-text">SPR</span>
+    </div>
+    <div>
+      <div class="logo-text" id="brand-name">SPRauto</div>
+      <div class="logo-sub" id="brand-slogan">ERP</div>
+    </div>
+  </div>
+  <nav class="nav-section">
+    <div class="nav-label">Главное</div>
+    <a class="nav-item active" data-page="dashboard" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Дашборд</span></a>
+    <a class="nav-item" data-page="orders" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg><span>Заказы</span></a>
+    <a class="nav-item" data-page="clients" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg><span>Клиенты</span></a>
+    <div class="nav-label">Финансы</div>
+    <a class="nav-item" data-page="finance" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg><span>Финансы</span></a>
+    <a class="nav-item" data-page="expenses" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zm-7 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm3-8h-6V6a3 3 0 0 1 6 0v1z"/></svg><span>Расходы</span></a>
+    <a class="nav-item" data-page="debt" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M11 7h2v2h-2V7zm0 4h2v6h-2v-6zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg><span>Дебиторка</span></a>
+    <div class="nav-label">Работа</div>
+    <a class="nav-item" data-page="team" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg><span>Сотрудники</span></a>
+    <a class="nav-item" data-page="services" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg><span>Услуги</span></a>
+    <a class="nav-item" data-page="inventory" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4z"/></svg><span>Склад</span></a>
+    <div class="nav-label">Система</div>
+    <a class="nav-item" data-page="settings" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19.43 12.98c.04-.32.07-.64.07-.98 0-.34-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98 0 .33.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg><span>Настройки</span></a>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="theme-toggle" onclick="toggleTheme()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 1 0 0 18A9 9 0 0 0 12 3zm0 16a7 7 0 0 1 0-14v14z"/></svg>
+      <span id="theme-label">Светлая тема</span>
+      <div class="toggle-track"><div class="toggle-knob"></div></div>
+    </div>
+  </div>
+</aside>
+
+<main class="main">
+  <header class="topbar">
+    <div class="topbar-left">
+      <div class="page-title" id="topbar-title">Дашборд</div>
+      <div class="topbar-sync"><div class="sync-dot"></div><span id="sync-time"></span></div>
+    </div>
+    <div class="topbar-right">
+      <button class="btn btn-ghost" onclick="loadCurrentPage()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
+        Обновить
+      </button>
+    </div>
+  </header>
+
+  <div id="app-loading" class="app-loading">
+    <div class="logo-icon-placeholder" style="width:72px;height:72px;font-size:24px;animation:pulse-logo 1.5s infinite;"><span class="logo-icon-text" style="font-size:22px;">SPR</span></div>
+    <div class="app-loading-text">Загружаем данные...</div>
+    <div class="app-loading-bar"><div class="app-loading-progress"></div></div>
+  </div>
+
+  <!-- ДАШБОРД -->
+  <div class="content page" id="page-dashboard">
+    <div id="dash-alerts"></div>
+    <div class="section-header">
+      <div class="section-title">Ключевые показатели</div>
+    </div>
+    <div class="kpi-grid" id="dash-kpi">
+      <div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div>
+    </div>
+    <div class="quick-actions">
+      <div class="quick-actions-title">Быстрые действия</div>
+      <div class="quick-actions-grid">
+        <button class="qa-btn qa-btn-primary" onclick="openModal('modal-new-order')"><div class="qa-icon">📋</div><div class="qa-label">Новый заказ</div><div class="qa-sub">Оклейка, тонировка...</div></button>
+        <button class="qa-btn" onclick="openModal('modal-new-payment')"><div class="qa-icon">💵</div><div class="qa-label">Принять оплату</div><div class="qa-sub">Нал или безнал</div></button>
+        <button class="qa-btn" onclick="openModal('modal-new-expense')"><div class="qa-icon">💸</div><div class="qa-label">Записать расход</div><div class="qa-sub">Материалы, аренда...</div></button>
+        <button class="qa-btn" onclick="goPage('team')"><div class="qa-icon">👥</div><div class="qa-label">Команда</div><div class="qa-sub">Сотрудники и ЗП</div></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- СОТРУДНИКИ -->
+  <div class="content page" id="page-team">
+    <div class="section-header">
+      <div class="section-title-big">Сотрудники</div>
+      <button class="btn btn-primary" onclick="openModal('modal-new-employee')">+ Добавить</button>
+    </div>
+    <div id="team-error" class="alert alert-red" style="display:none"><span>!</span><span id="team-error-text"></span></div>
+    <div class="team-grid" id="team-grid"><div class="kpi-skeleton" style="min-height:220px"></div></div>
+  </div>
+
+  <!-- НАСТРОЙКИ -->
+  <div class="content page" id="page-settings">
+    <div class="section-header"><div class="section-title-big">Настройки</div></div>
+    <div class="settings-grid">
+      <div class="settings-card">
+        <div class="settings-card-title">Бренд</div>
+        <div class="settings-card-desc">Логотип и название для каждого детейлинга</div>
+        <div class="form-row"><label class="form-label">Загрузить логотип</label>
+          <div class="logo-upload-zone" onclick="document.getElementById('logo-file').click()">
+            <div style="font-size:24px;margin-bottom:6px">📁</div>
+            <div style="font-size:12.5px;font-weight:600">Нажми чтобы выбрать</div>
+          </div>
+          <input type="file" id="logo-file" accept="image/*" style="display:none" onchange="handleLogoUpload(this)">
+        </div>
+        <div class="form-row"><label class="form-label">Название</label><input class="form-input" id="set-company-name" placeholder="SPRauto"></div>
+        <div class="form-row"><label class="form-label">Слоган</label><input class="form-input" id="set-company-slogan" placeholder="Детейлинг"></div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title">Реквизиты</div>
+        <div class="settings-card-desc">Для договоров и актов</div>
+        <div class="form-row"><label class="form-label">УНП</label><input class="form-input" id="set-unp"></div>
+        <div class="form-row"><label class="form-label">Адрес</label><input class="form-input" id="set-address"></div>
+        <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="set-phone"></div>
+        <div class="form-row"><label class="form-label">Email</label><input class="form-input" id="set-email"></div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title">Финансы</div>
+        <div class="settings-card-desc">Валюта и бонусы</div>
+        <div class="form-row"><label class="form-label">Валюта</label>
+          <select class="form-select" id="set-currency"><option value="BYN">BYN</option><option value="RUB">RUB</option><option value="USD">USD</option></select>
+        </div>
+        <div class="form-row"><label class="form-label">% фонда бонусов</label><input class="form-input" id="set-bonus-pool" type="number" placeholder="35"></div>
+        <div class="form-row"><label class="form-label">День 1-го цикла ЗП</label><input class="form-input" id="set-cycle-1" type="number" placeholder="5"></div>
+        <div class="form-row"><label class="form-label">День 2-го цикла ЗП</label><input class="form-input" id="set-cycle-2" type="number" placeholder="20"></div>
+      </div>
+    </div>
+    <div style="margin-top:20px"><button class="btn btn-primary" onclick="saveAllSettings()">Сохранить настройки</button></div>
+  </div>
+
+  <!-- ЗАГЛУШКИ -->
+  <div class="content page" id="page-orders"><div class="stub-page"><div class="stub-icon">📋</div><div class="stub-title">Заказы</div><div class="stub-desc">Следующий этап</div></div></div>
+  <div class="content page" id="page-clients"><div class="stub-page"><div class="stub-icon">👤</div><div class="stub-title">Клиенты</div><div class="stub-desc">Следующий этап</div></div></div>
+  <div class="content page" id="page-finance"><div class="stub-page"><div class="stub-icon">💰</div><div class="stub-title">Финансы</div><div class="stub-desc">Следующий этап</div></div></div>
+  <div class="content page" id="page-expenses"><div class="stub-page"><div class="stub-icon">💸</div><div class="stub-title">Расходы</div><div class="stub-desc">Следующий этап</div></div></div>
+  <div class="content page" id="page-debt"><div class="stub-page"><div class="stub-icon">🧾</div><div class="stub-title">Дебиторка</div><div class="stub-desc">Следующий этап</div></div></div>
+  <div class="content page" id="page-services"><div class="stub-page"><div class="stub-icon">🛠</div><div class="stub-title">Услуги</div><div class="stub-desc">Следующий этап</div></div></div>
+  <div class="content page" id="page-inventory"><div class="stub-page"><div class="stub-icon">📦</div><div class="stub-title">Склад</div><div class="stub-desc">Следующий этап</div></div></div>
+</main>
+
+<!-- МОДАЛКА: НОВЫЙ ЗАКАЗ -->
+<div class="modal-overlay" id="modal-new-order" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header"><div class="modal-title">Новый заказ</div><button class="modal-close" onclick="closeModal('modal-new-order')">&#10005;</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label class="form-label">Услуга *</label>
+        <select class="form-select"><option>Оклейка PPF</option><option>Тонировка</option><option>Полировка</option><option>Керамика</option><option>Антихром</option></select>
+      </div>
+
+      <div class="form-section-title">Клиент</div>
+      <div class="form-row"><label class="form-label">Тип клиента</label>
+        <div style="display:flex;gap:6px;margin-bottom:4px">
+          <button type="button" class="ctype-btn active" onclick="setClientType('phys',this)">&#128100; Физлицо</button>
+          <button type="button" class="ctype-btn" onclick="setClientType('legal',this)">&#127970; Юрлицо</button>
+        </div>
+      </div>
+
+      <div id="client-phys-fields">
+        <div class="form-row"><label class="form-label">ФИО *</label><input class="form-input" id="order-client-fio" placeholder="Иванов Иван Иванович"></div>
+        <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="order-client-phone" placeholder="+375 XX XXX-XX-XX"></div>
+        <div class="form-row"><label class="form-label">Паспорт (серия и номер)</label><input class="form-input" id="order-client-passport"></div>
+        <div class="form-grid">
+          <div class="form-row"><label class="form-label">Кем выдан</label><input class="form-input" id="order-client-passport-by"></div>
+          <div class="form-row"><label class="form-label">Дата выдачи</label><input class="form-input" id="order-client-passport-date" type="date"></div>
+        </div>
+        <div class="form-row"><label class="form-label">Адрес</label><input class="form-input" id="order-client-address"></div>
+      </div>
+
+      <div id="client-legal-fields" style="display:none">
+        <div class="form-row"><label class="form-label">Название организации *</label><input class="form-input" id="order-org-name" placeholder="ООО Название"></div>
+        <div class="form-grid">
+          <div class="form-row"><label class="form-label">УНП / ИНН</label><input class="form-input" id="order-org-unp"></div>
+          <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="order-org-phone"></div>
+        </div>
+        <div class="form-row"><label class="form-label">Юридический адрес</label><input class="form-input" id="order-org-address"></div>
+        <div class="form-grid">
+          <div class="form-row"><label class="form-label">Расчётный счёт (IBAN)</label><input class="form-input" id="order-org-iban"></div>
+          <div class="form-row"><label class="form-label">Банк</label><input class="form-input" id="order-org-bank"></div>
+        </div>
+        <div class="form-row"><label class="form-label">BIC</label><input class="form-input" id="order-org-bic"></div>
+        <div class="form-section-title">Контактное лицо</div>
+        <div class="form-grid">
+          <div class="form-row"><label class="form-label">ФИО</label><input class="form-input" id="order-org-contact"></div>
+          <div class="form-row"><label class="form-label">Должность</label><input class="form-input" id="order-org-contact-pos"></div>
+        </div>
+        <div class="form-row"><label class="form-label">Основание полномочий</label><input class="form-input" id="order-org-basis" placeholder="Устав / Доверенность"></div>
+        <div class="form-row"><label class="form-label">Email</label><input class="form-input" id="order-org-email" type="email"></div>
+      </div>
+
+      <div class="form-section-title">Автомобиль</div>
+      <div class="form-grid">
+        <div class="form-row"><label class="form-label">Марка</label><input class="form-input" id="order-car-make" placeholder="VOLKSWAGEN"></div>
+        <div class="form-row"><label class="form-label">Модель</label><input class="form-input" id="order-car-model" placeholder="Golf 8"></div>
+      </div>
+      <div class="form-grid">
+        <div class="form-row"><label class="form-label">Год</label><input class="form-input" id="order-car-year" type="number" placeholder="2024"></div>
+        <div class="form-row"><label class="form-label">Гос. номер</label><input class="form-input" id="order-car-plate" placeholder="1234 AB-7"></div>
+      </div>
+      <div class="form-row"><label class="form-label">VIN</label><input class="form-input" id="order-car-vin" style="font-family:monospace"></div>
+
+      <div class="form-section-title">Параметры работы</div>
+      <div class="form-grid">
+        <div class="form-row"><label class="form-label">Мастер</label><select class="form-select" id="order-master"><option>-- выбери --</option></select></div>
+        <div class="form-row"><label class="form-label">Стоимость, Br</label><input class="form-input" id="order-price" type="number" placeholder="2320"></div>
+      </div>
+      <div class="form-row"><label class="form-label">Условия оплаты</label>
+        <div style="display:flex;gap:6px">
+          <button type="button" class="ctype-btn active" onclick="setPayType(this)">Полная</button>
+          <button type="button" class="ctype-btn" onclick="setPayType(this)">Предоплата</button>
+          <button type="button" class="ctype-btn" onclick="setPayType(this)">Рассрочка</button>
+        </div>
+      </div>
+      <div class="form-row"><label class="form-label">Срок оплаты</label><input class="form-input" type="date"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-new-order')">Отмена</button><button class="btn btn-primary">Создать заказ</button></div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: ОПЛАТА -->
+<div class="modal-overlay" id="modal-new-payment" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header"><div class="modal-title">Принять оплату</div><button class="modal-close" onclick="closeModal('modal-new-payment')">&#10005;</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label class="form-label">Сумма, Br</label><input class="form-input" type="number"></div>
+      <div class="form-row"><label class="form-label">Способ</label><select class="form-select"><option>Наличные</option><option>Безнал</option></select></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-new-payment')">Отмена</button><button class="btn btn-green">Записать</button></div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: РАСХОД -->
+<div class="modal-overlay" id="modal-new-expense" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header"><div class="modal-title">Новый расход</div><button class="modal-close" onclick="closeModal('modal-new-expense')">&#10005;</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label class="form-label">Категория</label><select class="form-select"><option>Материалы</option><option>Аренда</option><option>Коммунальные</option><option>Маркетинг</option><option>Прочее</option></select></div>
+      <div class="form-row"><label class="form-label">Сумма, Br</label><input class="form-input" type="number"></div>
+      <div class="form-row"><label class="form-label">Описание</label><input class="form-input"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-new-expense')">Отмена</button><button class="btn btn-primary">Сохранить</button></div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: НОВЫЙ СОТРУДНИК -->
+<div class="modal-overlay" id="modal-new-employee" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header"><div class="modal-title">Новый сотрудник</div><button class="modal-close" onclick="closeModal('modal-new-employee')">&#10005;</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label class="form-label">ФИО *</label><input class="form-input" id="emp-fio" placeholder="Карпов Андрей"></div>
+      <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="emp-phone" placeholder="+375..."></div>
+      <div class="form-row"><label class="form-label">Email</label><input class="form-input" id="emp-email" type="email"></div>
+      <div class="form-row"><label class="form-label">Должность *</label><select class="form-select" id="emp-position"><option value="">-- выбери --</option></select></div>
+      <div class="form-grid">
+        <div class="form-row"><label class="form-label">Ставка, Br</label><input class="form-input" id="emp-salary" type="number" placeholder="4500"></div>
+        <div class="form-row"><label class="form-label">% бонуса</label><input class="form-input" id="emp-bonus" type="number" placeholder="5"></div>
+      </div>
+      <div class="form-row"><label class="form-label">Заметки</label><input class="form-input" id="emp-notes"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-new-employee')">Отмена</button><button class="btn btn-primary" id="emp-submit-btn" onclick="submitNewEmployee()">Сохранить</button></div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: РЕДАКТИРОВАТЬ СОТРУДНИКА -->
+<div class="modal-overlay" id="modal-edit-employee" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header"><div class="modal-title">Редактировать</div><button class="modal-close" onclick="closeModal('modal-edit-employee')">&#10005;</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label class="form-label">ФИО *</label><input class="form-input" id="edit-emp-fio"></div>
+      <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="edit-emp-phone"></div>
+      <div class="form-row"><label class="form-label">Email</label><input class="form-input" id="edit-emp-email" type="email"></div>
+      <div class="form-row"><label class="form-label">Должность *</label><select class="form-select" id="edit-emp-position"><option value="">-- выбери --</option></select></div>
+      <div class="form-grid">
+        <div class="form-row"><label class="form-label">Ставка, Br</label><input class="form-input" id="edit-emp-salary" type="number"></div>
+        <div class="form-row"><label class="form-label">% бонуса</label><input class="form-input" id="edit-emp-bonus" type="number"></div>
+      </div>
+      <div class="form-row"><label class="form-label">Заметки</label><input class="form-input" id="edit-emp-notes"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-edit-employee')">Отмена</button><button class="btn btn-primary" id="edit-emp-submit-btn" onclick="submitEditEmployee()">Сохранить</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var App={page:'dashboard',brand:null,config:null,employees:[],settings:{},pendingLogo:null,editingId:null,editingIdx:null,theme:localStorage.getItem('spr-theme')||'dark'};
+document.body.setAttribute('data-theme',App.theme);
+
+function toggleTheme(){App.theme=App.theme==='dark'?'light':'dark';document.body.setAttribute('data-theme',App.theme);localStorage.setItem('spr-theme',App.theme);var l=document.getElementById('theme-label');if(l)l.textContent=App.theme==='dark'?'Светлая тема':'Тёмная тема';}
+
+var PT={dashboard:'Дашборд',orders:'Заказы',clients:'Клиенты',finance:'Финансы',expenses:'Расходы',debt:'Дебиторка',team:'Сотрудники',services:'Услуги',inventory:'Склад',settings:'Настройки'};
+
+function goPage(n){App.page=n;document.querySelectorAll('.page').forEach(function(e){e.classList.remove('active');});var t=document.getElementById('page-'+n);if(t)t.classList.add('active');document.querySelectorAll('.nav-item').forEach(function(e){e.classList.toggle('active',e.dataset.page===n);});var h=document.getElementById('topbar-title');if(h)h.textContent=PT[n]||n;window.scrollTo(0,0);loadCurrentPage();}
+document.querySelectorAll('.nav-item').forEach(function(el){el.addEventListener('click',function(e){e.preventDefault();goPage(el.dataset.page);});});
+
+function refreshSync(){var n=new Date(),p=function(x){return String(x).padStart(2,'0');};var el=document.getElementById('sync-time');if(el)el.textContent=p(n.getDate())+'.'+p(n.getMonth()+1)+' '+p(n.getHours())+':'+p(n.getMinutes());}
+
+function toast(m,t){var el=document.getElementById('toast');if(!el)return;el.textContent=m;el.className='toast show '+(t||'');clearTimeout(App._tt);App._tt=setTimeout(function(){el.classList.remove('show');},3500);}
+
+function openModal(id){var el=document.getElementById(id);if(el){el.classList.add('open');document.body.style.overflow='hidden';}}
+function closeModal(id){var el=document.getElementById(id);if(el){el.classList.remove('open');document.body.style.overflow='';}}
+function closeModalOnOverlay(e){if(e.target===e.currentTarget)closeModal(e.currentTarget.id);}
+
+function applyBrand(b){if(!b)return;App.brand=b;var nm=document.getElementById('brand-name');if(nm)nm.textContent=b.companyName||'SPRauto';var sl=document.getElementById('brand-slogan');if(sl)sl.textContent=b.companySlogan||'ERP';if(b.logoDataUrl){var wrap=document.getElementById('brand-logo-wrap');if(wrap)wrap.innerHTML='<img class="logo-img" src="'+b.logoDataUrl+'" alt="Logo">';}if(b.accentColor){document.documentElement.style.setProperty('--accent',b.accentColor);document.documentElement.style.setProperty('--accent-soft',b.accentColor+'20');document.documentElement.style.setProperty('--accent-glow',b.accentColor+'45');}document.title=(b.companyName||'SPRauto')+' ERP';}
+
+function fillPositions(positions){['emp-position','edit-emp-position','order-master'].forEach(function(sid){var sel=document.getElementById(sid);if(!sel||!positions)return;var cur=sel.value;sel.innerHTML='<option value="">-- выбери --</option>';positions.forEach(function(p){var o=document.createElement('option');o.value=p;o.textContent=p;sel.appendChild(o);});if(cur)sel.value=cur;});}
+
+function loadCurrentPage(){refreshSync();if(App.page==='dashboard')renderDashboard();if(App.page==='team')loadTeam();if(App.page==='settings')loadSettings();}
+
+function renderDashboard(){var c=App.employees?App.employees.length:0;var grid=document.getElementById('dash-kpi');if(!grid)return;grid.innerHTML=kpi('Сотрудников',c,'активных')+kpi('Заказов','--','след. этап')+kpi('Выручка','--','след. этап')+kpi('Прибыль','--','след. этап');}
+function kpi(l,v,s){return '<div class="kpi-card"><div class="kpi-label">'+l+'</div><div class="kpi-value">'+v+'</div><div class="kpi-sub">'+s+'</div></div>';}
+
+function loadTeam(){var grid=document.getElementById('team-grid');var err=document.getElementById('team-error');if(!grid)return;grid.innerHTML='<div class="kpi-skeleton" style="min-height:220px"></div>'.repeat(3);if(err)err.style.display='none';google.script.run.withSuccessHandler(function(resp){if(!resp||!resp.ok){if(err){err.style.display='flex';document.getElementById('team-error-text').textContent=resp?resp.error:'Нет данных';}grid.innerHTML='';return;}App.employees=resp.data||[];renderTeam(App.employees);}).withFailureHandler(function(e){if(err){err.style.display='flex';document.getElementById('team-error-text').textContent=e.message;}grid.innerHTML='';}).getEmployees(false);}
+
+function renderTeam(employees){var grid=document.getElementById('team-grid');if(!grid)return;if(!employees||!employees.length){grid.innerHTML='<div style="text-align:center;padding:60px;color:var(--text3);grid-column:1/-1"><div style="font-size:48px;margin-bottom:12px">&#128101;</div><div style="font-size:15px;font-weight:600">Нет сотрудников</div></div>';return;}grid.innerHTML=employees.map(function(e,idx){var fio=e['ФИО']||'--';var status=e['Статус']||'--';var pos=e['Основная должность']||'--';var salary=Number(e['Базовая ставка'])||0;var bonus=Number(e['% бонуса'])||0;var phone=e['Телефон']||'';var ini=fio.split(' ').slice(0,2).map(function(s){return s&&s[0]?s[0].toUpperCase():'';}).join('');var active=status==='Работает';var sc=active?'status-work':status==='Отпуск'?'status-vac':'status-off';return '<div class="team-card"><div class="team-status '+sc+'">'+status+'</div><div class="team-head"><div class="team-avatar">'+ini+'</div><div><div class="team-name">'+fio+'</div><div class="team-role">'+pos+'</div>'+(phone?'<div class="team-phone">'+phone+'</div>':'')+'</div></div><div class="team-stats"><div class="team-stat"><div class="team-stat-label">Ставка</div><div class="team-stat-value">'+salary.toLocaleString('ru')+' Br</div></div><div class="team-stat"><div class="team-stat-label">% бонус</div><div class="team-stat-value">'+bonus+'%</div></div></div><div class="team-actions"><button class="btn-action" onclick="openEditEmployee('+idx+')">Изменить</button><button class="btn-action '+(active?'btn-action-red':'btn-action-green')+'" onclick="toggleStatus('+idx+')">'+(active?'Отключить':'Восстановить')+'</button></div></div>';}).join('');}
+
+function submitNewEmployee(){var fio=document.getElementById('emp-fio').value.trim();var pos=document.getElementById('emp-position').value;if(!fio){toast('Укажи ФИО','error');return;}if(!pos){toast('Выбери должность','error');return;}var btn=document.getElementById('emp-submit-btn');if(btn){btn.disabled=true;btn.textContent='Сохраняем...';}toast('Сохраняем...','info');google.script.run.withSuccessHandler(function(resp){if(btn){btn.disabled=false;btn.textContent='Сохранить';}if(!resp||!resp.ok){toast('Ошибка: '+(resp?resp.error:''),'error');return;}toast('Добавлен: '+(resp.data?resp.data['ФИО']:fio),'success');closeModal('modal-new-employee');['emp-fio','emp-phone','emp-email','emp-salary','emp-bonus','emp-notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});document.getElementById('emp-position').value='';if(App.page==='team')loadTeam();}).withFailureHandler(function(e){if(btn){btn.disabled=false;btn.textContent='Сохранить';}toast('Ошибка: '+e.message,'error');}).createEmployee({fio:fio,phone:document.getElementById('emp-phone').value.trim(),email:document.getElementById('emp-email').value.trim(),position:pos,baseSalary:Number(document.getElementById('emp-salary').value)||0,bonusPct:Number(document.getElementById('emp-bonus').value)||0,notes:document.getElementById('emp-notes').value.trim()});}
+
+function openEditEmployee(idx){var e=App.employees[idx];if(!e)return;App.editingIdx=idx;App.editingId=e['ID'];document.getElementById('edit-emp-fio').value=e['ФИО']||'';document.getElementById('edit-emp-phone').value=e['Телефон']||'';document.getElementById('edit-emp-email').value=e['Email']||'';document.getElementById('edit-emp-salary').value=e['Базовая ставка']||'';document.getElementById('edit-emp-bonus').value=e['% бонуса']||'';document.getElementById('edit-emp-notes').value=e['Заметки']||'';var sel=document.getElementById('edit-emp-position');if(sel){if(sel.options.length<=1&&App.config&&App.config.positions)fillPositions(App.config.positions);sel.value=e['Основная должность']||'';}openModal('modal-edit-employee');}
+
+function submitEditEmployee(){var id=App.editingId;if(!id){toast('Нет ID','error');return;}var fio=document.getElementById('edit-emp-fio').value.trim();var pos=document.getElementById('edit-emp-position').value;if(!fio){toast('Укажи ФИО','error');return;}if(!pos){toast('Выбери должность','error');return;}var btn=document.getElementById('edit-emp-submit-btn');if(btn){btn.disabled=true;btn.textContent='Сохраняем...';}google.script.run.withSuccessHandler(function(resp){if(btn){btn.disabled=false;btn.textContent='Сохранить';}if(!resp||!resp.ok){toast('Ошибка: '+(resp?resp.error:''),'error');return;}toast('Обновлено','success');closeModal('modal-edit-employee');if(App.page==='team')loadTeam();}).withFailureHandler(function(e){if(btn){btn.disabled=false;btn.textContent='Сохранить';}toast('Ошибка: '+e.message,'error');}).updateEmployee(id,{fio:fio,phone:document.getElementById('edit-emp-phone').value.trim(),email:document.getElementById('edit-emp-email').value.trim(),position:pos,baseSalary:Number(document.getElementById('edit-emp-salary').value)||0,bonusPct:Number(document.getElementById('edit-emp-bonus').value)||0,notes:document.getElementById('edit-emp-notes').value.trim()});}
+
+function toggleStatus(idx){var e=App.employees[idx];if(!e)return;var ns=e['Статус']==='Работает'?'Не работает':'Работает';if(!confirm((ns==='Не работает'?'Отключить':'Восстановить')+' '+e['ФИО']+'?'))return;toast('Обновляем...','info');google.script.run.withSuccessHandler(function(resp){if(!resp||!resp.ok){toast('Ошибка','error');return;}toast('Статус изменён','success');if(App.page==='team')loadTeam();}).withFailureHandler(function(e){toast('Ошибка: '+e.message,'error');}).updateEmployeeStatus(e['ID'],ns);}
+
+function loadSettings(){google.script.run.withSuccessHandler(function(resp){if(resp&&resp.ok){App.settings=resp.data||{};fillSettingsForm(App.settings);}}).withFailureHandler(function(e){toast('Ошибка: '+e.message,'error');}).getSettings();}
+function fillSettingsForm(s){var f=function(id,key){var el=document.getElementById(id);if(el&&s[key]!==undefined)el.value=s[key];};f('set-company-name','company_name');f('set-company-slogan','company_slogan');f('set-unp','unp');f('set-address','address');f('set-phone','phone');f('set-email','email');f('set-currency','currency');f('set-bonus-pool','bonus_pool_pct');f('set-cycle-1','cycle_day_1');f('set-cycle-2','cycle_day_2');}
+function saveAllSettings(){var s={},g=function(id,key){var el=document.getElementById(id);if(el)s[key]=el.value;};g('set-company-name','company_name');g('set-company-slogan','company_slogan');g('set-unp','unp');g('set-address','address');g('set-phone','phone');g('set-email','email');g('set-currency','currency');g('set-bonus-pool','bonus_pool_pct');g('set-cycle-1','cycle_day_1');g('set-cycle-2','cycle_day_2');if(App.pendingLogo)s['logo_dataurl']=App.pendingLogo;toast('Сохраняем...','info');google.script.run.withSuccessHandler(function(resp){if(!resp||!resp.ok){toast('Ошибка','error');return;}toast('Сохранено','success');App.pendingLogo=null;if(App.brand){App.brand.companyName=s['company_name']||App.brand.companyName;App.brand.companySlogan=s['company_slogan']||App.brand.companySlogan;if(s['logo_dataurl'])App.brand.logoDataUrl=s['logo_dataurl'];}applyBrand(App.brand);}).withFailureHandler(function(e){toast('Ошибка: '+e.message,'error');}).saveSettings(s);}
+
+function handleLogoUpload(input){var file=input.files[0];if(!file)return;if(file.size>512*1024){toast('Файл > 500 КБ','error');input.value='';return;}var reader=new FileReader();reader.onload=function(e){App.pendingLogo=e.target.result;var wrap=document.getElementById('brand-logo-wrap');if(wrap)wrap.innerHTML='<img class="logo-img" src="'+e.target.result+'" alt="Logo">';toast('Логотип загружен. Нажми Сохранить в Настройках','info');};reader.readAsDataURL(file);}
+
+function setClientType(type,btn){btn.closest('div').querySelectorAll('.ctype-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');document.getElementById('client-phys-fields').style.display=type==='phys'?'block':'none';document.getElementById('client-legal-fields').style.display=type==='legal'?'block':'none';}
+function setPayType(btn){btn.closest('div').querySelectorAll('.ctype-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');}
+
+function init(){var lbl=document.getElementById('theme-label');if(lbl)lbl.textContent=App.theme==='dark'?'Светлая тема':'Тёмная тема';refreshSync();google.script.run.withSuccessHandler(function(resp){var loader=document.getElementById('app-loading');if(loader)loader.classList.add('hidden');var dash=document.getElementById('page-dashboard');if(dash)dash.classList.add('active');if(!resp){toast('Обнови страницу','error');return;}var data=resp.ok&&resp.data?resp.data:(resp.brand||resp.config?resp:null);if(!data){toast('Ошибка данных','error');return;}if(data.brand)applyBrand(data.brand);App.config=data.config;App.employees=data.employees||[];if(data.config&&data.config.positions)fillPositions(data.config.positions);renderDashboard();refreshSync();}).withFailureHandler(function(err){var loader=document.getElementById('app-loading');if(loader)loader.classList.add('hidden');var dash=document.getElementById('page-dashboard');if(dash)dash.classList.add('active');toast('Ошибка: '+err.message,'error');}).initApp();}
+
+if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',init);}else{init();}
+</script>
+</body>
+</html>
