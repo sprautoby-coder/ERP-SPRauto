@@ -1,60 +1,576 @@
 /**
- * Api_Orders.gs — работа с заказами
- * Читаем из существующего листа «Расчёт ОКЛЕЙКА» (не ломаем!)
+ * Api_Orders.gs — работа с заказами (v1.2)
+ * Новые заказы хранятся в листе «Заказы» базы данных.
+ * Исторические данные из «Расчёт ОКЛЕЙКА» не трогаем.
  */
 
-/**
- * Маппинг колонок: ключ приложения → название колонки в Расчёт ОКЛЕЙКА
- * Подкорректировать после анализа реальных заголовков!
- */
-const ORDER_COLUMN_MAP = {
-  id:              'Номер заказа',
-  date:            'Дата',
-  client:          'Клиент',
-  auto:            'Авто',
-  vin:             'VIN',
-  service:         'Услуга',
-  totalPrice:      'Стоимость заказа',
-  paymentMethod:   'Безнал',
-  grossProfit:     'Валовая прибыль',
-  marginalProfit:  'Маржинальная прибыль',
-};
+// ─── РАСЧЁТ ПРИБЫЛИ ─────────────────────────────────────────────────────────
 
 /**
- * Получить список заказов
- * @param {Object} filter — { from, to, service, master, paymentMethod }
+ * Рассчитать финансовые показатели заказа по бизнес-формуле (v1.3).
+ * Материалы и расходы передаются уже посчитанными суммами (из динамических строк).
+ *
+ * Валовая = Цена − Итого материалы − Итого расходы − (Тип оплаты=Безнал ? Цена×0.15 : 0)
+ * Бонус менеджера = Валовая × 10% ÷ кол-во менеджеров
+ * Бонус оклейщика = Валовая × 35% ÷ кол-во оклейщиков
+ * Маржинальная = Валовая − сумма всех бонусов
+ *
+ * ВАЖНО: −15% теперь зависит ТОЛЬКО от «Тип оплаты» (условия, задаются персоналом
+ * и редактируются в любой момент), а НЕ от статуса оплаты. Это единый источник истины.
+ * Поддержан и legacy 'Да' для обратной совместимости со старыми вызовами.
+ */
+function calcOrderFinance_(price, materialCost, totalExpenses, payType, managersStr, mastersStr) {
+  price          = Number(price)          || 0;
+  materialCost   = Number(materialCost)   || 0;
+  totalExpenses  = Number(totalExpenses)  || 0;
+
+  var isBeznal       = (payType === 'Безнал' || payType === 'Да');
+  var bezналDiscount = isBeznal ? price * 0.15 : 0;
+  var grossProfit    = price - materialCost - totalExpenses - bezналDiscount;
+
+  var managersCount = managersStr ? managersStr.split(',').filter(function(s){ return s.trim(); }).length : 0;
+  var mastersCount  = mastersStr  ? mastersStr.split(',').filter(function(s){ return s.trim(); }).length  : 0;
+
+  var managerBonusTotal = (managersCount > 0) ? grossProfit * 0.10 : 0;
+  var masterBonusTotal  = (mastersCount  > 0) ? grossProfit * 0.35 : 0;
+
+  var managerBonusEach  = (managersCount > 0) ? managerBonusTotal / managersCount : 0;
+  var masterBonusEach   = (mastersCount  > 0) ? masterBonusTotal  / mastersCount  : 0;
+
+  var marginalProfit = grossProfit - managerBonusTotal - masterBonusTotal;
+
+  return {
+    grossProfit:    round2(grossProfit),
+    managerBonus:   round2(managerBonusEach),
+    masterBonus:    round2(masterBonusEach),
+    marginalProfit: round2(marginalProfit),
+  };
+}
+
+function round2(n) {
+  return Math.round(Number(n) * 100) / 100;
+}
+
+// ─── НОМЕР ДОГОВОРА ──────────────────────────────────────────────────────────
+
+/**
+ * Генерирует следующий номер договора.
+ * Оклейка: 04/01-XXX, Тонировка: 12/01-XXX
+ */
+function generateContractNumber_(serviceCode) {
+  var prefix = (serviceCode === 'TINT') ? '12/01-' : '04/01-';
+  var sheet  = getTab('DATABASE', 'ORDERS');
+  var lastRow = sheet.getLastRow();
+  // Ищем максимальный порядковый номер среди уже выданных
+  var maxNum = 0;
+  if (lastRow > 1) {
+    var data    = sheet.getDataRange().getValues();
+    var headers = data[0];
+    var numIdx  = headers.indexOf('Номер договора');
+    if (numIdx >= 0) {
+      for (var i = 1; i < data.length; i++) {
+        var raw = String(data[i][numIdx] || '');
+        if (raw.startsWith(prefix)) {
+          var n = parseInt(raw.replace(prefix, ''), 10);
+          if (!isNaN(n) && n > maxNum) maxNum = n;
+        }
+      }
+    }
+  }
+  return prefix + String(maxNum + 1).padStart(3, '0');
+}
+
+// ─── CRUD ────────────────────────────────────────────────────────────────────
+
+/**
+ * Получить список заказов с фильтрацией.
+ * @param {Object} filter — { from, to, service, status, clientId, search }
  */
 function getOrders(filter) {
-  return safeCall(() => {
+  return safeCall(function() {
+    var all = readSheetAsObjects('DATABASE', 'ORDERS');
     filter = filter || {};
-    const sheet = getTab('RASCHET_OKLEYKA', 'RASCHET');
-    const lastRow = sheet.getLastRow();
-    if (lastRow < 2) return [];
-    
-    const data = sheet.getDataRange().getValues();
-    const headers = data[0];
-    
-    const orders = data.slice(1).map(row => rowToOrder_(row, headers));
-    
-    // Применяем фильтры
-    return orders.filter(o => {
-      if (!o.id) return false; // пропускаем пустые строки
-      if (filter.from && o.date && new Date(o.date) < new Date(filter.from)) return false;
-      if (filter.to && o.date && new Date(o.date) > new Date(filter.to)) return false;
-      if (filter.service && o.service !== filter.service) return false;
+
+    // Карта типа клиента (физ/юр) — для подсветки юрлиц (контроль дебиторки)
+    var clientType = {};
+    try {
+      readSheetAsObjects('DATABASE', 'CLIENTS').forEach(function(c) {
+        if (c['ID']) clientType[String(c['ID'])] = String(c['Тип'] || '');
+      });
+    } catch (e) { /* лист клиентов может отсутствовать */ }
+
+    // Карта уплаченного по заказам — для прогресса рассрочки и остатка
+    var paidByOrder = {};
+    try {
+      readSheetAsObjects('DATABASE', 'PAYMENTS').forEach(function(p) {
+        if (!p['ID']) return;
+        var oid = String(p['Заказ ID']);
+        paidByOrder[oid] = (paidByOrder[oid] || 0) + (Number(p['Сумма']) || 0);
+      });
+    } catch (e) { /* лист платежей может отсутствовать */ }
+
+    // Карта графика рассрочки — дата окончательного взноса по заказу
+    var finalPayByOrder = {};
+    try {
+      readSheetAsObjects('DATABASE', 'SCHEDULE').forEach(function(s) {
+        if (!s['ID']) return;
+        var oid = String(s['Заказ ID']);
+        var prev = finalPayByOrder[oid];
+        if (!prev || (Number(s['№'])||0) >= prev.num) finalPayByOrder[oid] = { num: Number(s['№'])||0, date: s['Дата'] };
+      });
+    } catch (e) { /* лист графика может отсутствовать */ }
+
+    return all.filter(function(o) {
+      if (!o['ID']) return false;
+      if (filter.status  && o['Статус']  !== filter.status)  return false;
+      if (filter.service && o['Услуга']  !== filter.service) return false;
+      if (filter.clientId && String(o['Клиент ID']) !== String(filter.clientId)) return false;
+      if (filter.from) {
+        var d = parseDate_(o['Дата']);
+        if (d && d < new Date(filter.from)) return false;
+      }
+      if (filter.to) {
+        var d = parseDate_(o['Дата']);
+        if (d && d > new Date(filter.to)) return false;
+      }
+      if (filter.search) {
+        var q  = filter.search.toLowerCase();
+        var cl = String(o['Клиент']   || '').toLowerCase();
+        var ph = String(o['Телефон']  || '').toLowerCase();
+        var av = String(o['Авто']     || '').toLowerCase();
+        var gn = String(o['Госномер'] || '').toLowerCase();
+        if (!cl.includes(q) && !ph.includes(q) && !av.includes(q) && !gn.includes(q)) return false;
+      }
       return true;
+    }).map(function(o) {
+      // Обогащаем служебными полями (с префиксом _ чтобы не путать с колонками листа)
+      var price = Number(o['Стоимость заказа']) || 0;
+      var paid  = round2(paidByOrder[String(o['ID'])] || 0);
+      o._clientType = clientType[String(o['Клиент ID'])] || '';
+      // Если статус оплаты пуст (старые строки) — выводим из legacy «Безнал»
+      if (!String(o['Статус оплаты'] || '').trim()) {
+        var bz = String(o['Безнал'] || '').trim();
+        o['Статус оплаты'] = (bz === 'Да' || bz === 'Нет') ? 'Оплачен'
+                            : bz === 'Частично' ? 'Частично' : 'Не оплачен';
+      }
+      // Заказ помечен «Оплачен» без записей о платежах (старый) — считаем полностью оплаченным
+      if (o['Статус оплаты'] === 'Оплачен' && paid < price) paid = price;
+      o._paid       = paid;
+      o._remaining  = round2(Math.max(0, price - paid));
+      o._nextPay    = o['Срок оплаты'] || '';
+      o._finalPay   = (finalPayByOrder[String(o['ID'])] || {}).date || '';
+      return o;
     });
   });
 }
 
 /**
- * Маппинг строки → объект заказа
+ * Получить один заказ по ID.
  */
-function rowToOrder_(row, headers) {
-  const order = {};
-  for (const [key, columnName] of Object.entries(ORDER_COLUMN_MAP)) {
-    const idx = headers.indexOf(columnName);
-    if (idx >= 0) order[key] = row[idx];
+function getOrder(id) {
+  return safeCall(function() {
+    var all = readSheetAsObjects('DATABASE', 'ORDERS');
+    for (var i = 0; i < all.length; i++) {
+      if (String(all[i]['ID']) === String(id)) return all[i];
+    }
+    return null;
+  });
+}
+
+/**
+ * Создать новый заказ (v1.3).
+ * @param {Object} payload
+ *   Обязательные: price, service
+ *   Клиент: clientId, clientName, clientPhone
+ *   Авто: car, plate, vin
+ *   Оплата: beznal ('Да'/'Нет'/'' для дебиторки)
+ *   Персонал: manager, masters (строка через запятую)
+ *   Даты: dueDate
+ *   Материалы: materials (массив строк, см. saveOrderMaterials)
+ *   Расходы: expenses (массив строк, см. saveOrderExpenses)
+ *   Прочее: notes
+ */
+function createOrder(payload) {
+  return safeCall(function() {
+    if (!payload)         throw new Error('Нет данных');
+    if (!payload.price)   throw new Error('Укажите стоимость заказа');
+    if (!payload.service) throw new Error('Укажите услугу');
+
+    const sheet    = getTab('DATABASE', 'ORDERS');
+    const lastRow  = sheet.getLastRow();
+    const id       = 'ЗАК-' + String(lastRow).padStart(5, '0');
+    const tz       = Session.getScriptTimeZone();
+    const nowStr   = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy HH:mm');
+    const todayStr = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy');
+
+    // Сохраняем строки материалов и расходов, получаем итоговые суммы
+    let totalMaterialCost = 0;
+    let totalExpenses      = 0;
+
+    if (payload.materials && payload.materials.length > 0) {
+      const matResult = saveOrderMaterials(id, payload.materials);
+      if (matResult.ok) totalMaterialCost = matResult.data.totalMaterialCost;
+    }
+    if (payload.expenses && payload.expenses.length > 0) {
+      const expResult = saveOrderExpenses(id, payload.expenses);
+      if (expResult.ok) totalExpenses = expResult.data.totalExpenses;
+    }
+
+    // payType — это УСЛОВИЯ оплаты: 'Нал' | 'Безнал' | 'Отсрочка' | 'Рассрочка' | '' (пока не ясно).
+    // Они задают −15% (если Безнал) и могут редактироваться позже. На статус оплаты не влияют.
+    const payType     = payload.payType || payload.beznal || '';
+
+    const finance       = calcOrderFinance_(payload.price, totalMaterialCost, totalExpenses, payType, payload.manager, payload.masters);
+    const contractNum   = generateContractNumber_(payload.service);
+    const serviceName   = getServiceName_(payload.service);
+    const headers       = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+    const data = {
+      'ID':                    id,
+      'Номер договора':        contractNum,
+      'Дата':                  todayStr,
+      'Дата выполнения':       payload.dueDate || '',
+      'Статус':                'Новый',
+      'Клиент ID':             payload.clientId   || '',
+      'Клиент':                payload.clientName  || '',
+      'Телефон':               payload.clientPhone || '',
+      'Авто':                  payload.car   || '',
+      'Госномер':              payload.plate || '',
+      'VIN':                   payload.vin   || '',
+      'Услуга':                serviceName,
+      'Стоимость заказа':      payload.price,
+      'Тип оплаты':            payType,
+      'Статус оплаты':         'Не оплачен',   // факт оплаты узнаём позже, при платеже
+      'Безнал':                '',             // legacy-зеркало: пусто = ещё не оплачен
+      'Срок оплаты':           payload.duePayDate || '',
+      'Менеджер':              payload.manager || '',
+      'Оклейщики':             payload.masters || '',
+      'Итого материалы':       totalMaterialCost,
+      'Итого расходы':         totalExpenses,
+      'Валовая прибыль':       finance.grossProfit,
+      'Бонус менеджера':       finance.managerBonus,
+      'Бонус оклейщика':       finance.masterBonus,
+      'Маржинальная прибыль':  finance.marginalProfit,
+      'Заметки':               payload.notes || '',
+      'Проверено':             'Нет',
+      'Создан':                nowStr,
+      'Обновлён':              nowStr,
+    };
+
+    sheet.appendRow(headers.map(function(h) { return data[h] !== undefined ? data[h] : ''; }));
+
+    if (payload.clientId) {
+      updateClientOrderStats_(payload.clientId, payload.price, todayStr);
+    }
+
+    logActivity('Создал', 'Заказ', id, '', contractNum + ' — ' + (payload.clientName || ''));
+
+    return { id: id, contractNumber: contractNum, status: 'Новый', finance: finance };
+  });
+}
+
+/**
+ * Пересчитать финансы заказа после изменения материалов или расходов.
+ * Вызывается из UI когда пользователь обновляет строки материалов/расходов.
+ */
+function recalcOrderFinance(orderId) {
+  return safeCall(function() {
+    const sheet   = getTab('DATABASE', 'ORDERS');
+    const data    = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idIdx   = headers.indexOf('ID');
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][idIdx]) !== String(orderId)) continue;
+
+      const rowData = {};
+      headers.forEach(function(h, j) { rowData[h] = data[i][j]; });
+
+      // Считаем суммы из дочерних листов
+      const matRows = readSheetAsObjects('DATABASE', 'ORDER_MATERIALS')
+        .filter(function(r) { return String(r['Заказ ID']) === String(orderId) && r['Тип'] === 'расход'; });
+      const expRows = readSheetAsObjects('DATABASE', 'ORDER_EXPENSES')
+        .filter(function(r) { return String(r['Заказ ID']) === String(orderId); });
+
+      const totalMat = matRows.reduce(function(s, r) { return s + (Number(r['Стоимость']) || 0); }, 0);
+      const totalExp = expRows.reduce(function(s, r) { return s + (Number(r['Сумма'])     || 0); }, 0);
+
+      const finance = calcOrderFinance_(
+        rowData['Стоимость заказа'], totalMat, totalExp,
+        rowData['Тип оплаты'], rowData['Менеджер'], rowData['Оклейщики']
+      );
+
+      const tz  = Session.getScriptTimeZone();
+      const now = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy HH:mm');
+
+      const update = {
+        'Итого материалы':      round2(totalMat),
+        'Итого расходы':        round2(totalExp),
+        'Валовая прибыль':      finance.grossProfit,
+        'Бонус менеджера':      finance.managerBonus,
+        'Бонус оклейщика':      finance.masterBonus,
+        'Маржинальная прибыль': finance.marginalProfit,
+        'Обновлён':             now,
+      };
+
+      for (const [col, val] of Object.entries(update)) {
+        const colIdx = headers.indexOf(col);
+        if (colIdx >= 0) sheet.getRange(i + 1, colIdx + 1).setValue(val);
+      }
+
+      return { orderId: orderId, finance: finance, totalMat: round2(totalMat), totalExp: round2(totalExp) };
+    }
+    throw new Error('Заказ не найден: ' + orderId);
+  });
+}
+
+/**
+ * Редактировать существующий заказ (v1.5).
+ * payload: { clientName, clientPhone, car, plate, vin, service, price,
+ *             payType, duePayDate, dueDate, manager, masters, notes }
+ */
+function updateOrder(id, payload) {
+  return safeCall(function() {
+    if (!id) throw new Error('Нет ID заказа');
+    if (!payload) throw new Error('Нет данных для обновления');
+
+    const sheet   = getTab('DATABASE', 'ORDERS');
+    const data    = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idIdx   = headers.indexOf('ID');
+    const tz      = Session.getScriptTimeZone();
+    const nowStr  = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy HH:mm');
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][idIdx]) !== String(id)) continue;
+
+      const row = {};
+      headers.forEach(function(h, j) { row[h] = data[i][j]; });
+
+      const setCell = function(col, val) {
+        if (val === undefined || val === null) return;
+        const idx = headers.indexOf(col);
+        if (idx >= 0) sheet.getRange(i + 1, idx + 1).setValue(val);
+      };
+
+      // Текстовые поля
+      if (payload.clientName  !== undefined) setCell('Клиент',          payload.clientName);
+      if (payload.clientPhone !== undefined) setCell('Телефон',         payload.clientPhone);
+      if (payload.car         !== undefined) setCell('Авто',            payload.car);
+      if (payload.plate       !== undefined) setCell('Госномер',        payload.plate);
+      if (payload.vin         !== undefined) setCell('VIN',             payload.vin);
+      if (payload.dueDate     !== undefined) setCell('Дата выполнения', payload.dueDate);
+      if (payload.duePayDate  !== undefined) setCell('Срок оплаты',     payload.duePayDate);
+      if (payload.notes       !== undefined) setCell('Заметки',         payload.notes);
+      if (payload.manager     !== undefined) setCell('Менеджер',        payload.manager);
+      if (payload.masters     !== undefined) setCell('Оклейщики',       payload.masters);
+
+      if (payload.service !== undefined) {
+        setCell('Услуга', getServiceName_(payload.service));
+      }
+
+      // Тип оплаты (условия) — редактируется свободно. Статус оплаты НЕ трогаем:
+      // он меняется только платежами (addOrderPayment / updateOrderPaymentStatus_).
+      if (payload.payType !== undefined) {
+        setCell('Тип оплаты', payload.payType);
+      }
+
+      // Пересчёт финансов при изменении цены, условий оплаты или персонала
+      const needsRecalc = payload.price !== undefined || payload.payType !== undefined
+                       || payload.manager !== undefined || payload.masters !== undefined;
+      if (needsRecalc) {
+        const price      = payload.price   !== undefined ? Number(payload.price)  : Number(row['Стоимость заказа']) || 0;
+        const payType    = payload.payType !== undefined ? payload.payType         : String(row['Тип оплаты'] || '');
+        const manager    = payload.manager !== undefined ? payload.manager         : String(row['Менеджер']   || '');
+        const masters    = payload.masters !== undefined ? payload.masters         : String(row['Оклейщики']  || '');
+        const matCost    = Number(row['Итого материалы']) || 0;
+        const expCost    = Number(row['Итого расходы'])   || 0;
+        const finance    = calcOrderFinance_(price, matCost, expCost, payType, manager, masters);
+
+        if (payload.price !== undefined) setCell('Стоимость заказа', price);
+        setCell('Валовая прибыль',      finance.grossProfit);
+        setCell('Бонус менеджера',      finance.managerBonus);
+        setCell('Бонус оклейщика',      finance.masterBonus);
+        setCell('Маржинальная прибыль', finance.marginalProfit);
+      }
+
+      setCell('Обновлён', nowStr);
+      logActivity('Редактировал', 'Заказ', id, '', '');
+      return { id: id };
+    }
+    throw new Error('Заказ не найден: ' + id);
+  });
+}
+
+/**
+ * Переключить флаг верификации данных заказа (v1.5).
+ * Возвращает { id, verified: true/false }
+ */
+function toggleOrderVerification(id) {
+  return safeCall(function() {
+    if (!id) throw new Error('Нет ID заказа');
+
+    const sheet   = getTab('DATABASE', 'ORDERS');
+    const data    = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idIdx   = headers.indexOf('ID');
+    const verIdx  = headers.indexOf('Проверено');
+    const updIdx  = headers.indexOf('Обновлён');
+    const tz      = Session.getScriptTimeZone();
+    const nowStr  = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy HH:mm');
+
+    if (verIdx < 0) throw new Error('Колонка «Проверено» не найдена — запустите addPaymentColumns()');
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][idIdx]) !== String(id)) continue;
+      const current  = String(data[i][verIdx] || '');
+      const newVal   = (current === 'Да') ? 'Нет' : 'Да';
+      sheet.getRange(i + 1, verIdx + 1).setValue(newVal);
+      if (updIdx >= 0) sheet.getRange(i + 1, updIdx + 1).setValue(nowStr);
+      logActivity(newVal === 'Да' ? 'Проверил данные' : 'Снял проверку', 'Заказ', id, '', '');
+      return { id: id, verified: newVal === 'Да' };
+    }
+    throw new Error('Заказ не найден: ' + id);
+  });
+}
+
+/**
+ * Изменить статус заказа.
+ * Допустимые: Новый / В работе / Готов / Выдан / Отменён
+ */
+function updateOrderStatus(id, status) {
+  return safeCall(function() {
+    var allowed = ['Новый', 'В работе', 'Готов', 'Выдан', 'Отменён'];
+    if (allowed.indexOf(status) < 0) throw new Error('Недопустимый статус: ' + status);
+
+    var sheet   = getTab('DATABASE', 'ORDERS');
+    var data    = sheet.getDataRange().getValues();
+    var headers = data[0];
+    var idIdx   = headers.indexOf('ID');
+    var stIdx   = headers.indexOf('Статус');
+    var updIdx  = headers.indexOf('Обновлён');
+    var tz      = Session.getScriptTimeZone();
+    var nowStr  = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy HH:mm');
+
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][idIdx]) === String(id)) {
+        sheet.getRange(i + 1, stIdx + 1).setValue(status);
+        sheet.getRange(i + 1, updIdx + 1).setValue(nowStr);
+        logActivity('Статус → ' + status, 'Заказ', id, '', '');
+        return { id: id, status: status };
+      }
+    }
+    throw new Error('Заказ не найден: ' + id);
+  });
+}
+
+/**
+ * Получить сводку для дашборда заказов.
+ */
+function getOrdersStats() {
+  return safeCall(function() {
+    var all = readSheetAsObjects('DATABASE', 'ORDERS');
+
+    // Уплачено по заказам — чтобы дебиторка была остатком, а не всей суммой
+    var paidByOrder = {};
+    try {
+      readSheetAsObjects('DATABASE', 'PAYMENTS').forEach(function(p) {
+        if (!p['ID']) return;
+        var oid = String(p['Заказ ID']);
+        paidByOrder[oid] = (paidByOrder[oid] || 0) + (Number(p['Сумма']) || 0);
+      });
+    } catch (e) {}
+
+    var totalCount   = 0;
+    var totalRevenue = 0;
+    var inWork       = 0;
+    var debtCount    = 0;
+    var debtSum      = 0;
+
+    all.forEach(function(o) {
+      if (!o['ID']) return;
+      totalCount++;
+      var price = Number(o['Стоимость заказа']) || 0;
+      totalRevenue += price;
+      if (o['Статус'] === 'В работе' || o['Статус'] === 'Новый') inWork++;
+      if (o['Статус'] === 'Отменён') return;
+
+      // Статус оплаты с откатом на legacy «Безнал»
+      var st = String(o['Статус оплаты'] || '').trim();
+      if (!st) {
+        var bz = String(o['Безнал'] || '').trim();
+        st = (bz === 'Да' || bz === 'Нет') ? 'Оплачен' : bz === 'Частично' ? 'Частично' : 'Не оплачен';
+      }
+      if (st !== 'Оплачен') {
+        var paid = paidByOrder[String(o['ID'])] || 0;
+        debtCount++;
+        debtSum += Math.max(0, price - paid);
+      }
+    });
+
+    return {
+      totalCount:   totalCount,
+      totalRevenue: round2(totalRevenue),
+      avgCheck:     totalCount > 0 ? round2(totalRevenue / totalCount) : 0,
+      inWork:       inWork,
+      debtCount:    debtCount,
+      debtSum:      round2(debtSum),
+    };
+  });
+}
+
+// ─── ВСПОМОГАТЕЛЬНЫЕ ────────────────────────────────────────────────────────
+
+function getServiceName_(code) {
+  var map = {
+    PPF:     'Оклейка PPF',
+    TINT:    'Тонировка',
+    POLISH:  'Полировка',
+    CERAMIC: 'Керамика',
+    ANTICHR: 'Антихром',
+    SOUND:   'Шумоизоляция',
+    CHEMIE:  'Химчистка',
+    ANTICOR: 'Антикор',
+  };
+  return map[code] || code;
+}
+
+function parseDate_(val) {
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  var s = String(val);
+  // Формат dd.MM.yyyy
+  var m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+  if (m) return new Date(m[3], m[2] - 1, m[1]);
+  return new Date(s);
+}
+
+/**
+ * Обновить счётчики «Всего заказов», «Сумма заказов», «Последний заказ» у клиента.
+ */
+function updateClientOrderStats_(clientId, price, dateStr) {
+  try {
+    var sheet   = getTab('DATABASE', 'CLIENTS');
+    var data    = sheet.getDataRange().getValues();
+    var headers = data[0];
+    var idIdx   = headers.indexOf('ID');
+    var cntIdx  = headers.indexOf('Всего заказов');
+    var sumIdx  = headers.indexOf('Сумма заказов');
+    var lastIdx = headers.indexOf('Последний заказ');
+    var updIdx  = headers.indexOf('Обновлён');
+    var tz      = Session.getScriptTimeZone();
+    var nowStr  = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy HH:mm');
+
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][idIdx]) === String(clientId)) {
+        if (cntIdx  >= 0) sheet.getRange(i+1, cntIdx+1).setValue((Number(data[i][cntIdx]) || 0) + 1);
+        if (sumIdx  >= 0) sheet.getRange(i+1, sumIdx+1).setValue((Number(data[i][sumIdx]) || 0) + Number(price));
+        if (lastIdx >= 0) sheet.getRange(i+1, lastIdx+1).setValue(dateStr);
+        if (updIdx  >= 0) sheet.getRange(i+1, updIdx+1).setValue(nowStr);
+        break;
+      }
+    }
+  } catch(e) {
+    Logger.log('updateClientOrderStats_ ошибка: ' + e.message);
   }
-  return order;
 }

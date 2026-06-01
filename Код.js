@@ -38,7 +38,8 @@ function initApp() {
         services: CONFIG.SERVICES,
         currencies: CONFIG.CURRENCIES,
         expenseCategories: CONFIG.EXPENSE_CATEGORIES,
-        inventoryCategories: CONFIG.INVENTORY_CATEGORIES
+        inventoryCategories: CONFIG.INVENTORY_CATEGORIES,
+        leadSources: CONFIG.LEAD_SOURCES
       },
       employees: employees
     };

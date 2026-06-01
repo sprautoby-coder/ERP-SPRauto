@@ -13,7 +13,7 @@ const CONFIG = {
   
   SHEETS: {
     DEV: {
-      DATABASE:          '1AQSV-b-rK-eAgWGvLjMKQdyLqDeSQLZ-jAeG9F5cZRc',
+      DATABASE:          '1SBLWRTkxxn2-5hbxBenmM4njOQOT64QsMhf-4dPqBrg',
       OKLEYKA_CLIENTS:   '1ZBZrUkBedov7Y6fE0kytBQHGcgL40pgYLjV90H-QN0M',
       TONIROVKA_CLIENTS: '1C6QzRODwaw4xf8Q-76kYb-8C-RN2itfeomu69pPLYko',
       RASCHET_OKLEYKA:   '1054JIozquIipA2Vhu6v6nv8NS0Q61aVUiBpUirtW_sU',
@@ -52,7 +52,17 @@ const CONFIG = {
     // НОВЫЙ лист — Клиенты (v1.1)
     CLIENTS:         'Клиенты',
     VEHICLES:        'Автомобили',
-    
+
+    // НОВЫЙ лист — Заказы (v1.2)
+    ORDERS:          'Заказы',
+
+    // НОВЫЕ листы — Материалы и расходы по заказам (v1.3)
+    MATERIALS:       'Справочник материалов',
+    ORDER_MATERIALS: 'Расход материалов',
+    ORDER_EXPENSES:  'Расходы заказа',
+    PAYMENTS:        'Платежи',
+    SCHEDULE:        'График платежей',
+
     // В книге Расчёт ОКЛЕЙКА (существующая, не трогаем)
     RASCHET:         'Расчёт ОКЛЕЙКА',
     DDS_CLIENTS:     'ДДС клиенты',
@@ -123,6 +133,18 @@ const CONFIG = {
     'Бонусы', 'Маркетинг', 'Налоги', 'Транспорт',
     'Закупка товаров', 'Изъятие владельца', 'Прочее',
   ],
+
+  // Часто используемые расходы в карточке заказа (подсказки для автодополнения)
+  ORDER_EXPENSE_HINTS: ['Такси', 'Арматура', 'Парковка', 'Доставка', 'Инструмент', 'Прочее'],
+
+  // Категории материалов в справочнике
+  MATERIAL_CATEGORIES: [
+    'PPF плёнка', 'Тонировочная плёнка', 'Антихром',
+    'Защита фар', 'Химия', 'Расходник', 'Инструмент',
+  ],
+
+  // Стандартная ширина рулона (м) — используется по умолчанию
+  DEFAULT_ROLL_WIDTH: 1.52,
   
   INVENTORY_CATEGORIES: [
     'PPF плёнка', 'Тонировочная плёнка', 'Защита фар',

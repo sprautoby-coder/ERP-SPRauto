@@ -1,18 +1,29 @@
 <script>
+console.log('=== Scripts.html начал загружаться ===');
+
 var App = {
   currentPage: 'dashboard',
   brand: null,
   config: null,
   employees: [],
+  clients: [],
   settings: {},
   pendingLogoDataUrl: null,
   _theme: localStorage.getItem('sprauto-theme') || 'dark',
   _toastTimer: null,
   _editingId: null,
-  _editingIdx: null
+  _editingIdx: null,
+  _clientFilter: 'all',
+  _currentClientId: null,
+  _clientSort: { key: null, dir: 1 },
+  _clientView: localStorage.getItem('sprauto-clients-view') || 'table',
+  _modalStack: [],
+  _nextZIndex: 9999
 };
 
+console.log('App object created:', App);
 document.body.setAttribute('data-theme', App._theme);
+console.log('Theme set:', App._theme);
 
 /* ===== ТЕМА ===== */
 function toggleTheme() {
@@ -26,20 +37,58 @@ function toggleTheme() {
 /* ===== НАВИГАЦИЯ ===== */
 var PAGE_TITLES = {
   dashboard:'Дашборд', orders:'Заказы', clients:'Клиенты',
-  finance:'Финансы', expenses:'Расходы', team:'Сотрудники',
-  services:'Услуги', inventory:'Склад', settings:'Настройки'
+  'client-card':'Карточка клиента', 'order-card':'Карточка заказа',
+  finance:'Финансы', dds:'ДДС — Движение денег', expenses:'Расходы',
+  debt:'Дебиторка', salary:'Расчёт заработной платы',
+  team:'Сотрудники', services:'Услуги', inventory:'Склад',
+  materials:'Справочник материалов', settings:'Настройки'
 };
 
 function goPage(name) {
+  // Закрываем все открытые модальные окна при смене страницы
+  closeAllModals();
+
   App.currentPage = name;
   document.querySelectorAll('.page').forEach(function(el){ el.classList.remove('active'); });
   var t = document.getElementById('page-' + name);
   if (t) t.classList.add('active');
   document.querySelectorAll('.nav-item').forEach(function(el){
-    el.classList.toggle('active', el.dataset.page === name);
+    el.classList.toggle('active', el.dataset.page === name || (name === 'client-card' && el.dataset.page === 'clients'));
   });
   var h = document.getElementById('topbar-title');
   if (h) h.textContent = PAGE_TITLES[name] || name;
+
+  var actionBtn = document.getElementById('topbar-action-btn');
+  if (actionBtn) {
+    if (name === 'clients') {
+      actionBtn.style.display = 'inline-flex';
+      actionBtn.textContent = '+ Новый клиент';
+      actionBtn.onclick = function(){ openModal('modal-new-client'); };
+    } else if (name === 'orders') {
+      actionBtn.style.display = 'inline-flex';
+      actionBtn.textContent = '+ Новый заказ';
+      actionBtn.onclick = function(){ openModal('modal-new-order'); };
+    } else if (name === 'expenses') {
+      actionBtn.style.display = 'inline-flex';
+      actionBtn.textContent = '+ Добавить расход';
+      actionBtn.onclick = function(){ openModal('modal-new-expense'); };
+    } else if (name === 'materials') {
+      actionBtn.style.display = 'inline-flex';
+      actionBtn.textContent = '+ Добавить материал';
+      actionBtn.onclick = function(){ openModal('modal-new-material'); };
+    } else if (name === 'team') {
+      actionBtn.style.display = 'inline-flex';
+      actionBtn.textContent = '+ Добавить сотрудника';
+      actionBtn.onclick = function(){ openModal('modal-new-employee'); };
+    } else if (name === 'salary') {
+      actionBtn.style.display = 'inline-flex';
+      actionBtn.textContent = 'Рассчитать ЗП';
+      actionBtn.onclick = function(){ calcSalary(); };
+    } else {
+      actionBtn.style.display = 'none';
+    }
+  }
+
   window.scrollTo(0,0);
   loadCurrentPage();
 }
@@ -47,6 +96,8 @@ function goPage(name) {
 document.querySelectorAll('.nav-item').forEach(function(el){
   el.addEventListener('click', function(e){ e.preventDefault(); goPage(el.dataset.page); });
 });
+
+function topbarAction() {}
 
 /* ===== СИНХРОНИЗАЦИЯ ===== */
 function refreshSync() {
@@ -67,14 +118,166 @@ function toast(msg, type) {
 }
 
 /* ===== МОДАЛКИ ===== */
-function openModal(id) {
-  var el = document.getElementById(id);
-  if (el){ el.classList.add('open'); document.body.style.overflow = 'hidden'; }
+function closeAllModals() {
+  document.querySelectorAll('.modal-dialog-bg').forEach(function(modal) {
+    modal.classList.remove('open');
+    modal.style.cssText = 'display:none';
+  });
+  App._modalStack = [];
+  App._nextZIndex = 9999;
+  document.body.style.overflow = '';
 }
+
 function closeModal(id) {
   var el = document.getElementById(id);
-  if (el){ el.classList.remove('open'); document.body.style.overflow = ''; }
+  if (!el) return;
+  el.classList.remove('open');
+  el.style.cssText = 'display:none';
+
+  // Убираем из стека
+  var idx = App._modalStack.indexOf(id);
+  if (idx !== -1) App._modalStack.splice(idx, 1);
+
+  // Если стек пустой, разблокируем скролл
+  if (App._modalStack.length === 0) {
+    document.body.style.overflow = '';
+  }
 }
+
+function openModal(id) {
+  var el = document.getElementById(id);
+  if (!el) { toast('Модал не найден: ' + id, 'error'); return; }
+
+  // Перемещаем в конец body чтобы гарантировать отрисовку поверх всего
+  document.body.appendChild(el);
+
+  // Выставляем все стили явно через JS — обходим любые CSS-блокировки
+  el.style.cssText = [
+    'position:fixed',
+    'top:0', 'left:0',
+    'width:100vw', 'height:100vh',
+    'background:rgba(0,0,0,0.75)',
+    'z-index:2147483647',
+    'display:flex',
+    'align-items:center',
+    'justify-content:center',
+    'padding:20px',
+    'box-sizing:border-box'
+  ].join(';');
+
+  el.classList.add('open');
+  App._modalStack.push(id);
+  document.body.style.overflow = 'hidden';
+
+  if (id === 'modal-new-order') {
+    if (!App.employees || App.employees.length === 0) {
+      google.script.run
+        .withSuccessHandler(function(resp) {
+          App.employees = (resp && resp.ok && resp.data) ? resp.data : [];
+          fillOrderEmployees(); initOrderForm();
+        })
+        .withFailureHandler(function(){ fillOrderEmployees(); initOrderForm(); })
+        .getEmployees(true);
+    } else {
+      fillOrderEmployees(); initOrderForm();
+    }
+  }
+
+  if (id === 'modal-new-expense') {
+    var dateEl = document.getElementById('exp-date');
+    if (dateEl && !dateEl.value) {
+      dateEl.value = new Date().toISOString().slice(0, 10);
+    }
+  }
+
+  if (id === 'modal-new-employee') {
+    if (App.config && App.config.positions) fillPositions(App.config.positions);
+  }
+}
+
+function fillOrderEmployees() {
+  var employees = App.employees || [];
+
+  // Менеджер — select
+  var selMgr = document.getElementById('ord-manager');
+  if (selMgr) {
+    selMgr.innerHTML = '<option value="">— выбрать —</option>';
+    employees.forEach(function(e) {
+      var roles = (e['Основная должность'] || '') + ',' + (e['Доп. роли'] || '');
+      if (!/менеджер|администратор|директор/i.test(roles)) return;
+      var opt = document.createElement('option');
+      opt.value = e['ФИО'] || e['Имя'] || '';
+      opt.textContent = e['ФИО'] || e['Имя'] || '';
+      selMgr.appendChild(opt);
+    });
+    // Если фильтр дал 0 результатов — показать всех
+    if (selMgr.options.length <= 1) {
+      employees.forEach(function(e) {
+        var opt = document.createElement('option');
+        opt.value = e['ФИО'] || e['Имя'] || '';
+        opt.textContent = e['ФИО'] || e['Имя'] || '';
+        selMgr.appendChild(opt);
+      });
+    }
+  }
+
+  // Мастера — заменяем текстовое поле на select с множественным выбором
+  var masterWrap = document.getElementById('ord-masters-wrap');
+  if (masterWrap) {
+    masterWrap.innerHTML = '';
+    employees.forEach(function(e) {
+      var name = e['ФИО'] || e['Имя'] || '';
+      if (!name) return;
+      var label = document.createElement('label');
+      label.className = 'master-checkbox';
+      label.innerHTML =
+        '<input type="checkbox" value="' + name + '" onchange="updateMastersField()"> ' + name;
+      masterWrap.appendChild(label);
+    });
+  }
+
+  // Загружаем справочник материалов — через initOrderForm
+}
+
+function toggleMastersDropdown(e) {
+  e.stopPropagation();
+  var dd = document.getElementById('masters-dropdown');
+  if (!dd) return;
+  var isOpen = dd.style.display !== 'none';
+  if (isOpen) {
+    dd.style.display = 'none';
+    document.removeEventListener('click', closeMastersOnOutside);
+  } else {
+    dd.style.display = 'block';
+    // Небольшая задержка чтобы этот же клик не закрыл сразу
+    setTimeout(function() {
+      document.addEventListener('click', closeMastersOnOutside);
+    }, 100);
+  }
+}
+
+function closeMastersOnOutside(e) {
+  var dd = document.getElementById('masters-dropdown');
+  if (!dd) return;
+  // Если клик был внутри дропдауна — не закрываем
+  if (dd.contains(e.target)) return;
+  dd.style.display = 'none';
+  document.removeEventListener('click', closeMastersOnOutside);
+}
+
+function updateMastersField() {
+  var checked = [];
+  document.querySelectorAll('#ord-masters-wrap input[type=checkbox]:checked').forEach(function(cb) {
+    checked.push(cb.value);
+  });
+  var hidden = document.getElementById('ord-masters');
+  if (hidden) hidden.value = checked.join(', ');
+  // Обновляем метку кнопки
+  var lbl = document.getElementById('ord-masters-label');
+  if (lbl) lbl.textContent = checked.length ? checked.join(', ') : '— выбрать —';
+  recalcOrderPreview();
+}
+
 function closeModalOnOverlay(e) {
   if (e.target === e.currentTarget) closeModal(e.currentTarget.id);
 }
@@ -83,12 +286,14 @@ function closeModalOnOverlay(e) {
 function applyBrand(brand) {
   if (!brand) return;
   App.brand = brand;
-  var logo = document.getElementById('brand-logo');
-  if (logo && brand.logoDataUrl) logo.src = brand.logoDataUrl;
   var nm = document.getElementById('brand-name');
   if (nm) nm.textContent = brand.companyName || 'SPRauto';
   var sl = document.getElementById('brand-slogan');
-  if (sl) sl.textContent = brand.companySlogan || 'Детейлинг';
+  if (sl) sl.textContent = brand.companySlogan || 'ERP';
+  if (brand.logoDataUrl) {
+    var wrap = document.getElementById('brand-logo-wrap');
+    if (wrap) wrap.innerHTML = '<img class="logo-img" src="'+brand.logoDataUrl+'" alt="Logo">';
+  }
   if (brand.accentColor) {
     document.documentElement.style.setProperty('--accent', brand.accentColor);
     document.documentElement.style.setProperty('--accent-soft', brand.accentColor + '20');
@@ -97,21 +302,32 @@ function applyBrand(brand) {
   document.title = (brand.companyName || 'SPRauto') + ' ERP';
 }
 
-/* ===== ЗАПОЛНЕНИЕ ДОЛЖНОСТЕЙ ===== */
+/* ===== ЗАПОЛНЕНИЕ СПРАВОЧНИКОВ ===== */
 function fillPositions(positions) {
-  // Заполняем ОБА селекта — для добавления и для редактирования
-  var selIds = ['emp-position', 'edit-emp-position'];
-  selIds.forEach(function(selId) {
+  ['emp-position', 'edit-emp-position'].forEach(function(selId) {
     var sel = document.getElementById(selId);
     if (!sel || !positions) return;
-    var current = sel.value; // запомним текущее значение
+    var current = sel.value;
     sel.innerHTML = '<option value="">— Выбери должность —</option>';
     positions.forEach(function(p){
       var o = document.createElement('option');
       o.value = p; o.textContent = p;
       sel.appendChild(o);
     });
-    if (current) sel.value = current; // восстанавливаем
+    if (current) sel.value = current;
+  });
+}
+
+function fillLeadSources(sources) {
+  ['cl-source', 'edit-cl-source'].forEach(function(selId) {
+    var sel = document.getElementById(selId);
+    if (!sel || !sources) return;
+    sel.innerHTML = '<option value="">— Откуда клиент —</option>';
+    sources.forEach(function(s){
+      var o = document.createElement('option');
+      o.value = s; o.textContent = s;
+      sel.appendChild(o);
+    });
   });
 }
 
@@ -119,36 +335,575 @@ function fillPositions(positions) {
 function loadCurrentPage() {
   refreshSync();
   if (App.currentPage === 'dashboard') renderDashboard();
-  if (App.currentPage === 'team') loadTeam();
-  if (App.currentPage === 'settings') loadSettings();
+  if (App.currentPage === 'team')      loadTeam();
+  if (App.currentPage === 'clients')   loadClients();
+  if (App.currentPage === 'orders')    loadOrders();
+  if (App.currentPage === 'materials') loadMaterials();
+  if (App.currentPage === 'settings')  loadSettings();
+  if (App.currentPage === 'expenses')  loadExpenses();
+  if (App.currentPage === 'finance')   loadFinance();
+  if (App.currentPage === 'debt')      loadDebt();
+  if (App.currentPage === 'services')  loadServices();
+  if (App.currentPage === 'dds')       loadDDS();
+  if (App.currentPage === 'salary')    {} // ручной запуск
 }
 
-/* ===== ДАШБОРД ===== */
-function renderDashboard() {
-  var grid = document.getElementById('dash-kpi');
-  if (!grid) return;
-  var c = App.employees ? App.employees.length : 0;
-  grid.innerHTML =
-    kpi('👥 Сотрудников', c, 'активных') +
-    kpi('📋 Заказов', '—', 'след. этап') +
-    kpi('💰 Выручка', '—', 'след. этап') +
-    kpi('🧾 Дебиторка', '—', 'след. этап');
+/* Дашборд — реальная реализация renderDashboard() ниже (раздел «ДАШБОРД (данные)») */
+
+/* ===== КЛИЕНТЫ: ЗАГРУЗКА ===== */
+function loadClients() {
+  var tbody = document.getElementById('clients-tbody');
+  var err = document.getElementById('clients-error');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="8" class="ct-loading">' +
+    '<div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>'.repeat(4) +
+    '</td></tr>';
+  if (err) err.style.display = 'none';
+
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) {
+        tbody.innerHTML = '';
+        if (err) {
+          err.style.display = 'flex';
+          var txt = document.getElementById('clients-error-text');
+          if (txt) txt.textContent = 'Ошибка: ' + (resp ? resp.error : 'нет данных');
+        }
+        return;
+      }
+      App.clients = resp.data || [];
+      App._vehicleMap = {};
+      renderClients(App.clients);
+    })
+    .withFailureHandler(function(e){
+      tbody.innerHTML = '';
+      if (err) {
+        err.style.display = 'flex';
+        var txt = document.getElementById('clients-error-text');
+        if (txt) txt.textContent = 'Ошибка: ' + e.message;
+      }
+    })
+    .getClients({});
 }
 
-function kpi(label, value, sub) {
-  return '<div class="kpi-card">' +
-    '<div class="kpi-label">'+label+'</div>' +
-    '<div class="kpi-value">'+value+'</div>' +
-    '<div class="kpi-sub">'+sub+'</div>' +
-    '</div>';
+/* ===== КЛИЕНТЫ: ФИЛЬТР ===== */
+function setClientFilter(type, btn) {
+  App._clientFilter = type;
+  document.querySelectorAll('.filter-tab').forEach(function(b){ b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  filterClients();
 }
 
-/* ===== СОТРУДНИКИ: ЗАГРУЗКА ===== */
+function filterClients() {
+  var search = (document.getElementById('clients-search') || {}).value || '';
+  var sourceFilter = (document.getElementById('clients-source-filter') || {}).value || '';
+  var q = search.toLowerCase();
+
+  var filtered = App.clients.filter(function(c) {
+    if (App._clientFilter !== 'all' && c['Тип'] !== App._clientFilter) return false;
+    if (sourceFilter && c['Источник лида'] !== sourceFilter) return false;
+    if (q) {
+      var name  = String(c['Имя'] || '').toLowerCase();
+      var phone = String(c['Телефон'] || '').toLowerCase();
+      var auto  = String(c['_autoLabel'] || '').toLowerCase();
+      if (!name.includes(q) && !phone.includes(q) && !auto.includes(q)) return false;
+    }
+    return true;
+  });
+
+  var sort = App._clientSort;
+  if (sort && sort.key) {
+    filtered = filtered.slice().sort(function(a, b) {
+      var av, bv;
+      if (sort.key === 'name')   { av = String(a['Имя'] || ''); bv = String(b['Имя'] || ''); return sort.dir * av.localeCompare(bv, 'ru'); }
+      if (sort.key === 'orders') { av = Number(a['Всего заказов'] || 0); bv = Number(b['Всего заказов'] || 0); return sort.dir * (av - bv); }
+      if (sort.key === 'sum')    { av = Number(a['Сумма заказов'] || 0); bv = Number(b['Сумма заказов'] || 0); return sort.dir * (av - bv); }
+      return 0;
+    });
+  }
+
+  renderClientsTable(filtered);
+}
+
+/* ===== КЛИЕНТЫ: СОРТИРОВКА ===== */
+function sortClients(key) {
+  var sort = App._clientSort;
+  if (sort.key === key) { sort.dir *= -1; } else { sort.key = key; sort.dir = 1; }
+
+  ['name', 'orders', 'sum'].forEach(function(k) {
+    var el = document.getElementById('sort-icon-' + k);
+    if (!el) return;
+    el.className = 'ct-sort-icon' + (k === key ? ' active' : '');
+    el.textContent = k === key ? (sort.dir === 1 ? '↑' : '↓') : '↕';
+  });
+
+  filterClients();
+}
+
+/* ===== КЛИЕНТЫ: СТАТИСТИКА ===== */
+function renderClientsKpi(clients) {
+  var total = clients.length;
+  var fiz   = clients.filter(function(c){ return c['Тип'] === 'физ'; }).length;
+  var yur   = clients.filter(function(c){ return c['Тип'] === 'юр'; }).length;
+  var sum   = clients.reduce(function(acc, c){ return acc + (Number(c['Сумма заказов']) || 0); }, 0);
+
+  function set(id, val) { var el = document.getElementById(id); if (el) el.textContent = val; }
+  set('ckpi-total', total);
+  set('ckpi-fiz',   fiz);
+  set('ckpi-yur',   yur);
+  set('ckpi-sum',   sum ? sum.toLocaleString('ru') + ' Br' : '—');
+}
+
+/* ===== КЛИЕНТЫ: ФИЛЬТР ИСТОЧНИКОВ ===== */
+function fillClientsSourceFilter(clients) {
+  var sel = document.getElementById('clients-source-filter');
+  if (!sel) return;
+  var sources = {};
+  clients.forEach(function(c){ if (c['Источник лида']) sources[c['Источник лида']] = 1; });
+  var keys = Object.keys(sources).sort();
+  sel.innerHTML = '<option value="">Все источники</option>';
+  keys.forEach(function(s) {
+    var o = document.createElement('option');
+    o.value = s; o.textContent = s;
+    sel.appendChild(o);
+  });
+}
+
+/* ===== КЛИЕНТЫ: ПЕРЕКЛЮЧЕНИЕ ВИДА ===== */
+function setClientsView(view) {
+  App._clientView = view;
+  localStorage.setItem('sprauto-clients-view', view);
+
+  var btnTable = document.getElementById('view-btn-table');
+  var btnCards = document.getElementById('view-btn-cards');
+  var tableWrap = document.getElementById('clients-table-wrap');
+  var cardsWrap = document.getElementById('clients-cards-wrap');
+
+  if (btnTable) btnTable.classList.toggle('active', view === 'table');
+  if (btnCards) btnCards.classList.toggle('active', view === 'cards');
+  if (tableWrap) tableWrap.style.display = view === 'table' ? 'block' : 'none';
+  if (cardsWrap) cardsWrap.style.display = view === 'cards' ? 'grid' : 'none';
+
+  filterClients();
+}
+
+/* ===== КЛИЕНТЫ: РЕНДЕР ===== */
+function renderClients(clients) {
+  App.clients.forEach(function(c) {
+    c['_autoLabel'] = App._vehicleMap && App._vehicleMap[c['ID']] ? App._vehicleMap[c['ID']] : '';
+  });
+  renderClientsKpi(App.clients);
+  fillClientsSourceFilter(App.clients);
+
+  // Применяем сохранённый вид
+  setClientsView(App._clientView);
+}
+
+function renderClientsTable(clients) {
+  var tbody = document.getElementById('clients-tbody');
+  var footer = document.getElementById('clients-table-footer');
+
+  // Рендер карточек
+  var cardsWrap = document.getElementById('clients-cards-wrap');
+
+  if (!clients || clients.length === 0) {
+    var emptyHtml =
+      '<div class="ct-empty">' +
+        '<div class="ct-empty-icon">👤</div>' +
+        '<div class="ct-empty-title">Нет клиентов</div>' +
+        '<div class="ct-empty-sub">Попробуйте изменить фильтр или добавьте первого клиента</div>' +
+      '</div>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="8">' + emptyHtml + '</td></tr>';
+    if (cardsWrap) cardsWrap.innerHTML = emptyHtml;
+    if (footer) footer.textContent = 'Нет записей';
+    return;
+  }
+
+  clients.forEach(function(c) {
+    var id        = c['ID'] || '';
+    var name      = c['Имя'] || '—';
+    var type      = c['Тип'] || 'физ';
+    var phone     = c['Телефон'] || '';
+    var source    = c['Источник лида'] || '—';
+    var orders    = Number(c['Всего заказов']) || 0;
+    var sum       = Number(c['Сумма заказов']) || 0;
+    var autoLabel = c['_autoLabel'] || '—';
+    var isYur     = type === 'юр';
+    var sumStr    = sum ? sum.toLocaleString('ru') + ' Br' : '—';
+
+    var ini = name.split(' ').slice(0,2).map(function(s){
+      return (s && s[0] ? s[0].toUpperCase() : '');
+    }).join('');
+
+    var avClass    = isYur ? 'ct-av-yur' : 'ct-av-fiz';
+    var badgeClass = isYur ? 'badge badge-yur' : 'badge badge-fiz';
+    var typeLabel  = isYur ? 'Юр.' : 'Физ.';
+
+    c['_ini']       = ini;
+    c['_avClass']   = avClass;
+    c['_badge']     = badgeClass;
+    c['_typeLabel'] = typeLabel;
+    c['_sumStr']    = sumStr;
+    c['_autoLabel'] = autoLabel;
+    c['_phone']     = phone;
+    c['_source']    = source;
+    c['_orders']    = orders;
+  });
+
+  // ── ТАБЛИЦА ──
+  if (tbody) {
+    tbody.innerHTML = clients.map(function(c) {
+      var id = c['ID'] || '';
+      return '<tr onclick="openClientCard(\'' + id + '\')">' +
+        '<td><div class="ct-name-cell">' +
+          '<div class="ct-avatar ' + c['_avClass'] + '">' + c['_ini'] + '</div>' +
+          '<span class="ct-client-name">' + (c['Имя'] || '—') + '</span>' +
+        '</div></td>' +
+        '<td><span class="' + c['_badge'] + '">' + c['_typeLabel'] + '</span></td>' +
+        '<td style="color:var(--text2);font-size:12.5px;">' + c['_phone'] + '</td>' +
+        '<td style="color:var(--text2);font-size:12px;">' + c['_autoLabel'] + '</td>' +
+        '<td style="color:var(--text3);font-size:12px;">' + c['_source'] + '</td>' +
+        '<td style="text-align:center;font-weight:600;">' + c['_orders'] + '</td>' +
+        '<td style="font-weight:600;">' + c['_sumStr'] + '</td>' +
+        '<td><div class="ct-actions">' +
+          '<button class="ct-action-btn" title="Карточка" onclick="event.stopPropagation();openClientCard(\'' + id + '\')">👤</button>' +
+          '<button class="ct-action-btn" title="Редактировать" onclick="event.stopPropagation();openClientCardAndEdit(\'' + id + '\')">✏️</button>' +
+        '</div></td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  // ── КАРТОЧКИ ──
+  if (cardsWrap) {
+    cardsWrap.innerHTML = clients.map(function(c) {
+      var id = c['ID'] || '';
+      return '<div class="client-row" onclick="openClientCard(\'' + id + '\')">' +
+        '<div class="ct-avatar ' + c['_avClass'] + '" style="width:40px;height:40px;font-size:14px;flex-shrink:0;">' + c['_ini'] + '</div>' +
+        '<div class="client-info">' +
+          '<div class="client-name">' +
+            (c['Имя'] || '—') +
+            ' <span class="' + c['_badge'] + '">' + c['_typeLabel'] + '</span>' +
+          '</div>' +
+          '<div class="client-meta">' +
+            (c['_phone'] ? '<span>📞 ' + c['_phone'] + '</span>' : '') +
+            (c['_source'] !== '—' ? '<span>📍 ' + c['_source'] + '</span>' : '') +
+          '</div>' +
+        '</div>' +
+        '<div class="client-stats">' +
+          '<div class="client-stat"><div class="client-stat-val">' + c['_orders'] + '</div><div class="client-stat-lbl">заказов</div></div>' +
+          '<div class="client-stat"><div class="client-stat-val">' + c['_sumStr'] + '</div><div class="client-stat-lbl">сумма</div></div>' +
+        '</div>' +
+        '<div class="client-arrow">›</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  if (footer) {
+    footer.textContent = 'Показано ' + clients.length + ' из ' + App.clients.length;
+  }
+}
+
+/* ===== КАРТОЧКА КЛИЕНТА ===== */
+function openClientCard(id) {
+  App._currentClientId = id;
+  var content = document.getElementById('client-card-content');
+  if (content) content.innerHTML = '<div class="kpi-skeleton" style="min-height:200px"></div>';
+  goPage('client-card');
+
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) {
+        toast('Ошибка загрузки клиента', 'error');
+        return;
+      }
+      renderClientCard(resp.data.client, resp.data.vehicles);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .getClientWithVehicles(id);
+}
+
+function openClientCardAndEdit(id) {
+  App._currentClientId = id;
+  openClientCard(id);
+  setTimeout(function(){ openEditClientModal(); }, 600);
+}
+
+function renderClientCard(c, vehicles) {
+  var content = document.getElementById('client-card-content');
+  if (!content || !c) return;
+
+  var type = c['Тип'] || 'физ';
+  var isLegal = type === 'юр';
+
+  var vehiclesHtml = '';
+  if (vehicles && vehicles.length) {
+    vehiclesHtml = vehicles.map(function(v){
+      return '<div class="vehicle-item">' +
+        '<div style="font-weight:600;">' + (v['Марка']||'') + ' ' + (v['Модель']||'') + '</div>' +
+        '<div style="font-size:12px;color:var(--text3);margin-top:2px;">' +
+          (v['Госномер'] ? '🔢 ' + v['Госномер'] : '') +
+          (v['VIN'] ? ' &nbsp;VIN: ' + v['VIN'] : '') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } else {
+    vehiclesHtml = '<div style="color:var(--text3);font-size:13px;">Нет автомобилей</div>';
+  }
+
+  content.innerHTML =
+    '<div class="client-card-header">' +
+      '<div class="team-avatar" style="width:64px;height:64px;font-size:24px;">' +
+        (c['Имя']||'').split(' ').slice(0,2).map(function(s){ return s&&s[0]?s[0].toUpperCase():''; }).join('') +
+      '</div>' +
+      '<div>' +
+        '<div style="font-size:20px;font-weight:700;">' + (c['Имя']||'—') + '</div>' +
+        '<div style="color:var(--text3);margin-top:4px;">' + (isLegal ? '🏢 Юр. лицо' : '👤 Физ. лицо') + '</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="card-grid">' +
+      '<div class="info-card">' +
+        '<div class="info-card-title">Контакты</div>' +
+        infoRow('Телефон', c['Телефон']) +
+        infoRow('Email', c['Email']) +
+        (isLegal ? infoRow('Директор', c['Директор']) : infoRow('Паспорт', c['Паспорт'])) +
+        (isLegal ? infoRow('Контактное лицо', c['Контактное лицо']) : '') +
+        infoRow('Источник', c['Источник лида']) +
+      '</div>' +
+      (isLegal ?
+      '<div class="info-card">' +
+        '<div class="info-card-title">Реквизиты</div>' +
+        infoRow('УНП', c['УНП']) +
+        infoRow('Юр. адрес', c['Юр. адрес']) +
+        infoRow('Банк. реквизиты', c['Банк. реквизиты']) +
+      '</div>' : '') +
+      '<div class="info-card">' +
+        '<div class="info-card-title">Статистика</div>' +
+        infoRow('Заказов', c['Всего заказов'] || '0') +
+        infoRow('Сумма', c['Сумма заказов'] ? Number(c['Сумма заказов']).toLocaleString('ru') + ' Br' : '0 Br') +
+        infoRow('Последний заказ', c['Последний заказ'] || '—') +
+      '</div>' +
+    '</div>' +
+    '<div class="info-card" style="margin-top:16px;">' +
+      '<div class="info-card-title" style="display:flex;justify-content:space-between;align-items:center;">' +
+        'Автомобили' +
+        '<button class="btn btn-ghost btn-sm" onclick="openAddVehicleModal()">+ Добавить авто</button>' +
+      '</div>' +
+      '<div class="vehicles-list">' + vehiclesHtml + '</div>' +
+    '</div>' +
+    (c['Заметки'] ?
+    '<div class="info-card" style="margin-top:16px;">' +
+      '<div class="info-card-title">Заметки</div>' +
+      '<div style="color:var(--text2);font-size:13px;line-height:1.6;">' + c['Заметки'] + '</div>' +
+    '</div>' : '');
+}
+
+function infoRow(label, value) {
+  if (!value) return '';
+  return '<div class="info-row"><span class="info-label">' + label + '</span><span class="info-value">' + value + '</span></div>';
+}
+
+function openEditClientModal() {
+  var id = App._currentClientId;
+  if (!id) return;
+  var c = null;
+  for (var i = 0; i < App.clients.length; i++) {
+    if (App.clients[i]['ID'] === id) { c = App.clients[i]; break; }
+  }
+  if (!c) { toast('Клиент не найден', 'error'); return; }
+
+  var isLegal = c['Тип'] === 'юр';
+  document.getElementById('edit-cl-name').value = c['Имя'] || '';
+  document.getElementById('edit-cl-phone').value = c['Телефон'] || '';
+  document.getElementById('edit-cl-email').value = c['Email'] || '';
+  document.getElementById('edit-cl-notes').value = c['Заметки'] || '';
+
+  if (isLegal) {
+    document.getElementById('edit-cl-phys-fields').style.display = 'none';
+    document.getElementById('edit-cl-legal-fields').style.display = 'block';
+    document.getElementById('edit-cl-unp').value = c['УНП'] || '';
+    document.getElementById('edit-cl-director').value = c['Директор'] || '';
+    document.getElementById('edit-cl-contact').value = c['Контактное лицо'] || '';
+    document.getElementById('edit-cl-address').value = c['Юр. адрес'] || '';
+    document.getElementById('edit-cl-bank').value = c['Банк. реквизиты'] || '';
+  } else {
+    document.getElementById('edit-cl-phys-fields').style.display = 'block';
+    document.getElementById('edit-cl-legal-fields').style.display = 'none';
+    document.getElementById('edit-cl-passport').value = c['Паспорт'] || '';
+  }
+
+  var sel = document.getElementById('edit-cl-source');
+  if (sel) sel.value = c['Источник лида'] || '';
+
+  openModal('modal-edit-client');
+}
+
+/* ===== СОЗДАТЬ КЛИЕНТА ===== */
+function setClientType(type, btn) {
+  btn.closest('div').querySelectorAll('.ctype-btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById('client-phys-fields').style.display = type === 'физ' ? 'block' : 'none';
+  document.getElementById('client-legal-fields').style.display = type === 'юр' ? 'block' : 'none';
+  App._newClientType = type;
+}
+
+function setPayType(btn) {
+  btn.closest('div').querySelectorAll('.ctype-btn').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+}
+
+function submitNewClient() {
+  var type = App._newClientType || 'физ';
+  var isLegal = type === 'юр';
+
+  var name = isLegal
+    ? document.getElementById('cl-org-name').value.trim()
+    : document.getElementById('cl-fio').value.trim();
+
+  if (!name) {
+    toast(isLegal ? 'Укажи название организации' : 'Укажи ФИО', 'error');
+    return;
+  }
+
+  var payload = {
+    type: type,
+    name: name,
+    phone: isLegal ? document.getElementById('cl-legal-phone').value.trim() : document.getElementById('cl-phone').value.trim(),
+    email: isLegal ? document.getElementById('cl-legal-email').value.trim() : document.getElementById('cl-email').value.trim(),
+    leadSource: document.getElementById('cl-source').value,
+    notes: document.getElementById('cl-notes').value.trim()
+  };
+
+  if (isLegal) {
+    payload.unp = document.getElementById('cl-unp').value.trim();
+    payload.director = document.getElementById('cl-director').value.trim();
+    payload.contactPerson = document.getElementById('cl-contact').value.trim();
+    payload.legalAddress = document.getElementById('cl-address').value.trim();
+    payload.bankDetails = document.getElementById('cl-bank').value.trim();
+  } else {
+    payload.passport = document.getElementById('cl-passport').value.trim();
+  }
+
+  var btn = document.getElementById('cl-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
+  toast('Сохраняем клиента...', 'info');
+
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить клиента'; }
+      if (!resp || !resp.ok) {
+        toast('Ошибка: ' + (resp ? resp.error : 'нет ответа'), 'error');
+        return;
+      }
+
+      var clientId = resp.data ? resp.data['ID'] : null;
+      var clientName = resp.data ? resp.data['Имя'] : name;
+
+      var carBrand = document.getElementById('cl-car-brand').value.trim();
+      var carModel = document.getElementById('cl-car-model').value.trim();
+      if (carBrand && clientId) {
+        google.script.run
+          .withSuccessHandler(function(){ toast('✅ Клиент и авто сохранены', 'success'); })
+          .withFailureHandler(function(){ toast('✅ Клиент сохранён (авто не добавлено)', 'success'); })
+          .createVehicle({
+            clientId: clientId,
+            brand: carBrand,
+            model: carModel,
+            plate: document.getElementById('cl-car-plate').value.trim(),
+            vin: document.getElementById('cl-car-vin').value.trim()
+          });
+      } else {
+        toast('✅ ' + clientName + ' добавлен', 'success');
+      }
+
+      closeModal('modal-new-client');
+      ['cl-fio','cl-phone','cl-email','cl-passport','cl-org-name','cl-unp',
+       'cl-legal-phone','cl-legal-email','cl-director','cl-contact','cl-address',
+       'cl-bank','cl-car-brand','cl-car-model','cl-car-plate','cl-car-vin','cl-notes'].forEach(function(id){
+        var el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      document.getElementById('cl-source').value = '';
+      App._newClientType = 'физ';
+      document.getElementById('client-phys-fields').style.display = 'block';
+      document.getElementById('client-legal-fields').style.display = 'none';
+
+      if (App.currentPage === 'clients') loadClients();
+    })
+    .withFailureHandler(function(e){
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить клиента'; }
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .createClient(payload);
+}
+
+/* ===== РЕДАКТИРОВАТЬ КЛИЕНТА ===== */
+function submitEditClient() {
+  var id = App._currentClientId;
+  if (!id) { toast('Нет ID клиента', 'error'); return; }
+
+  var name = document.getElementById('edit-cl-name').value.trim();
+  if (!name) { toast('Укажи имя', 'error'); return; }
+
+  var c = null;
+  for (var i = 0; i < App.clients.length; i++) {
+    if (App.clients[i]['ID'] === id) { c = App.clients[i]; break; }
+  }
+  var isLegal = c && c['Тип'] === 'юр';
+
+  var payload = {
+    name: name,
+    phone: document.getElementById('edit-cl-phone').value.trim(),
+    email: document.getElementById('edit-cl-email').value.trim(),
+    notes: document.getElementById('edit-cl-notes').value.trim(),
+    leadSource: document.getElementById('edit-cl-source').value
+  };
+
+  if (isLegal) {
+    payload.unp = document.getElementById('edit-cl-unp').value.trim();
+    payload.director = document.getElementById('edit-cl-director').value.trim();
+    payload.contactPerson = document.getElementById('edit-cl-contact').value.trim();
+    payload.legalAddress = document.getElementById('edit-cl-address').value.trim();
+    payload.bankDetails = document.getElementById('edit-cl-bank').value.trim();
+  } else {
+    payload.passport = document.getElementById('edit-cl-passport').value.trim();
+  }
+
+  var btn = document.getElementById('edit-cl-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
+
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      if (!resp || !resp.ok) {
+        toast('Ошибка: ' + (resp ? resp.error : ''), 'error');
+        return;
+      }
+      toast('✅ Данные обновлены', 'success');
+      closeModal('modal-edit-client');
+      if (App.currentPage === 'client-card') openClientCard(id);
+      if (App.currentPage === 'clients') loadClients();
+    })
+    .withFailureHandler(function(e){
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .updateClient(id, payload);
+}
+
+function openAddVehicleModal() {
+  toast('Добавление авто — следующий этап', 'info');
+}
+
+/* ===== СОТРУДНИКИ ===== */
+
+// Отдельный кеш только для страницы команды — не перезаписывается другими операциями
+App._teamList = [];
+
 function loadTeam() {
   var grid = document.getElementById('team-grid');
   var err = document.getElementById('team-error');
   if (!grid) return;
-  grid.innerHTML = '<div class="skeleton-card" style="min-height:200px;grid-column:1/-1;"></div>';
+  grid.innerHTML = '<div class="kpi-skeleton" style="min-height:200px;grid-column:1/-1;"></div>';
   if (err) err.style.display = 'none';
 
   google.script.run
@@ -162,8 +917,9 @@ function loadTeam() {
         }
         return;
       }
-      App.employees = resp.data || [];
-      renderTeam(App.employees);
+      App._teamList = resp.data || [];
+      App.employees = App._teamList; // обновляем общий список тоже
+      renderTeam(App._teamList);
     })
     .withFailureHandler(function(e){
       grid.innerHTML = '';
@@ -176,11 +932,9 @@ function loadTeam() {
     .getEmployees(false);
 }
 
-/* ===== СОТРУДНИКИ: РЕНДЕР ===== */
 function renderTeam(employees) {
   var grid = document.getElementById('team-grid');
   if (!grid) return;
-
   if (!employees || !employees.length) {
     grid.innerHTML = '<div style="text-align:center;padding:60px;color:var(--text3);grid-column:1/-1;">' +
       '<div style="font-size:48px;margin-bottom:12px;">👥</div>' +
@@ -188,338 +942,2484 @@ function renderTeam(employees) {
       '</div>';
     return;
   }
-
-  grid.innerHTML = employees.map(function(e, idx) {
-    var fio     = e['ФИО'] || '—';
-    var status  = e['Статус'] || '—';
-    var pos     = e['Основная должность'] || '—';
-    var salary  = e['Базовая ставка'] || 0;
-    var bonus   = e['% бонуса'] || 0;
-    var phone   = e['Телефон'] || '';
-
-    var ini = fio.split(' ').slice(0,2).map(function(s){
-      return (s && s[0] ? s[0].toUpperCase() : '');
-    }).join('');
-
+  var cards = employees.map(function(e, idx) {
+    var fio = e['ФИО'] || '—';
+    var status = e['Статус'] || '—';
+    var pos = e['Основная должность'] || '—';
+    var salary = e['Базовая ставка'] || 0;
+    var bonus = e['% бонуса'] || 0;
+    var phone = e['Телефон'] || '';
+    var ini = fio.split(' ').slice(0,2).map(function(s){ return (s&&s[0]?s[0].toUpperCase():''); }).join('');
     var isActive = (status === 'Работает');
     var sc = isActive ? 'status-work' : status === 'Отпуск' ? 'status-vacation' : 'status-off';
-
-    return '<div class="team-card">' +
-      '<div class="team-status ' + sc + '">' + status + '</div>' +
-      '<div class="team-head">' +
-        '<div class="team-avatar">' + ini + '</div>' +
-        '<div>' +
-          '<div class="team-name">' + fio + '</div>' +
-          '<div class="team-role">' + pos + '</div>' +
-          (phone ? '<div class="team-role" style="margin-top:2px;">' + phone + '</div>' : '') +
-        '</div>' +
-      '</div>' +
+    return '<div class="team-card" data-team-idx="'+idx+'">' +
+      '<div class="team-status '+sc+'">'+status+'</div>' +
+      '<div class="team-head"><div class="team-avatar">'+ini+'</div>' +
+      '<div><div class="team-name">'+fio+'</div><div class="team-role">'+pos+'</div>' +
+      (phone?'<div class="team-role" style="margin-top:2px;">'+phone+'</div>':'') +
+      '</div></div>' +
       '<div class="team-stats">' +
-        '<div class="team-stat">' +
-          '<div class="team-stat-label">Ставка</div>' +
-          '<div class="team-stat-value">' + Number(salary).toLocaleString('ru') + ' Br</div>' +
-        '</div>' +
-        '<div class="team-stat">' +
-          '<div class="team-stat-label">% бонуса</div>' +
-          '<div class="team-stat-value">' + bonus + '%</div>' +
-        '</div>' +
+        '<div class="team-stat"><div class="team-stat-label">Ставка</div><div class="team-stat-value">'+Number(salary).toLocaleString('ru')+' Br</div></div>' +
+        '<div class="team-stat"><div class="team-stat-label">% бонуса</div><div class="team-stat-value">'+bonus+'%</div></div>' +
       '</div>' +
       '<div style="display:flex;gap:6px;margin-top:10px;">' +
-        '<button class="btn btn-secondary btn-sm" style="flex:1;" ' +
-          'onclick="openEditEmployee(' + idx + ')">✏️ Изменить</button>' +
-        '<button class="btn btn-sm" ' +
-          'style="flex:1;background:' + (isActive ? 'var(--red-soft)' : 'var(--green-soft)') + ';' +
-          'color:' + (isActive ? 'var(--red)' : 'var(--green)') + ';' +
-          'border:1px solid ' + (isActive ? 'rgba(231,76,60,0.2)' : 'rgba(46,204,113,0.2)') + ';" ' +
-          'onclick="toggleEmployeeStatus(' + idx + ')">' +
-          (isActive ? '🔴 Отключить' : '🟢 Восстановить') +
-        '</button>' +
+        '<button class="btn btn-secondary btn-sm" style="flex:1;" data-action="edit">✏️ Изменить</button>' +
+        '<button class="btn btn-sm" style="flex:1;background:'+(isActive?'var(--red-soft)':'var(--green-soft)')+';color:'+(isActive?'var(--red)':'var(--green)')+';border:1px solid '+(isActive?'rgba(231,76,60,0.2)':'rgba(46,204,113,0.2)')+'" data-action="toggle">'+(isActive?'🔴 Отключить':'🟢 Восстановить')+'</button>' +
       '</div>' +
     '</div>';
   }).join('');
+
+  grid.innerHTML = cards;
+
+  // Делегирование событий: один обработчик на контейнер, навешивается ОДИН раз.
+  // Так клики работают для любых перерисованных карточек и не зависят от
+  // повторного навешивания слушателей на каждую кнопку (что ломалось в sandbox GAS).
+  if (!grid._teamHandlerBound) {
+    grid.addEventListener('click', function(ev) {
+      // Ищем нажатую кнопку с data-action (клик мог прийти по тексту/эмодзи внутри неё)
+      var btn = ev.target;
+      while (btn && btn !== grid && !(btn.getAttribute && btn.getAttribute('data-action'))) {
+        btn = btn.parentNode;
+      }
+      if (!btn || btn === grid) return;
+
+      var action = btn.getAttribute('data-action');
+
+      // Находим карточку и её индекс
+      var card = btn;
+      while (card && card !== grid && !(card.getAttribute && card.getAttribute('data-team-idx'))) {
+        card = card.parentNode;
+      }
+      if (!card || card === grid) return;
+      var idx = parseInt(card.getAttribute('data-team-idx'), 10);
+
+      ev.stopPropagation();
+      if (action === 'edit')   openEditEmployee(idx);
+      if (action === 'toggle') toggleEmployeeStatus(idx);
+    });
+    grid._teamHandlerBound = true;
+  }
 }
 
-/* ===== ДОБАВИТЬ СОТРУДНИКА ===== */
 function submitNewEmployee() {
   var fio = document.getElementById('emp-fio').value.trim();
   var pos = document.getElementById('emp-position').value;
   if (!fio) { toast('Укажи ФИО','error'); return; }
   if (!pos) { toast('Выбери должность','error'); return; }
-
   var btn = document.getElementById('emp-submit-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
-  toast('Сохраняем в Google Sheets...','info');
-
   google.script.run
     .withSuccessHandler(function(resp){
       if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
-      if (!resp || !resp.ok) {
-        toast('Ошибка: ' + (resp ? resp.error : 'нет ответа'), 'error');
-        return;
-      }
-      toast('✅ ' + (resp.data ? resp.data['ФИО'] : fio) + ' добавлен','success');
+      if (!resp || !resp.ok) { toast('Ошибка: '+(resp?resp.error:''), 'error'); return; }
+      toast('✅ '+(resp.data?resp.data['ФИО']:fio)+' добавлен','success');
       closeModal('modal-new-employee');
-      ['emp-fio','emp-phone','emp-email','emp-salary','emp-bonus','emp-notes'].forEach(function(id){
-        var el = document.getElementById(id);
-        if (el) el.value = '';
-      });
-      document.getElementById('emp-position').value = '';
-      if (App.currentPage === 'team') loadTeam();
+      ['emp-fio','emp-phone','emp-email','emp-salary','emp-bonus','emp-notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
+      document.getElementById('emp-position').value='';
+      if (App.currentPage==='team') loadTeam();
     })
-    .withFailureHandler(function(e){
-      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
-      toast('Ошибка: ' + e.message, 'error');
-    })
-    .createEmployee({
-      fio:        fio,
-      phone:      document.getElementById('emp-phone').value.trim(),
-      email:      document.getElementById('emp-email').value.trim(),
-      position:   pos,
-      baseSalary: Number(document.getElementById('emp-salary').value) || 0,
-      bonusPct:   Number(document.getElementById('emp-bonus').value) || 0,
-      notes:      document.getElementById('emp-notes').value.trim()
-    });
+    .withFailureHandler(function(e){ if(btn){btn.disabled=false;btn.textContent='Сохранить';}toast('Ошибка: '+e.message,'error'); })
+    .createEmployee({fio:fio,phone:document.getElementById('emp-phone').value.trim(),email:document.getElementById('emp-email').value.trim(),position:pos,baseSalary:Number(document.getElementById('emp-salary').value)||0,bonusPct:Number(document.getElementById('emp-bonus').value)||0,notes:document.getElementById('emp-notes').value.trim()});
 }
 
-/* ===== РЕДАКТИРОВАТЬ СОТРУДНИКА ===== */
 function openEditEmployee(idx) {
-  var e = App.employees[idx];
-  if (!e) return;
-  App._editingIdx = idx;
-  App._editingId = e['ID'];
+  try {
+    var e = App._teamList[idx];
+    if (!e) { toast('Нет данных (idx=' + idx + '), обновите страницу', 'error'); return; }
 
-  // Заполняем форму текущими данными
-  document.getElementById('edit-emp-fio').value    = e['ФИО'] || '';
-  document.getElementById('edit-emp-phone').value  = e['Телефон'] || '';
-  document.getElementById('edit-emp-email').value  = e['Email'] || '';
-  document.getElementById('edit-emp-salary').value = e['Базовая ставка'] || '';
-  document.getElementById('edit-emp-bonus').value  = e['% бонуса'] || '';
-  document.getElementById('edit-emp-notes').value  = e['Заметки'] || '';
+    App._editingId = e['ID'] || ('idx:' + idx);
 
-  // Выставляем должность — нужно подождать пока список заполнен
-  var sel = document.getElementById('edit-emp-position');
-  if (sel) {
-    // Если список пуст — заполним из App.config
-    if (sel.options.length <= 1 && App.config && App.config.positions) {
-      fillPositions(App.config.positions);
-    }
-    sel.value = e['Основная должность'] || '';
+    // Безопасное присвоение — не падает если элемент не найден
+    var set = function(id, val) {
+      var el = document.getElementById(id);
+      if (el) el.value = (val !== undefined && val !== null) ? String(val) : '';
+    };
+
+    set('edit-emp-fio',    e['ФИО']);
+    set('edit-emp-phone',  e['Телефон']);
+    set('edit-emp-email',  e['Email']);
+    set('edit-emp-salary', e['Базовая ставка']);
+    set('edit-emp-bonus',  e['% бонуса']);
+    set('edit-emp-notes',  e['Заметки']);
+
+    var sel = document.getElementById('edit-emp-position');
+    if (sel) sel.value = e['Основная должность'] || '';
+
+    openModal('modal-edit-employee');
+
+  } catch(err) {
+    toast('Ошибка открытия: ' + err.message, 'error');
   }
-
-  openModal('modal-edit-employee');
 }
 
 function submitEditEmployee() {
-  var id = App._editingId;
-  if (!id) { toast('Ошибка: нет ID сотрудника', 'error'); return; }
-
+  var id = App._editingId; if(!id){toast('Нет ID','error');return;}
   var fio = document.getElementById('edit-emp-fio').value.trim();
   var pos = document.getElementById('edit-emp-position').value;
-  if (!fio) { toast('Укажи ФИО', 'error'); return; }
-  if (!pos) { toast('Выбери должность', 'error'); return; }
-
+  if (!fio){toast('Укажи ФИО','error');return;}
+  if (!pos){toast('Выбери должность','error');return;}
   var btn = document.getElementById('edit-emp-submit-btn');
-  if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
-  toast('Сохраняем...', 'info');
-
+  if(btn){btn.disabled=true;btn.textContent='Сохраняем...';}
   google.script.run
-    .withSuccessHandler(function(resp){
-      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
-      if (!resp || !resp.ok) {
-        toast('Ошибка: ' + (resp ? resp.error : 'нет ответа'), 'error');
-        return;
-      }
-      toast('✅ Данные обновлены', 'success');
-      closeModal('modal-edit-employee');
-      if (App.currentPage === 'team') loadTeam();
-    })
-    .withFailureHandler(function(e){
-      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
-      toast('Ошибка: ' + e.message, 'error');
-    })
-    .updateEmployee(id, {
-      fio:        fio,
-      phone:      document.getElementById('edit-emp-phone').value.trim(),
-      email:      document.getElementById('edit-emp-email').value.trim(),
-      position:   pos,
-      baseSalary: Number(document.getElementById('edit-emp-salary').value) || 0,
-      bonusPct:   Number(document.getElementById('edit-emp-bonus').value) || 0,
-      notes:      document.getElementById('edit-emp-notes').value.trim()
-    });
+    .withSuccessHandler(function(resp){if(btn){btn.disabled=false;btn.textContent='Сохранить';}if(!resp||!resp.ok){toast('Ошибка: '+(resp?resp.error:''),'error');return;}toast('✅ Обновлено','success');closeModal('modal-edit-employee');if(App.currentPage==='team')loadTeam();})
+    .withFailureHandler(function(e){if(btn){btn.disabled=false;btn.textContent='Сохранить';}toast('Ошибка: '+e.message,'error');})
+    .updateEmployee(id,{fio:fio,phone:document.getElementById('edit-emp-phone').value.trim(),email:document.getElementById('edit-emp-email').value.trim(),position:pos,baseSalary:Number(document.getElementById('edit-emp-salary').value)||0,bonusPct:Number(document.getElementById('edit-emp-bonus').value)||0,notes:document.getElementById('edit-emp-notes').value.trim()});
 }
 
-/* ===== ОТКЛЮЧИТЬ / ВОССТАНОВИТЬ СОТРУДНИКА ===== */
 function toggleEmployeeStatus(idx) {
-  var e = App.employees[idx];
-  if (!e) return;
-  var id = e['ID'];
-  var fio = e['ФИО'] || '?';
-  var currentStatus = e['Статус'];
-  var newStatus = (currentStatus === 'Работает') ? 'Не работает' : 'Работает';
-
-  var msg = currentStatus === 'Работает'
-    ? 'Отключить сотрудника «' + fio + '»?\n\nИстория и данные сохранятся, он просто скроется из активных.'
-    : 'Восстановить сотрудника «' + fio + '»?';
-
-  if (!confirm(msg)) return;
-
-  toast('Обновляем статус...', 'info');
-
+  var e = App._teamList[idx];
+  if (!e) { toast('Сотрудник не найден — обновите страницу', 'error'); return; }
+  var ns = e['Статус']==='Работает'?'Не работает':'Работает';
+  if(!confirm((ns==='Не работает'?'Отключить':'Восстановить')+' '+e['ФИО']+'?')) return;
   google.script.run
-    .withSuccessHandler(function(resp){
-      if (!resp || !resp.ok) {
-        toast('Ошибка: ' + (resp ? resp.error : 'нет ответа'), 'error');
-        return;
-      }
-      toast('✅ Статус изменён', 'success');
-      if (App.currentPage === 'team') loadTeam();
-    })
-    .withFailureHandler(function(err){
-      toast('Ошибка: ' + err.message, 'error');
-    })
-    .updateEmployeeStatus(id, newStatus);
+    .withSuccessHandler(function(resp){if(!resp||!resp.ok){toast('Ошибка','error');return;}toast('✅ Статус изменён','success');if(App.currentPage==='team')loadTeam();})
+    .withFailureHandler(function(e){toast('Ошибка: '+e.message,'error');})
+    .updateEmployeeStatus(e['ID'],ns);
 }
 
 /* ===== НАСТРОЙКИ ===== */
 function loadSettings() {
   google.script.run
-    .withSuccessHandler(function(resp){
-      if (resp && resp.ok) {
-        App.settings = resp.data || {};
-        fillSettingsForm(App.settings);
-      }
-    })
-    .withFailureHandler(function(e){ toast('Ошибка настроек: ' + e.message, 'error'); })
+    .withSuccessHandler(function(resp){ if(resp&&resp.ok){App.settings=resp.data||{};fillSettingsForm(App.settings);} })
+    .withFailureHandler(function(e){ toast('Ошибка настроек: '+e.message,'error'); })
     .getSettings();
 }
 
 function fillSettingsForm(s) {
-  var set = function(id, key) {
-    var el = document.getElementById(id);
-    if (el && s[key] !== undefined) el.value = s[key];
-  };
-  set('set-company-name',   'company_name');
-  set('set-company-slogan', 'company_slogan');
-  set('set-unp',            'unp');
-  set('set-address',        'address');
-  set('set-phone',          'phone');
-  set('set-email',          'email');
-  set('set-iban',           'iban');
-  set('set-bank',           'bank');
-  set('set-bic',            'bic');
-  set('set-director',       'director');
-  set('set-currency',       'currency');
-  set('set-bonus-pool',     'bonus_pool_pct');
-  set('set-manager-bonus',  'manager_bonus_pct');
-  set('set-cycle-1',        'cycle_day_1');
-  set('set-cycle-2',        'cycle_day_2');
-
-  var color = s['accent_color'] || '#00B8D4';
-  var ci = document.getElementById('set-accent-color');
-  var ch = document.getElementById('set-accent-hex');
-  if (ci) ci.value = color;
-  if (ch) ch.value = color;
-
-  if (s['logo_dataurl']) {
-    var prev = document.getElementById('settings-logo-preview');
-    if (prev) prev.src = s['logo_dataurl'];
-  }
-  var nameEl = document.getElementById('settings-logo-name');
-  if (nameEl) nameEl.textContent = s['company_name'] || 'SPRauto';
+  var set=function(id,key){var el=document.getElementById(id);if(el&&s[key]!==undefined)el.value=s[key];};
+  set('set-company-name','company_name'); set('set-company-slogan','company_slogan');
+  set('set-unp','unp'); set('set-address','address');
+  set('set-phone','phone'); set('set-email','email');
+  set('set-currency','currency'); set('set-bonus-pool','bonus_pool_pct');
+  set('set-cycle-1','cycle_day_1'); set('set-cycle-2','cycle_day_2');
 }
 
 function saveAllSettings() {
-  var settings = {};
-  var get = function(id, key) {
-    var el = document.getElementById(id);
-    if (el) settings[key] = el.value;
-  };
-  get('set-company-name',   'company_name');
-  get('set-company-slogan', 'company_slogan');
-  get('set-unp',            'unp');
-  get('set-address',        'address');
-  get('set-phone',          'phone');
-  get('set-email',          'email');
-  get('set-iban',           'iban');
-  get('set-bank',           'bank');
-  get('set-bic',            'bic');
-  get('set-director',       'director');
-  get('set-currency',       'currency');
-  get('set-bonus-pool',     'bonus_pool_pct');
-  get('set-manager-bonus',  'manager_bonus_pct');
-  get('set-cycle-1',        'cycle_day_1');
-  get('set-cycle-2',        'cycle_day_2');
-
-  var ch = document.getElementById('set-accent-hex');
-  if (ch) settings['accent_color'] = ch.value;
-  if (App.pendingLogoDataUrl) settings['logo_dataurl'] = App.pendingLogoDataUrl;
-
-  toast('Сохраняем настройки...', 'info');
-
+  var s={},g=function(id,key){var el=document.getElementById(id);if(el)s[key]=el.value;};
+  g('set-company-name','company_name'); g('set-company-slogan','company_slogan');
+  g('set-unp','unp'); g('set-address','address');
+  g('set-phone','phone'); g('set-email','email');
+  g('set-currency','currency'); g('set-bonus-pool','bonus_pool_pct');
+  g('set-cycle-1','cycle_day_1'); g('set-cycle-2','cycle_day_2');
+  if(App.pendingLogoDataUrl) s['logo_dataurl']=App.pendingLogoDataUrl;
+  toast('Сохраняем...','info');
   google.script.run
-    .withSuccessHandler(function(resp){
-      if (!resp || !resp.ok) { toast('Ошибка', 'error'); return; }
-      toast('✅ Настройки сохранены', 'success');
-      App.pendingLogoDataUrl = null;
-      if (App.brand) {
-        App.brand.companyName   = settings['company_name']   || App.brand.companyName;
-        App.brand.companySlogan = settings['company_slogan'] || App.brand.companySlogan;
-        App.brand.accentColor   = settings['accent_color']   || App.brand.accentColor;
-        if (settings['logo_dataurl']) App.brand.logoDataUrl = settings['logo_dataurl'];
-      }
-      applyBrand(App.brand);
-    })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
-    .saveSettings(settings);
+    .withSuccessHandler(function(resp){if(!resp||!resp.ok){toast('Ошибка','error');return;}toast('✅ Сохранено','success');App.pendingLogoDataUrl=null;if(App.brand){App.brand.companyName=s['company_name']||App.brand.companyName;App.brand.companySlogan=s['company_slogan']||App.brand.companySlogan;if(s['logo_dataurl'])App.brand.logoDataUrl=s['logo_dataurl'];}applyBrand(App.brand);})
+    .withFailureHandler(function(e){toast('Ошибка: '+e.message,'error');})
+    .saveSettings(s);
 }
 
-/* ===== ЗАГРУЗКА ЛОГОТИПА ===== */
 function handleLogoUpload(input) {
-  var file = input.files[0];
-  if (!file) return;
-  if (file.size > 512 * 1024) {
-    toast('Файл больше 500 КБ — уменьши размер', 'error');
-    input.value = '';
-    return;
-  }
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    App.pendingLogoDataUrl = e.target.result;
-    var prev = document.getElementById('settings-logo-preview');
-    if (prev) prev.src = e.target.result;
-    var sb = document.getElementById('brand-logo');
-    if (sb) sb.src = e.target.result;
-    toast('Логотип загружен. Нажми «Сохранить»', 'info');
-  };
+  var file=input.files[0]; if(!file) return;
+  if(file.size>512*1024){toast('Файл > 500 КБ','error');input.value='';return;}
+  var reader=new FileReader();
+  reader.onload=function(e){App.pendingLogoDataUrl=e.target.result;var wrap=document.getElementById('brand-logo-wrap');if(wrap)wrap.innerHTML='<img class="logo-img" src="'+e.target.result+'" alt="Logo">';toast('Логотип загружен. Нажми Сохранить','info');};
   reader.readAsDataURL(file);
 }
 
-function previewAccentColor(c) {
-  document.documentElement.style.setProperty('--accent', c);
-  document.documentElement.style.setProperty('--accent-soft', c + '20');
-  document.documentElement.style.setProperty('--accent-glow', c + '45');
-  var h = document.getElementById('set-accent-hex');
-  if (h) h.value = c;
+/* ===== ЗАКАЗЫ ===== */
+
+App.orders       = [];
+App._orderFilter = 'all';
+
+function loadOrders() {
+  var tbody = document.getElementById('orders-tbody');
+  var err   = document.getElementById('orders-error');
+  if (!tbody) return;
+  if (err) err.style.display = 'none';
+  tbody.innerHTML = '<tr><td colspan="11" class="ct-loading"><div class="kpi-skeleton" style="min-height:48px;margin:4px 0"></div><div class="kpi-skeleton" style="min-height:48px;margin:4px 0"></div></td></tr>';
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) {
+        if (err) { err.style.display='flex'; document.getElementById('orders-error-text').textContent = resp ? resp.error : 'Нет ответа'; }
+        tbody.innerHTML = '';
+        return;
+      }
+      App.orders = resp.data || [];
+      renderOrders(App.orders);
+      loadOrdersKpi();
+    })
+    .withFailureHandler(function(e) {
+      if (err) { err.style.display='flex'; document.getElementById('orders-error-text').textContent = e.message; }
+      tbody.innerHTML = '';
+    })
+    .getOrders({});
 }
-function syncColorPicker(hex) {
-  if (/^#[0-9A-Fa-f]{6}$/.test(hex)) {
-    previewAccentColor(hex);
-    var p = document.getElementById('set-accent-color');
-    if (p) p.value = hex;
+
+function loadOrdersKpi() {
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) return;
+      var s = resp.data;
+      var fmt = function(n){ return Number(n).toLocaleString('ru') + ' Br'; };
+      var el = function(id, v){ var e = document.getElementById(id); if(e) e.textContent = v; };
+      el('okpi-total',   s.totalCount);
+      el('okpi-revenue', fmt(s.totalRevenue));
+      el('okpi-avg',     fmt(s.avgCheck));
+      el('okpi-inwork',  s.inWork);
+    })
+    .withFailureHandler(function(){})
+    .getOrdersStats();
+}
+
+function setOrderStatusFilter(status, btn) {
+  App._orderFilter = status;
+  document.querySelectorAll('#orders-status-tabs .filter-tab').forEach(function(b){ b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  filterOrders();
+}
+
+function filterOrders() {
+  var search  = (document.getElementById('orders-search')         || {}).value || '';
+  var service = (document.getElementById('orders-service-filter') || {}).value || '';
+  var filtered = App.orders.filter(function(o) {
+    if (App._orderFilter !== 'all' && o['Статус'] !== App._orderFilter) return false;
+    if (service && o['Услуга'] !== service) return false;
+    if (search) {
+      var q  = search.toLowerCase();
+      var cl = String(o['Клиент']   || '').toLowerCase();
+      var av = String(o['Авто']     || '').toLowerCase();
+      var gn = String(o['Госномер'] || '').toLowerCase();
+      var ph = String(o['Телефон']  || '').toLowerCase();
+      if (!cl.includes(q) && !av.includes(q) && !gn.includes(q) && !ph.includes(q)) return false;
+    }
+    return true;
+  });
+  renderOrdersTable(filtered);
+}
+
+function renderOrders(orders) {
+  renderOrdersTable(orders);
+}
+
+var ORDER_STATUS_COLORS = {
+  'Новый':    '#6c8ebf',
+  'В работе': '#f0a500',
+  'Готов':    '#4da6ff',
+  'Выдан':    '#5cb85c',
+  'Отменён':  '#d9534f',
+};
+
+function renderOrdersTable(orders) {
+  var tbody  = document.getElementById('orders-tbody');
+  var footer = document.getElementById('orders-table-footer');
+  if (!tbody) return;
+
+  if (!orders || orders.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text2)">Заказов не найдено</td></tr>';
+    if (footer) footer.textContent = '';
+    return;
+  }
+
+  var esc = function(s){ return String(s||'').replace(/'/g,"\\'"); };
+
+  var html = '';
+  orders.forEach(function(o) {
+    var price      = Number(o['Стоимость заказа']) || 0;
+    var paid       = Number(o._paid) || 0;
+    var status     = o['Статус'] || '';
+    var color      = ORDER_STATUS_COLORS[status] || 'var(--text2)';
+    var payStatus  = String(o['Статус оплаты'] || '').trim() || 'Не оплачен';
+    var payType    = String(o['Тип оплаты'] || '').trim();
+    var isLegal    = o._clientType === 'юр';
+    var isPaid     = payStatus === 'Оплачен';
+
+    // Класс подсветки строки (контроль дебиторки)
+    var rowClass = '';
+    if (isPaid)                                       rowClass = 'row-paid';
+    else if (isLegal)                                 rowClass = 'row-legal';
+    else if (payStatus === 'Частично' || payType === 'Рассрочка') rowClass = 'row-rass';
+    else if (payType === 'Отсрочка')                  rowClass = 'row-otsr';
+    else                                              rowClass = 'row-debt';
+
+    // Бейдж оплаты
+    var payBadge;
+    if (isPaid) {
+      payBadge = '<span style="font-size:11px;background:var(--green-soft);color:var(--success);padding:2px 7px;border-radius:10px;">✓ оплачен</span>';
+    } else if (payStatus === 'Частично') {
+      payBadge = '<span style="font-size:11px;background:var(--blue-soft);color:var(--blue);padding:2px 7px;border-radius:10px;" title="Оплачено ' + paid.toLocaleString('ru') + ' из ' + price.toLocaleString('ru') + ' Br">рассрочка ' + Math.round(price ? paid/price*100 : 0) + '%</span>';
+    } else if (payType === 'Отсрочка') {
+      payBadge = '<span style="font-size:11px;background:var(--yellow-soft);color:var(--warning);padding:2px 7px;border-radius:10px;">отсрочка</span>';
+    } else if (payType === 'Рассрочка') {
+      payBadge = '<span style="font-size:11px;background:var(--blue-soft);color:var(--blue);padding:2px 7px;border-radius:10px;">рассрочка</span>';
+    } else {
+      payBadge = '<span style="font-size:11px;background:var(--red-soft);color:var(--danger);padding:2px 7px;border-radius:10px;">долг</span>';
+    }
+    if (isLegal) {
+      payBadge += ' <span style="font-size:10px;background:var(--purple-soft);color:var(--purple);padding:1px 5px;border-radius:8px;" title="Юридическое лицо">ЮЛ</span>';
+    }
+
+    var oid    = o['ID'] || '';
+    var payBtn = !isPaid
+      ? '<button class="btn" onclick="event.stopPropagation();openPayOrderModal(\'' + oid + '\',\'' + esc(o['Клиент']) + '\',' + price + ',\'' + esc(o['Срок оплаты']) + '\')" ' +
+          'style="padding:3px 8px;font-size:11px;font-weight:600;background:var(--green-soft);color:var(--success);border:1px solid rgba(46,204,113,.3);border-radius:6px;white-space:nowrap">✓ Оплатить</button>'
+      : '<span style="font-size:11px;color:var(--success);font-weight:600">✓ оплачен</span>';
+
+    // Даты следующего и финального платежа (для рассрочки/отсрочки)
+    var nextPay  = o._nextPay  || '';
+    var finalPay = o._finalPay || '';
+    var payDates = (!isPaid && (nextPay || finalPay))
+      ? '<div style="font-size:10px;color:var(--text3);margin-top:3px;white-space:nowrap">' +
+          (nextPay ? '📅 ' + nextPay : '') +
+          (finalPay && finalPay !== nextPay ? (nextPay ? ' · ' : '') + 'до ' + finalPay : '') +
+        '</div>'
+      : '';
+
+    html +=
+      '<tr class="' + rowClass + '" style="cursor:pointer" onclick="openOrderCard(\'' + oid + '\')">' +
+      '<td onclick="event.stopPropagation()" style="white-space:nowrap">' + payBtn + '</td>' +
+      '<td style="font-weight:600;font-size:12px">' + (o['Номер договора'] || oid || '') + '</td>' +
+      '<td style="font-size:12px;color:var(--text-secondary)">' + (o['Дата'] || '') + '</td>' +
+      '<td>' +
+        '<div style="font-weight:500;font-size:13px">' + (o['Клиент'] || '—') + '</div>' +
+        '<div style="font-size:11px;color:var(--text-secondary)">' + (o['Телефон'] || '') + '</div>' +
+      '</td>' +
+      '<td>' +
+        '<div style="font-size:13px">' + (o['Авто'] || '—') + '</div>' +
+        '<div style="font-size:11px;color:var(--text-secondary)">' + (o['Госномер'] || '') + '</div>' +
+      '</td>' +
+      '<td style="font-size:13px">' + (o['Услуга'] || '') + '</td>' +
+      '<td style="text-align:right;font-weight:600">' + price.toLocaleString('ru') + ' Br</td>' +
+      '<td style="text-align:center">' + payBadge + payDates + '</td>' +
+      '<td style="text-align:center"><span style="font-size:12px;font-weight:600;color:' + color + '">' + status + '</span></td>' +
+      '<td style="font-size:12px;color:var(--text-secondary)">' + (o['Менеджер'] || '—') + '</td>' +
+      '<td onclick="event.stopPropagation()">' +
+        '<select class="form-select" style="font-size:11px;padding:2px 4px;height:26px;min-width:90px" onchange="changeOrderStatus(\'' + oid + '\', this)">' +
+          ['Новый','В работе','Готов','Выдан','Отменён'].map(function(s){
+            return '<option value="' + s + '"' + (s === status ? ' selected' : '') + '>' + s + '</option>';
+          }).join('') +
+        '</select>' +
+      '</td>' +
+      '</tr>';
+  });
+
+  tbody.innerHTML = html;
+  if (footer) footer.textContent = 'Показано: ' + orders.length + ' из ' + App.orders.length;
+}
+
+function changeOrderStatus(orderId, selectEl) {
+  var newStatus = selectEl.value;
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+      for (var i = 0; i < App.orders.length; i++) {
+        if (App.orders[i]['ID'] === orderId) { App.orders[i]['Статус'] = newStatus; break; }
+      }
+      toast('Статус обновлён', 'success');
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .updateOrderStatus(orderId, newStatus);
+}
+
+/* ===== ФОРМА НОВОГО ЗАКАЗА ===== */
+
+App._orderPayType  = '';   // условия оплаты в форме нового заказа
+App._materials     = [];   // справочник материалов
+App._expenseHints  = ['Такси','Арматура','Парковка','Доставка','Инструмент','Прочее'];
+App._orderMaterials = [];  // строки материалов текущей формы
+App._orderExpenses  = [];  // строки расходов текущей формы
+
+/* --- Инициализация формы заказа --- */
+function initOrderForm() {
+  App._orderMaterials = [];
+  App._orderExpenses  = [];
+  var ml = document.getElementById('ord-materials-list');
+  var el = document.getElementById('ord-expenses-list');
+  if (ml) ml.innerHTML = '';
+  if (el) el.innerHTML = '';
+  var me = document.getElementById('ord-materials-empty');
+  var ee = document.getElementById('ord-expenses-empty');
+  if (me) me.style.display = 'block';
+  if (ee) ee.style.display = 'block';
+  // Сбрасываем выбор мастеров
+  var lbl = document.getElementById('ord-masters-label');
+  if (lbl) lbl.textContent = '— выбрать —';
+  document.querySelectorAll('#ord-masters-wrap input[type=checkbox]').forEach(function(cb){ cb.checked = false; });
+  var hid = document.getElementById('ord-masters'); if (hid) hid.value = '';
+
+  // Загружаем справочник материалов
+  if (App._materials.length === 0) {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        App._materials = (resp && resp.ok) ? (resp.data || []) : [];
+        document.querySelectorAll('.mat-select').forEach(function(sel) {
+          fillMaterialSelect(sel, '');
+        });
+      })
+      .withFailureHandler(function(){})
+      .getMaterials(null);
   }
 }
-function setAccentColor(c) {
-  previewAccentColor(c);
-  var p = document.getElementById('set-accent-color');
-  var h = document.getElementById('set-accent-hex');
-  if (p) p.value = c;
-  if (h) h.value = c;
+
+/* --- Справочник материалов: заполнить select --- */
+function fillMaterialSelect(sel, selectedId) {
+  sel.innerHTML = '<option value="">— материал —</option>';
+  App._materials.forEach(function(m) {
+    var opt = document.createElement('option');
+    opt.value = m['ID'] || '';
+    opt.textContent = m['Название'] + (m['Категория'] ? ' (' + m['Категория'] + ')' : '');
+    opt.dataset.unit      = m['Единица']      || 'пм';
+    opt.dataset.price     = m['Цена']          || 0;
+    opt.dataset.rollWidth = m['Ширина рулона'] || 1.52;
+    if (m['ID'] === selectedId) opt.selected = true;
+    sel.appendChild(opt);
+  });
+}
+
+/* --- Добавить строку материала --- */
+function addMaterialLine() {
+  var idx = App._orderMaterials.length;
+  App._orderMaterials.push({ materialId:'', name:'', unit:'пм', qty:0, rollWidth:1.52, pricePerSqm:0, type:'расход', cost:0 });
+
+  var list  = document.getElementById('ord-materials-list');
+  var empty = document.getElementById('ord-materials-empty');
+  if (empty) empty.style.display = 'none';
+
+  var row = document.createElement('div');
+  row.className = 'line-item-row';
+  row.id = 'mat-row-' + idx;
+  row.innerHTML =
+    '<select class="mat-select line-item-select" onchange="onMaterialSelect(this,' + idx + ')"></select>' +
+    '<select class="line-item-unit" onchange="onMaterialChange(' + idx + ')">' +
+      '<option value="пм">пм</option>' +
+      '<option value="м²">м²</option>' +
+    '</select>' +
+    '<input class="line-item-qty" type="number" placeholder="кол-во" min="0" step="0.01" oninput="onMaterialChange(' + idx + ')">' +
+    '<select class="line-item-type" onchange="onMaterialChange(' + idx + ')">' +
+      '<option value="расход">расход</option>' +
+      '<option value="остаток">остаток</option>' +
+    '</select>' +
+    '<span class="line-item-cost" id="mat-cost-' + idx + '" style="min-width:60px;text-align:right;font-size:12px">0 Br</span>' +
+    '<button class="line-item-remove" onclick="removeMaterialLine(' + idx + ')">✕</button>';
+
+  list.appendChild(row);
+  fillMaterialSelect(row.querySelector('.mat-select'), '');
+}
+
+function onMaterialSelect(sel, idx) {
+  var opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.value) return;
+  var m = App._orderMaterials[idx];
+  if (!m) return;
+  m.materialId  = opt.value;
+  m.name        = opt.textContent.split(' (')[0];
+  m.unit        = opt.dataset.unit      || 'пм';
+  m.pricePerSqm = Number(opt.dataset.price)     || 0;
+  m.rollWidth   = Number(opt.dataset.rollWidth)  || 1.52;
+
+  var row     = document.getElementById('mat-row-' + idx);
+  var unitSel = row ? row.querySelector('.line-item-unit') : null;
+  if (unitSel) unitSel.value = m.unit;
+  onMaterialChange(idx);
+}
+
+function onMaterialChange(idx) {
+  var row = document.getElementById('mat-row-' + idx);
+  if (!row) return;
+  var m = App._orderMaterials[idx];
+  if (!m) return;
+  var unitSel = row.querySelector('.line-item-unit');
+  var qtyInp  = row.querySelector('.line-item-qty');
+  var typeSel = row.querySelector('.line-item-type');
+
+  m.unit = unitSel ? unitSel.value : m.unit;
+  m.qty  = Number(qtyInp ? qtyInp.value : 0) || 0;
+  m.type = typeSel ? typeSel.value : 'расход';
+
+  var qtySqm = (m.unit === 'пм') ? Math.round(m.qty * m.rollWidth * 100) / 100 : m.qty;
+  m.cost = (m.type === 'остаток') ? 0 : Math.round(qtySqm * m.pricePerSqm * 100) / 100;
+
+  var costEl = document.getElementById('mat-cost-' + idx);
+  if (costEl) {
+    costEl.textContent = m.cost + ' Br';
+    costEl.style.color = m.type === 'остаток' ? 'var(--text3)' : 'var(--success)';
+  }
+  recalcOrderPreview();
+}
+
+function removeMaterialLine(idx) {
+  var row = document.getElementById('mat-row-' + idx);
+  if (row) row.remove();
+  App._orderMaterials[idx] = null;
+  var remaining = App._orderMaterials.filter(function(m){ return m; });
+  var empty = document.getElementById('ord-materials-empty');
+  if (empty) empty.style.display = remaining.length ? 'none' : 'block';
+  recalcOrderPreview();
+}
+
+/* --- Добавить строку расхода --- */
+function addExpenseLine() {
+  var idx  = App._orderExpenses.length;
+  App._orderExpenses.push({ name:'', amount:0 });
+
+  var list  = document.getElementById('ord-expenses-list');
+  var empty = document.getElementById('ord-expenses-empty');
+  if (empty) empty.style.display = 'none';
+
+  var hints = App._expenseHints;
+  var dOpts = hints.map(function(h){ return '<option value="' + h + '">'; }).join('');
+
+  var row = document.createElement('div');
+  row.className = 'line-item-row';
+  row.id = 'exp-row-' + idx;
+  row.innerHTML =
+    '<input class="line-item-name" list="exp-hints-' + idx + '" placeholder="Такси / Арматура..." ' +
+      'oninput="onExpenseChange(' + idx + ')">' +
+    '<datalist id="exp-hints-' + idx + '">' + dOpts + '</datalist>' +
+    '<input class="line-item-amount" type="number" placeholder="сумма" min="0" step="0.01" ' +
+      'style="max-width:100px" oninput="onExpenseChange(' + idx + ')">' +
+    '<span style="font-size:12px;color:var(--text3)">Br</span>' +
+    '<button class="line-item-remove" onclick="removeExpenseLine(' + idx + ')">✕</button>';
+
+  list.appendChild(row);
+}
+
+function onExpenseChange(idx) {
+  var row = document.getElementById('exp-row-' + idx);
+  if (!row) return;
+  var e = App._orderExpenses[idx];
+  if (!e) return;
+  e.name   = (row.querySelector('.line-item-name')   || {}).value || '';
+  e.amount = Number((row.querySelector('.line-item-amount') || {}).value) || 0;
+  recalcOrderPreview();
+}
+
+function removeExpenseLine(idx) {
+  var row = document.getElementById('exp-row-' + idx);
+  if (row) row.remove();
+  App._orderExpenses[idx] = null;
+  var remaining = App._orderExpenses.filter(function(e){ return e; });
+  var empty = document.getElementById('ord-expenses-empty');
+  if (empty) empty.style.display = remaining.length ? 'none' : 'block';
+  recalcOrderPreview();
+}
+
+function setOrderPayType(val, btn) {
+  // Повторный клик по активному — снять выбор (условия пока не ясны)
+  var already = (App._orderPayType === val);
+  App._orderPayType = already ? '' : val;
+  var hid = document.getElementById('ord-paytype');
+  if (hid) hid.value = App._orderPayType;
+  btn.closest('div').querySelectorAll('.ctype-btn').forEach(function(b){ b.classList.remove('active'); });
+  if (!already) btn.classList.add('active');
+
+  // Поле срока/предоплаты показываем для отсрочки и рассрочки
+  var isDeferred = (App._orderPayType === 'Отсрочка' || App._orderPayType === 'Рассрочка');
+  var isRassr    = (App._orderPayType === 'Рассрочка');
+  var dueRow = document.getElementById('ord-duepay-row');
+  if (dueRow) dueRow.style.display = isDeferred ? 'block' : 'none';
+  var monthsWrap = document.getElementById('ord-rassr-months-wrap');
+  if (monthsWrap) monthsWrap.style.display = isRassr ? 'block' : 'none';
+  var hint = document.getElementById('ord-rassr-hint');
+  if (hint) hint.style.display = isRassr ? 'block' : 'none';
+  var dueLabel = document.getElementById('ord-duepay-label');
+  if (dueLabel) dueLabel.textContent = isRassr ? 'Дата первого взноса' : 'Срок оплаты';
+
+  recalcOrderPreview();
+}
+
+function orderSearchClient() {
+  var phone = (document.getElementById('ord-client-phone') || {}).value || '';
+  if (phone.replace(/\D/g,'').length < 7) return;
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      var found = document.getElementById('ord-client-found');
+      if (!resp || !resp.ok || !resp.data) { if (found) found.style.display = 'none'; return; }
+      var c = resp.data;
+      if (found) {
+        found.style.display = 'block';
+        found.innerHTML = '<strong>' + (c['Имя'] || '') + '</strong>' +
+          (c['Авто'] ? ' &nbsp;·&nbsp; ' + c['Авто'] : '') +
+          '<button class="btn btn-ghost" style="margin-left:10px;padding:2px 8px;font-size:11px" onclick="fillOrderClient()">Использовать</button>';
+        App._foundClient = c;
+      }
+      document.getElementById('ord-client-name').value = c['Имя'] || '';
+      document.getElementById('ord-client-id').value   = c['ID']  || '';
+    })
+    .withFailureHandler(function(){})
+    .findClientByPhone(phone);
+}
+
+function fillOrderClient() {
+  if (!App._foundClient) return;
+  var c = App._foundClient;
+  document.getElementById('ord-client-name').value = c['Имя']  || '';
+  document.getElementById('ord-client-id').value   = c['ID']   || '';
+  var found = document.getElementById('ord-client-found');
+  if (found) found.style.display = 'none';
+}
+
+function recalcOrderPreview() {
+  var price   = Number((document.getElementById('ord-price') || {}).value) || 0;
+  var payType = App._orderPayType;
+  var manager = ((document.getElementById('ord-manager') || {}).value) || '';
+  var masters = ((document.getElementById('ord-masters') || {}).value) || '';
+
+  var totalMat = App._orderMaterials.reduce(function(s, m) { return s + (m ? (m.cost || 0) : 0); }, 0);
+  var totalExp = App._orderExpenses.reduce(function(s, e)  { return s + (e ? (e.amount || 0) : 0); }, 0);
+
+  // Показываем итоги строк
+  var matTotEl = document.getElementById('prev-mat-total');
+  var expTotEl = document.getElementById('prev-exp-total');
+  if (matTotEl) matTotEl.textContent = Math.round(totalMat * 100) / 100 + ' Br';
+  if (expTotEl) expTotEl.textContent = Math.round(totalExp * 100) / 100 + ' Br';
+
+  if (!price) { var p = document.getElementById('ord-finance-preview'); if(p) p.style.display = 'none'; return; }
+
+  var fmt        = function(n){ return Math.round(n * 100) / 100; };
+  var bezDisc    = (payType === 'Безнал') ? price * 0.15 : 0;
+  var gross      = price - totalMat - totalExp - bezDisc;
+  var mgrCount   = manager ? 1 : 0;
+  var mstrCount  = masters.split(',').filter(function(s){ return s.trim(); }).length;
+  var mgrBonus   = mgrCount  > 0 ? gross * 0.10 / mgrCount  : 0;
+  var mstrBonus  = mstrCount > 0 ? gross * 0.35 / mstrCount : 0;
+  var margin     = gross - (mgrCount > 0 ? gross * 0.10 : 0) - (mstrCount > 0 ? gross * 0.35 : 0);
+
+  document.getElementById('prev-gross').textContent  = fmt(gross)     + ' Br';
+  document.getElementById('prev-mgr').textContent    = fmt(mgrBonus)  + ' Br';
+  document.getElementById('prev-master').textContent = fmt(mstrBonus) + ' Br';
+  document.getElementById('prev-margin').textContent = fmt(margin)    + ' Br';
+  var p = document.getElementById('ord-finance-preview'); if(p) p.style.display = 'block';
+}
+
+function submitNewOrder() {
+  var service = (document.getElementById('ord-service') || {}).value;
+  var name    = ((document.getElementById('ord-client-name') || {}).value || '').trim();
+  var price   = Number((document.getElementById('ord-price') || {}).value || 0);
+
+  if (!service) { toast('Выберите услугу', 'error'); return; }
+  if (!name)    { toast('Укажите имя клиента', 'error'); return; }
+  if (!price)   { toast('Укажите стоимость заказа', 'error'); return; }
+
+  var payType     = App._orderPayType || '';
+  var duePay      = (document.getElementById('ord-duepay') || {}).value || '';
+  var prepay      = Number((document.getElementById('ord-prepay') || {}).value || 0);
+  var prepayMeth  = (document.getElementById('ord-prepay-method') || {}).value || 'Нал';
+  var rassrMonths = Number((document.getElementById('ord-rassr-months') || {}).value || 0);
+
+  var payload = {
+    service:     service,
+    clientId:    (document.getElementById('ord-client-id')    || {}).value || '',
+    clientName:  name,
+    clientPhone: (document.getElementById('ord-client-phone') || {}).value || '',
+    car:         (document.getElementById('ord-car')          || {}).value || '',
+    plate:       (document.getElementById('ord-plate')        || {}).value || '',
+    price:       price,
+    payType:     payType,
+    duePayDate:  duePay,
+    manager:     (document.getElementById('ord-manager') || {}).value || '',
+    masters:     ((document.getElementById('ord-masters') || {}).value || '').trim(),
+    notes:       ((document.getElementById('ord-notes')   || {}).value || '').trim(),
+    materials:   App._orderMaterials.filter(function(m){ return m && m.materialId; }),
+    expenses:    App._orderExpenses.filter(function(e){ return e && e.name && e.amount > 0; }),
+  };
+
+  var btn = document.getElementById('ord-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
+  var resetBtn = function(){ if (btn) { btn.disabled = false; btn.textContent = 'Создать заказ'; } };
+
+  var finalizeNewOrder = function() {
+    closeModal('modal-new-order');
+    ['ord-service','ord-client-phone','ord-client-name','ord-client-id',
+     'ord-car','ord-plate','ord-price','ord-masters','ord-notes','ord-prepay'].forEach(function(id){
+      var el = document.getElementById(id); if (el) el.value = '';
+    });
+    var found = document.getElementById('ord-client-found'); if (found) found.style.display = 'none';
+    var preview = document.getElementById('ord-finance-preview'); if (preview) preview.style.display = 'none';
+    App._orderPayType = '';
+    initOrderForm();
+    var hid = document.getElementById('ord-paytype'); if (hid) hid.value = '';
+    var duepayEl = document.getElementById('ord-duepay'); if (duepayEl) duepayEl.value = '';
+    var dueRow = document.getElementById('ord-duepay-row'); if (dueRow) dueRow.style.display = 'none';
+    document.querySelectorAll('#modal-new-order .ctype-btn').forEach(function(b){ b.classList.remove('active'); });
+    App._foundClient = null;
+    if (App.currentPage === 'orders') loadOrders();
+  };
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { resetBtn(); toast('Ошибка: ' + (resp ? resp.error : 'нет ответа'), 'error'); return; }
+      var orderId  = resp.data.id;
+      var contract = resp.data.contractNumber || '';
+
+      var done = function() {
+        resetBtn();
+        toast('✅ Заказ ' + contract + ' создан', 'success');
+        finalizeNewOrder();
+      };
+      // Шаг 3: график рассрочки (на остаток после предоплаты)
+      var buildPlan = function() {
+        if (payType === 'Рассрочка' && rassrMonths >= 1) {
+          google.script.run
+            .withSuccessHandler(function(){ done(); })
+            .withFailureHandler(function(e){ resetBtn(); toast('Заказ создан, но график не построен: ' + e.message, 'error'); finalizeNewOrder(); })
+            .createInstallmentPlan(orderId, { months: rassrMonths, startDate: duePay });
+        } else done();
+      };
+      // Шаг 2: предоплата (если указана)
+      if (prepay > 0) {
+        google.script.run
+          .withSuccessHandler(function(){ buildPlan(); })
+          .withFailureHandler(function(e){ resetBtn(); toast('Заказ создан, но предоплата не внесена: ' + e.message, 'error'); finalizeNewOrder(); })
+          .addOrderPayment(orderId, { amount: prepay, payType: prepayMeth, comment: 'Предоплата при создании' });
+      } else {
+        buildPlan();
+      }
+    })
+    .withFailureHandler(function(e) {
+      resetBtn();
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .createOrder(payload);
+}
+
+/* ===== СТРАНИЦА СПРАВОЧНИКА МАТЕРИАЛОВ ===== */
+
+function loadMaterials() {
+  var tbody = document.getElementById('materials-tbody');
+  var err   = document.getElementById('materials-error');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</td></tr>';
+  if (err)   err.style.display = 'none';
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) {
+        if (err) { err.textContent = resp ? resp.error : 'Нет ответа'; err.style.display = 'block'; }
+        return;
+      }
+      App._materials = resp.data || [];
+      renderMaterialsTable(App._materials);
+    })
+    .withFailureHandler(function(e) {
+      if (err) { err.textContent = e.message; err.style.display = 'block'; }
+    })
+    .getMaterials(null);
+}
+
+function renderMaterialsTable(list) {
+  var tbody = document.getElementById('materials-tbody');
+  if (!tbody) return;
+  if (!list || list.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3)">Материалы не добавлены. Нажмите «+ Добавить материал» или «⬇ Импорт из таблицы»</td></tr>';
+    return;
+  }
+  tbody.innerHTML = list.map(function(m) {
+    var unit      = m['Единица']      || '—';
+    var rollWidth = m['Ширина рулона'] ? m['Ширина рулона'] + ' м' : '—';
+    var price     = m['Цена'] ? Number(m['Цена']).toLocaleString('ru') + ' Br' : '—';
+    var active    = m['Активен'] !== 'Нет';
+    var id        = m['ID'] || '';
+    var ellip = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    return '<tr style="' + (active ? '' : 'opacity:.45') + '">' +
+      '<td style="font-weight:600;' + ellip + '" title="' + String(m['Название']||'').replace(/"/g,'&quot;') + '">' + (m['Название'] || '—') + '</td>' +
+      '<td style="color:var(--text3);font-size:12px;' + ellip + '">' + (m['Категория'] || '—') + '</td>' +
+      '<td style="font-size:12px">' + (m['Услуга'] || '—') + '</td>' +
+      '<td style="font-size:12px">' + unit + '</td>' +
+      '<td style="font-size:12px">' + (unit === 'пм' ? rollWidth : '—') + '</td>' +
+      '<td style="font-weight:600;color:var(--accent);text-align:right;white-space:nowrap">' + price + '</td>' +
+      '<td style="text-align:center"><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:' +
+        (active ? 'rgba(40,167,69,.15)' : 'var(--bg-hover)') + ';color:' +
+        (active ? 'var(--success)' : 'var(--text3)') + '">' +
+        (active ? 'Активен' : 'Архив') + '</span></td>' +
+      '<td style="text-align:right;white-space:nowrap">' +
+        '<button class="btn btn-ghost" style="padding:3px 7px;font-size:11px;margin-right:3px" ' +
+          'onclick=\'openEditMaterial(' + JSON.stringify(m) + ')\'>✏</button>' +
+        (active
+          ? '<button class="btn btn-ghost" style="padding:3px 7px;font-size:11px;color:var(--text3);margin-right:3px" onclick="deactivateMat(\'' + id + '\')">Архив</button>'
+          : '<button class="btn btn-ghost" style="padding:3px 7px;font-size:11px;color:var(--success);margin-right:3px" onclick="restoreMat(\'' + id + '\')">Восст.</button>') +
+        '<button class="btn btn-ghost" style="padding:3px 7px;font-size:11px;color:var(--danger)" title="Удалить навсегда" onclick="deleteMatRow(\'' + id + '\',\'' + String(m['Название']||'').replace(/'/g,"\\'") + '\')">🗑</button>' +
+      '</td>' +
+      '</tr>';
+  }).join('');
+}
+
+function openEditMaterial(m) {
+  document.getElementById('edit-mat-id').value         = m['ID']             || '';
+  document.getElementById('edit-mat-name').value       = m['Название']       || '';
+  document.getElementById('edit-mat-category').value   = m['Категория']      || '';
+  document.getElementById('edit-mat-service').value    = m['Услуга']         || 'Универсальная';
+  document.getElementById('edit-mat-unit').value       = m['Единица']        || 'пм';
+  document.getElementById('edit-mat-price').value      = m['Цена']           || '';
+  document.getElementById('edit-mat-roll-width').value = m['Ширина рулона']  || 1.52;
+  toggleEditRollWidth();
+  openModal('modal-edit-material');
+}
+
+function toggleEditRollWidth() {
+  var unit = (document.getElementById('edit-mat-unit') || {}).value;
+  var wrap = document.getElementById('edit-mat-roll-wrap');
+  if (wrap) wrap.style.display = (unit === 'пм') ? '' : 'none';
+}
+
+function submitEditMaterial() {
+  var id    = (document.getElementById('edit-mat-id')    || {}).value || '';
+  var name  = ((document.getElementById('edit-mat-name') || {}).value || '').trim();
+  var price = Number((document.getElementById('edit-mat-price') || {}).value || 0);
+  var unit  = (document.getElementById('edit-mat-unit')  || {}).value || 'пм';
+  if (!name)  { toast('Укажите название', 'error'); return; }
+  if (!price) { toast('Укажите цену', 'error'); return; }
+
+  var payload = {
+    name:      name,
+    category:  (document.getElementById('edit-mat-category')  || {}).value || '',
+    service:   (document.getElementById('edit-mat-service')   || {}).value || 'Универсальная',
+    unit:      unit,
+    price:     price,
+    rollWidth: unit === 'пм' ? Number((document.getElementById('edit-mat-roll-width') || {}).value || 1.52) : '',
+    active:    'Да',
+  };
+
+  var btn = document.getElementById('edit-mat-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+      toast('Материал обновлён', 'success');
+      closeModal('modal-edit-material');
+      App._materials = [];
+      loadMaterials();
+    })
+    .withFailureHandler(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .updateMaterial(id, payload);
+}
+
+function restoreMat(id) {
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка', 'error'); return; }
+      toast('Материал восстановлен', 'success');
+      loadMaterials();
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .updateMaterial(id, { active: 'Да' });
+}
+
+function deleteMatRow(id, name) {
+  if (!confirm('Удалить материал «' + (name || id) + '» навсегда? Действие необратимо.')) return;
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast('Материал удалён', 'success');
+      App._materials = [];
+      loadMaterials();
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .deleteMaterialRow(id);
+}
+
+function clearAllMaterials() {
+  if (!confirm('Очистить ВЕСЬ справочник материалов? Удалятся все строки. Действие необратимо.')) return;
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast('Справочник очищен: удалено ' + (resp.data.deleted||0), 'success');
+      App._materials = [];
+      loadMaterials();
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .clearAllMaterials();
+}
+
+function importMaterialsFromRaschet() {
+  var btn = document.getElementById('btn-import-mat');
+  if (btn) { btn.disabled = true; btn.textContent = 'Загружаем...'; }
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (btn) { btn.disabled = false; btn.textContent = '⬇ Импорт из таблицы'; }
+      if (!resp || !resp.ok) { toast('Ошибка импорта: ' + (resp ? resp.error : ''), 'error'); return; }
+      var d = resp.data;
+      toast('Импорт завершён: добавлено ' + d.added + ', пропущено (уже есть) ' + d.skipped, 'success');
+      App._materials = [];
+      loadMaterials();
+    })
+    .withFailureHandler(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = '⬇ Импорт из таблицы'; }
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .importMaterialsFromRaschet();
+}
+
+function toggleRollWidth() {
+  var unit = (document.getElementById('mat-unit') || {}).value;
+  var wrap = document.getElementById('mat-roll-wrap');
+  if (wrap) wrap.style.display = (unit === 'пм') ? '' : 'none';
+}
+
+function submitNewMaterial() {
+  var name  = ((document.getElementById('mat-name')  || {}).value || '').trim();
+  var price = Number((document.getElementById('mat-price') || {}).value || 0);
+  var unit  = (document.getElementById('mat-unit') || {}).value || 'пм';
+  if (!name)  { toast('Укажите название', 'error'); return; }
+  if (!price) { toast('Укажите цену', 'error'); return; }
+
+  var payload = {
+    name:      name,
+    category:  (document.getElementById('mat-category')  || {}).value || '',
+    service:   (document.getElementById('mat-service')   || {}).value || 'Универсальная',
+    unit:      unit,
+    price:     price,
+    rollWidth: unit === 'пм' ? Number((document.getElementById('mat-roll-width') || {}).value || 1.52) : null,
+  };
+
+  var btn = document.getElementById('mat-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : 'нет ответа'), 'error'); return; }
+      toast('Материал добавлен', 'success');
+      closeModal('modal-new-material');
+      App._materials = []; // сброс кеша
+      if (App.currentPage === 'materials') loadMaterials();
+      ['mat-name','mat-price','mat-roll-width'].forEach(function(id){ var el = document.getElementById(id); if(el) el.value = ''; });
+    })
+    .withFailureHandler(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .createMaterial(payload);
+}
+
+function deactivateMat(id) {
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка', 'error'); return; }
+      toast('Материал перенесён в архив', 'success');
+      loadMaterials();
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .deactivateMaterial(id);
+}
+
+/* ===== ДАШБОРД ===== */
+
+// Диапазон периода дашборда: если заданы даты — берём их, иначе пресет
+function getDashRange() {
+  var from = (document.getElementById('dash-from') || {}).value;
+  var to   = (document.getElementById('dash-to')   || {}).value;
+  if (from || to) {
+    return {
+      from: from ? new Date(from).toISOString() : null,
+      to:   to   ? new Date(to + 'T23:59:59').toISOString() : null,
+    };
+  }
+  return getPeriodRange((document.getElementById('dash-period') || {}).value || 'month');
+}
+
+// Смена пресета периода → заполняем календари и пересчитываем
+function onDashPeriodChange() {
+  var r = getPeriodRange((document.getElementById('dash-period') || {}).value || 'month');
+  var f = document.getElementById('dash-from');
+  var t = document.getElementById('dash-to');
+  if (f) f.value = r.from ? r.from.slice(0, 10) : '';
+  if (t) t.value = r.to   ? r.to.slice(0, 10)   : '';
+  renderDashboard();
+}
+
+// Ручная правка даты в календаре → пересчитываем
+function onDashDateEdit() { renderDashboard(); }
+
+function renderDashboard() {
+  var kpi = document.getElementById('dash-kpi');
+  if (kpi) kpi.innerHTML = '<div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div>';
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) return;
+      var d = resp.data;
+      var k = d.kpi || {};
+      var fmt = function(n){ return (Math.round(Number(n)*100)/100).toLocaleString('ru') + ' Br'; };
+      if (kpi) kpi.innerHTML =
+        kpiCard('Выручка',        fmt(k.revenue),     'var(--accent)',   '💰') +
+        kpiCard('Валовая прибыль',fmt(k.grossProfit),  'var(--success)', '📈') +
+        kpiCard('Расходы',        fmt(k.expenses),     'var(--danger)',  '💸') +
+        kpiCard('Дебиторка',      fmt(k.debtSum),      '#f59e0b',       '🧾');
+
+      // Заказы за период (внизу) — счётчик берём из KPI (всего за период)
+      renderRecentOrders(d.recentOrders || [], k.ordersCount || 0);
+    })
+    .withFailureHandler(function(){})
+    .getDashboardData(getDashRange());
+}
+
+function kpiCard(label, value, color, icon) {
+  return '<div class="kpi-card">' +
+    '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+      '<span style="font-size:20px">' + icon + '</span>' +
+      '<span class="kpi-label">' + label + '</span>' +
+    '</div>' +
+    '<div class="kpi-value" style="color:' + color + '">' + value + '</div>' +
+  '</div>';
+}
+
+function renderRecentOrders(orders, totalCount) {
+  var container = document.getElementById('dash-recent');
+  if (!container) return;
+
+  var cnt = (typeof totalCount === 'number') ? totalCount : (orders ? orders.length : 0);
+  var shown = orders ? orders.length : 0;
+  var head = '<div class="section-header" style="margin:0 0 10px">' +
+    '<div class="section-title">Заказы за период' + (cnt ? ' (' + cnt + ')' : '') + '</div>' +
+    '<button class="btn btn-ghost" onclick="goPage(\'orders\')" style="font-size:12px">Все заказы →</button>' +
+  '</div>';
+
+  if (!orders || !orders.length) {
+    container.innerHTML = head + '<div style="padding:28px;text-align:center;color:var(--text3);background:var(--bg-card);border:1px solid var(--border);border-radius:12px">За выбранный период заказов нет. Измените период или даты вверху.</div>';
+    return;
+  }
+  var footNote = (cnt > shown) ? '<div style="text-align:center;padding:8px;color:var(--text3);font-size:12px">Показаны последние ' + shown + ' из ' + cnt + ' · <a onclick="goPage(\'orders\')" style="color:var(--accent);cursor:pointer">все заказы →</a></div>' : '';
+
+  var payBadge = function(o) {
+    var ps = o.payStatus || '';
+    if (ps === 'Оплачен')  return '<span style="font-size:10px;padding:1px 7px;border-radius:10px;background:var(--green-soft);color:var(--success)">✓ оплачен</span>';
+    if (ps === 'Частично') return '<span style="font-size:10px;padding:1px 7px;border-radius:10px;background:var(--blue-soft);color:var(--blue)">рассрочка</span>';
+    if (o.payType === 'Отсрочка')  return '<span style="font-size:10px;padding:1px 7px;border-radius:10px;background:var(--yellow-soft);color:var(--warning)">отсрочка</span>';
+    if (o.payType === 'Рассрочка') return '<span style="font-size:10px;padding:1px 7px;border-radius:10px;background:var(--blue-soft);color:var(--blue)">рассрочка</span>';
+    return '<span style="font-size:10px;padding:1px 7px;border-radius:10px;background:var(--red-soft);color:var(--danger)">долг</span>';
+  };
+
+  var rows = orders.map(function(o) {
+    var statusColor = ORDER_STATUS_COLORS[o.status] || 'var(--text2)';
+    var carLine = (o.car || '—') + (o.plate ? ' · ' + o.plate : '');
+    return '<tr style="cursor:pointer" onclick="openOrderCard(\'' + o.id + '\')">' +
+      '<td style="font-size:12px;font-weight:600">' + (o.contract || o.id) + '</td>' +
+      '<td style="font-size:12px;color:var(--text3);white-space:nowrap">' + (o.date || '') + '</td>' +
+      '<td><div style="font-weight:500;font-size:13px">' + (o.client || '—') + '</div>' +
+        '<div style="font-size:11px;color:var(--text3)">' + (o.phone || '') + '</div></td>' +
+      '<td><div style="font-size:13px">' + carLine + '</div></td>' +
+      '<td style="font-size:12px">' + (o.service || '') + '</td>' +
+      '<td style="font-weight:600;text-align:right;white-space:nowrap">' + Number(o.price||0).toLocaleString('ru') + ' Br</td>' +
+      '<td style="text-align:center">' + payBadge(o) + '</td>' +
+      '<td style="text-align:center"><span style="font-size:11px;font-weight:600;color:' + statusColor + '">' + (o.status || '') + '</span></td>' +
+    '</tr>';
+  }).join('');
+
+  container.innerHTML = head +
+    '<div class="clients-table-wrap"><table class="clients-table"><thead><tr>' +
+      '<th>Договор</th><th>Дата</th><th>Клиент</th><th>Авто / Госномер</th><th>Услуга</th>' +
+      '<th style="text-align:right">Сумма</th><th style="text-align:center">Оплата</th><th style="text-align:center">Статус</th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table>' + footNote + '</div>';
+}
+
+/* ===== ФИНАНСЫ ===== */
+
+function loadFinance() {
+  var range = getPeriodRangeFromUI('fin');
+
+  var fmtBr = function(n){ return (Math.round(Number(n||0)*100)/100).toLocaleString('ru') + ' Br'; };
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) return;
+      var d = resp.data;
+      var k = d.kpi || {};
+      var set = function(id, val){ var el = document.getElementById(id); if(el) el.textContent = val; };
+      set('fin-revenue',  fmtBr(k.revenue));
+      set('fin-gross',    fmtBr(k.grossProfit));
+      set('fin-expenses', fmtBr(k.expenses));
+      set('fin-net',      fmtBr(k.netProfit));
+
+      // По услугам
+      var svcTbody = document.getElementById('fin-services-tbody');
+      if (svcTbody) {
+        var svcRows = Object.keys(d.byService || {}).map(function(svc) {
+          var s = d.byService[svc];
+          var pct = k.revenue > 0 ? Math.round(s.revenue / k.revenue * 100) + '%' : '—';
+          return '<tr>' +
+            '<td style="font-weight:600">' + svc + '</td>' +
+            '<td style="text-align:right">' + s.count + '</td>' +
+            '<td style="text-align:right">' + fmtBr(s.revenue) + '</td>' +
+            '<td style="text-align:right;color:var(--success)">' + fmtBr(s.gross) + '</td>' +
+            '<td style="text-align:right;color:var(--text3)">' + pct + '</td>' +
+          '</tr>';
+        }).join('');
+        svcTbody.innerHTML = svcRows || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:16px">Нет данных</td></tr>';
+      }
+
+      // Расходы по категориям
+      var expTbody = document.getElementById('fin-exp-tbody');
+      if (expTbody) {
+        var ec = d.expByCategory || {};
+        var totalExp = Object.values(ec).reduce(function(s,v){ return s+v; }, 0);
+        var expRows = Object.keys(ec).sort(function(a,b){ return ec[b]-ec[a]; }).map(function(cat) {
+          var pct = totalExp > 0 ? Math.round(ec[cat]/totalExp*100) + '%' : '—';
+          return '<tr><td>' + cat + '</td><td style="text-align:right;font-weight:600">' + fmtBr(ec[cat]) + '</td>' +
+            '<td style="text-align:right;color:var(--text3)">' + pct + '</td></tr>';
+        }).join('');
+        expTbody.innerHTML = expRows || '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:16px">Нет расходов</td></tr>';
+      }
+    })
+    .withFailureHandler(function(){})
+    .getDashboardData(range);
+}
+
+function getPeriodRange(period) {
+  var now   = new Date();
+  var year  = now.getFullYear();
+  var month = now.getMonth();
+  var day   = now.getDate();
+  if (period === 'today')      return { from: new Date(year, month, day).toISOString(),            to: new Date(year, month, day, 23, 59, 59).toISOString() };
+  if (period === 'week')       return { from: new Date(year, month, day - 6).toISOString(),         to: new Date(year, month, day, 23, 59, 59).toISOString() };
+  if (period === 'month')      return { from: new Date(year, month, 1).toISOString(),               to: new Date(year, month+1, 0, 23, 59, 59).toISOString() };
+  if (period === 'prev_month') return { from: new Date(year, month-1, 1).toISOString(),             to: new Date(year, month, 0, 23, 59, 59).toISOString() };
+  if (period === 'quarter')    return { from: new Date(year, Math.floor(month/3)*3, 1).toISOString(),to: now.toISOString() };
+  if (period === 'half')       return { from: new Date(year, month, 1).toISOString(),               to: now.toISOString() };
+  if (period === 'year')       return { from: new Date(year, 0, 1).toISOString(),                   to: new Date(year, 11, 31, 23, 59, 59).toISOString() };
+  if (period === 'all')        return {};
+  return {};
+}
+
+// Читает диапазон дат из UI для страниц с prefix-from/to и prefix-period
+function getPeriodRangeFromUI(prefix) {
+  var period = (document.getElementById(prefix + '-period') || {}).value || 'month';
+  if (period === 'custom') {
+    var fromVal = (document.getElementById(prefix + '-from') || {}).value;
+    var toVal   = (document.getElementById(prefix + '-to')   || {}).value;
+    return {
+      from: fromVal ? new Date(fromVal).toISOString() : null,
+      to:   toVal   ? new Date(toVal + 'T23:59:59').toISOString() : null,
+    };
+  }
+  return getPeriodRange(period);
+}
+
+// Показывает/скрывает поля дат при выборе "Произвольный…" в любом select
+function _onPeriodChange(prefix, loadFn) {
+  var period    = (document.getElementById(prefix + '-period') || {}).value;
+  var customWrap = document.getElementById(prefix + '-custom-range');
+  if (customWrap) customWrap.style.display = (period === 'custom') ? 'flex' : 'none';
+  if (period !== 'custom') loadFn();
+}
+
+function onFinPeriodChange() { _onPeriodChange('fin', loadFinance); }
+function onDdsPeriodChange() { _onPeriodChange('dds', loadDDS); }
+function onSalPeriodChange() { _onPeriodChange('sal', function(){}); } // ЗП запускается вручную
+
+/* ===== РАСХОДЫ ===== */
+
+App._expenses    = [];
+App._expCompare  = false;
+App._expDataB    = [];
+
+// Показ/скрытие дат при выборе "Произвольный…"
+function onExpPeriodChange() {
+  _onPeriodChange('exp', loadExpenses);
+}
+
+// Включение/выключение режима сравнения
+function toggleExpCompare() {
+  App._expCompare = !App._expCompare;
+  var btn  = document.getElementById('exp-compare-btn');
+  var wrap = document.getElementById('exp-compare-range');
+  if (btn)  btn.style.background  = App._expCompare ? 'var(--accent-soft)' : '';
+  if (btn)  btn.style.color       = App._expCompare ? 'var(--accent)' : '';
+  if (wrap) wrap.style.display    = App._expCompare ? 'flex' : 'none';
+
+  // Подставляем "прошлый период" по умолчанию при включении сравнения
+  if (App._expCompare) {
+    var range = getPeriodRangeFromUI('exp');
+    if (range.from && range.to) {
+      var ms   = new Date(range.to) - new Date(range.from);
+      var cmpTo   = new Date(new Date(range.from) - 1);
+      var cmpFrom = new Date(cmpTo - ms);
+      var toISO = function(d){ return d.toISOString().slice(0,10); };
+      var cmpFromEl = document.getElementById('exp-cmp-from');
+      var cmpToEl   = document.getElementById('exp-cmp-to');
+      if (cmpFromEl && !cmpFromEl.value) cmpFromEl.value = toISO(cmpFrom);
+      if (cmpToEl   && !cmpToEl.value)   cmpToEl.value   = toISO(cmpTo);
+    }
+  }
+  loadExpenses();
+}
+
+function loadExpenses() {
+  var tbody = document.getElementById('expenses-tbody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</td></tr>';
+
+  var range  = getPeriodRangeFromUI('exp');
+  var filter = { from: range.from || null, to: range.to || null };
+
+  if (App._expCompare) {
+    // Два параллельных запроса
+    var cmpFrom = (document.getElementById('exp-cmp-from') || {}).value;
+    var cmpTo   = (document.getElementById('exp-cmp-to')   || {}).value;
+    var filterB = {
+      from: cmpFrom ? new Date(cmpFrom).toISOString()              : null,
+      to:   cmpTo   ? new Date(cmpTo + 'T23:59:59').toISOString()  : null,
+    };
+
+    App._expLoading = 2;
+    App._expDataA   = null;
+    App._expDataB   = null;
+
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        App._expDataA = (resp && resp.ok) ? (resp.data || []) : [];
+        if (--App._expLoading === 0) _renderExpensesWithCompare();
+      })
+      .withFailureHandler(function(e){ toast('Ошибка загрузки: ' + e.message, 'error'); })
+      .getExpenses(filter);
+
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        App._expDataB = (resp && resp.ok) ? (resp.data || []) : [];
+        if (--App._expLoading === 0) _renderExpensesWithCompare();
+      })
+      .withFailureHandler(function(e){ toast('Ошибка загрузки: ' + e.message, 'error'); })
+      .getExpenses(filterB);
+
+  } else {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp || !resp.ok) {
+          toast('Ошибка расходов: ' + (resp ? resp.error : 'нет ответа'), 'error');
+          if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--danger)">Ошибка загрузки</td></tr>';
+          return;
+        }
+        App._expenses = resp.data || [];
+        renderExpensesTable(App._expenses);
+        updateExpensesKpi(App._expenses, null);
+      })
+      .withFailureHandler(function(e) {
+        toast('Ошибка: ' + e.message, 'error');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--danger)">' + e.message + '</td></tr>';
+      })
+      .getExpenses(filter);
+  }
+}
+
+function _renderExpensesWithCompare() {
+  App._expenses = App._expDataA || [];
+  renderExpensesTable(App._expenses);
+  updateExpensesKpi(App._expenses, App._expDataB || []);
+}
+
+function filterExpenses() {
+  var cat    = (document.getElementById('exp-cat-filter') || {}).value || '';
+  var search = ((document.getElementById('exp-search') || {}).value || '').toLowerCase();
+  var list   = App._expenses.filter(function(e) {
+    if (cat    && e['Категория'] !== cat) return false;
+    if (search && !String(e['Описание']||'').toLowerCase().includes(search) &&
+                  !String(e['Категория']||'').toLowerCase().includes(search)) return false;
+    return true;
+  });
+  renderExpensesTable(list);
+}
+
+function renderExpensesTable(list) {
+  var tbody  = document.getElementById('expenses-tbody');
+  var footer = document.getElementById('expenses-footer');
+  if (!tbody) return;
+
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">Расходов за выбранный период нет</td></tr>';
+    if (footer) footer.textContent = '';
+    return;
+  }
+
+  var total = 0;
+  tbody.innerHTML = list.map(function(e) {
+    var sum = Number(e['Сумма']) || 0;
+    total += sum;
+    return '<tr>' +
+      '<td style="color:var(--text3);font-size:12px;white-space:nowrap">' + (e['Дата'] || '—') + '</td>' +
+      '<td><span style="font-size:11px;padding:2px 8px;border-radius:12px;background:var(--bg-hover)">' + (e['Категория'] || '—') + '</span></td>' +
+      '<td style="font-size:13px">' + (e['Описание'] || '—') + '</td>' +
+      '<td style="text-align:right;font-weight:600;white-space:nowrap">' + sum.toLocaleString('ru') + ' Br</td>' +
+      '<td style="font-size:12px;color:var(--text3)">' + (e['Способ оплаты'] || '') + '</td>' +
+      '<td style="text-align:right">' +
+        '<button class="btn btn-ghost" style="padding:2px 8px;font-size:11px;color:var(--danger)" onclick="deleteExp(\'' + e['ID'] + '\')">Удалить</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+
+  if (footer) footer.textContent = 'Записей: ' + list.length + ' · Итого: ' + total.toLocaleString('ru') + ' Br';
+}
+
+function updateExpensesKpi(list, compare) {
+  var sum = function(arr, cats) {
+    return arr.reduce(function(acc, e) {
+      var c = e['Категория'] || '';
+      var s = Number(e['Сумма']) || 0;
+      return acc + (cats ? (cats.indexOf(c) >= 0 ? s : 0) : s);
+    }, 0);
+  };
+
+  var total = sum(list);
+  var fixed = sum(list, ['Аренда','Коммунальные']);
+  var mkt   = sum(list, ['Маркетинг']);
+  var trans = sum(list, ['Транспорт']);
+
+  var fmt = function(n){ return Math.round(n).toLocaleString('ru') + ' Br'; };
+  var set = function(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; };
+  set('exp-total',    fmt(total));
+  set('exp-fixed',    fmt(fixed));
+  set('exp-marketing',fmt(mkt));
+  set('exp-transport',fmt(trans));
+
+  // Дельта при сравнении
+  if (compare && compare.length >= 0) {
+    var cTotal = sum(compare);
+    var cFixed = sum(compare, ['Аренда','Коммунальные']);
+    var cMkt   = sum(compare, ['Маркетинг']);
+    var cTrans = sum(compare, ['Транспорт']);
+
+    var delta = function(a, b, elId) {
+      var el = document.getElementById(elId);
+      if (!el) return;
+      if (b <= 0) { el.textContent = ''; return; }
+      var pct  = Math.round((a - b) / b * 100);
+      var sign = pct > 0 ? '+' : '';
+      var col  = pct > 0 ? 'var(--danger)' : 'var(--success)';
+      el.innerHTML = '<span style="color:' + col + ';font-weight:600">' + sign + pct + '%</span> vs пред. период (' + fmt(b) + ')';
+    };
+
+    delta(total, cTotal, 'exp-total-delta');
+    delta(fixed, cFixed, 'exp-fixed-delta');
+    delta(mkt,   cMkt,   'exp-marketing-delta');
+    delta(trans, cTrans, 'exp-transport-delta');
+  } else {
+    ['exp-total-delta','exp-fixed-delta','exp-marketing-delta','exp-transport-delta'].forEach(function(id){
+      var el = document.getElementById(id);
+      if (el) el.textContent = '';
+    });
+  }
+}
+
+function submitNewExpense() {
+  var amount   = Number((document.getElementById('exp-amount')   ||{}).value||0);
+  var category = ((document.getElementById('exp-category')||{}).value||'').trim();
+  if (!amount)   { toast('Укажите сумму','error'); return; }
+  if (!category) { toast('Выберите категорию','error'); return; }
+
+  // Установим сегодня если дата пустая
+  var dateEl = document.getElementById('exp-date');
+  if (dateEl && !dateEl.value) {
+    var now = new Date();
+    dateEl.value = now.toISOString().slice(0,10);
+  }
+
+  var payload = {
+    date:        dateEl ? dateEl.value.split('-').reverse().join('.') : '',
+    amount:      amount,
+    category:    category,
+    description: ((document.getElementById('exp-description')||{}).value||'').trim(),
+    payMethod:   (document.getElementById('exp-pay-method')||{}).value||'Нал',
+    orderId:     ((document.getElementById('exp-order-id')||{}).value||'').trim(),
+  };
+
+  var btn = document.getElementById('exp-submit-btn');
+  if (btn) { btn.disabled=true; btn.textContent='Сохраняем...'; }
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (btn) { btn.disabled=false; btn.textContent='Сохранить'; }
+      if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
+      toast('Расход записан','success');
+      closeModal('modal-new-expense');
+      ['exp-amount','exp-description','exp-order-id'].forEach(function(id){
+        var el=document.getElementById(id); if(el) el.value='';
+      });
+      if (App.currentPage==='expenses') loadExpenses();
+    })
+    .withFailureHandler(function(e){ if(btn){btn.disabled=false;btn.textContent='Сохранить';} toast('Ошибка: '+e.message,'error'); })
+    .createExpense(payload);
+}
+
+function deleteExp(id) {
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp||!resp.ok) { toast('Ошибка','error'); return; }
+      toast('Удалено','success');
+      loadExpenses();
+    })
+    .withFailureHandler(function(){})
+    .deleteExpense(id);
+}
+
+/* ===== ДЕБИТОРКА И РАССРОЧКИ ===== */
+
+function loadDebt() {
+  var tbody = document.getElementById('debt-tbody');
+  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</td></tr>';
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) {
+        if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--danger)">' + (resp ? resp.error : 'Ошибка загрузки') + '</td></tr>';
+        return;
+      }
+      renderDebtTable(resp.data || []);
+    })
+    .withFailureHandler(function(e) {
+      if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--danger)">' + e.message + '</td></tr>';
+    })
+    .getDebtOrders();
+}
+
+function renderDebtTable(rows) {
+  var tbody  = document.getElementById('debt-tbody');
+  var footer = document.getElementById('debt-footer');
+  if (!tbody) return;
+
+  // KPI
+  var totalRemaining = 0, overdueCount = 0, partialCount = 0;
+  rows.forEach(function(r) {
+    totalRemaining += r.remaining;
+    if (r.isOverdue)         overdueCount++;
+    if (r.beznal === 'Частично') partialCount++;
+  });
+
+  var fmt = function(n){ return (Math.round(n*100)/100).toLocaleString('ru') + ' Br'; };
+  var set = function(id, v){ var el = document.getElementById(id); if (el) el.textContent = v; };
+  set('debt-total',   fmt(totalRemaining));
+  set('debt-count',   rows.length);
+  set('debt-overdue', overdueCount);
+  set('debt-partial', partialCount);
+
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--success);font-size:15px">✅ Дебиторки нет — все оплачено!</td></tr>';
+    if (footer) footer.textContent = '';
+    return;
+  }
+
+  tbody.innerHTML = rows.map(function(r) {
+    // Цвет строки и метка срока
+    var rowStyle = '';
+    var dueCell  = '';
+
+    if (r.dueDate) {
+      if (r.isOverdue) {
+        rowStyle = 'border-left:3px solid var(--danger);';
+        var overDays = Math.abs(r.daysUntilDue);
+        dueCell = '<div style="font-weight:700;color:var(--danger)">просрочено ' + overDays + ' д.</div>' +
+                  '<div style="font-size:10px;color:var(--text3)">' + r.dueDate + '</div>';
+      } else if (r.daysUntilDue === 0) {
+        rowStyle = 'border-left:3px solid #f59e0b;';
+        dueCell = '<div style="font-weight:700;color:#f59e0b">сегодня</div>' +
+                  '<div style="font-size:10px;color:var(--text3)">' + r.dueDate + '</div>';
+      } else if (r.daysUntilDue <= 3) {
+        rowStyle = 'border-left:3px solid #f59e0b;';
+        dueCell = '<div style="font-weight:600;color:#f59e0b">через ' + r.daysUntilDue + ' д.</div>' +
+                  '<div style="font-size:10px;color:var(--text3)">' + r.dueDate + '</div>';
+      } else {
+        dueCell = '<div style="color:var(--text2)">через ' + r.daysUntilDue + ' д.</div>' +
+                  '<div style="font-size:10px;color:var(--text3)">' + r.dueDate + '</div>';
+      }
+    } else {
+      dueCell = '<span style="font-size:11px;color:var(--text3)">не задан</span>';
+    }
+
+    var beznalBadge = r.beznal === 'Частично'
+      ? '<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:rgba(245,158,11,.15);color:#f59e0b;white-space:nowrap">рассрочка</span>'
+      : '<span style="font-size:10px;padding:1px 6px;border-radius:8px;background:rgba(220,53,69,.1);color:var(--danger);white-space:nowrap">долг</span>';
+
+    var remainingStr = fmt(r.remaining);
+    var clientSafe = r.client.replace(/'/g, "\\'");
+    var dueDateSafe = r.dueDate.replace(/'/g, "\\'");
+
+    return '<tr style="cursor:pointer;' + rowStyle + '" onclick="openOrderCard(\'' + r.id + '\')">' +
+      '<td>' +
+        '<div style="font-weight:600;font-size:12px">' + (r.contract || r.id) + '</div>' +
+        '<div style="margin-top:3px">' + beznalBadge + '</div>' +
+      '</td>' +
+      '<td>' +
+        '<div style="font-weight:500;font-size:13px">' + r.client + '</div>' +
+        '<div style="font-size:11px;color:var(--text3)">' + r.phone + '</div>' +
+      '</td>' +
+      '<td>' +
+        '<div style="font-size:12px">' + r.car + '</div>' +
+        '<div style="font-size:11px;color:var(--text3)">' + r.service + '</div>' +
+      '</td>' +
+      '<td style="text-align:right">' +
+        '<div style="font-weight:700;color:var(--danger);font-size:14px">' + remainingStr + '</div>' +
+        (r.paid > 0 ? '<div style="font-size:10px;color:var(--success)">оплачено: ' + fmt(r.paid) + '</div>' : '') +
+      '</td>' +
+      '<td>' + dueCell + '</td>' +
+      '<td onclick="event.stopPropagation()" style="white-space:nowrap">' +
+        '<button onclick="event.stopPropagation();openPayOrderModal(\'' + r.id + '\',\'' + clientSafe + '\',' + r.price + ',\'' + dueDateSafe + '\')" ' +
+          'style="padding:4px 10px;font-size:11px;font-weight:600;background:rgba(34,197,94,.15);color:var(--success);border:1px solid rgba(34,197,94,.3);border-radius:6px;cursor:pointer;margin-right:4px">+ Оплата</button>' +
+        '<button onclick="event.stopPropagation();openSetDueDateModal(\'' + r.id + '\',\'' + dueDateSafe + '\',\'' + clientSafe + '\')" ' +
+          'style="padding:4px 8px;font-size:11px;background:var(--bg-hover);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2)">📅 Срок</button>' +
+      '</td>' +
+    '</tr>';
+  }).join('');
+
+  if (footer) footer.textContent = 'Итого к получению: ' + fmt(totalRemaining) + ' · ' + rows.length + ' заказов';
+}
+
+function parseClientDate(str) {
+  if (!str) return null;
+  var m = String(str).match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+  return m ? new Date(+m[3], +m[2]-1, +m[1]) : null;
+}
+
+/* ===== УСТАНОВИТЬ СРОК ОПЛАТЫ ===== */
+
+App._setDueDateOrderId = null;
+
+function openSetDueDateModal(orderId, currentDueDate, clientName) {
+  App._setDueDateOrderId = orderId;
+  var titleEl = document.getElementById('set-due-date-client');
+  var inputEl = document.getElementById('set-due-date-input');
+  if (titleEl) titleEl.textContent = clientName || '';
+  if (inputEl) {
+    // Конвертируем dd.MM.yyyy → YYYY-MM-DD для date input
+    var m = currentDueDate ? String(currentDueDate).match(/^(\d{2})\.(\d{2})\.(\d{4})/) : null;
+    inputEl.value = m ? m[3] + '-' + m[2] + '-' + m[1] : '';
+  }
+  openModal('modal-set-due-date');
+}
+
+function confirmSetDueDate() {
+  var id      = App._setDueDateOrderId;
+  var dateVal = (document.getElementById('set-due-date-input') || {}).value || '';
+  if (!id) return;
+
+  var btn = document.getElementById('set-due-date-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+      toast(dateVal ? 'Срок оплаты установлен' : 'Срок сброшен', 'success');
+      closeModal('modal-set-due-date');
+      if (App.currentPage === 'debt') loadDebt();
+    })
+    .withFailureHandler(function(e) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .setOrderDueDate(id, dateVal);
+}
+
+/* ===== УСЛУГИ ===== */
+
+function loadServices() {
+  var cards = document.getElementById('services-cards');
+  if (!cards) return;
+  var config = App.config || {};
+  var services = config.services || [];
+  if (!services.length) {
+    cards.innerHTML = '<div style="color:var(--text3);padding:16px">Нет данных об услугах</div>';
+    return;
+  }
+  cards.innerHTML = services.map(function(s) {
+    var active = s.active !== false;
+    return '<div style="padding:16px;background:var(--bg-card);border-radius:12px;border:1px solid var(--border);opacity:' + (active?1:.5) + '">' +
+      '<div style="font-weight:700;font-size:15px;margin-bottom:6px">' + s.name + '</div>' +
+      '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">Тип: ' + (s.calcType||'—') + '</div>' +
+      '<div style="display:flex;gap:10px;font-size:12px">' +
+        '<span style="background:var(--accent-soft);color:var(--accent);padding:2px 8px;border-radius:8px">Мастер ' + (s.bonusPoolPct||35) + '%</span>' +
+        '<span style="background:var(--bg-hover);padding:2px 8px;border-radius:8px">Менеджер ' + (s.managerBonusPct||10) + '%</span>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function submitNewService() {
+  toast('Услуги настраиваются в разделе Настройки → Конфиг', 'info');
+  closeModal('modal-new-service');
+}
+
+/* ===== ДДС ===== */
+
+function loadDDS() {
+  var range = getPeriodRangeFromUI('dds');
+  var fmt    = function(n){ return (Number(n)||0).toLocaleString('ru') + ' Br'; };
+  var set    = function(id, v, color) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = v;
+    if (color) el.style.color = color;
+  };
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp||!resp.ok) return;
+      var d = resp.data;
+      var s = d.summary;
+
+      // Касса
+      set('dds-nal',     fmt(s.totalNal),    'var(--success)');
+      set('dds-exp-nal', fmt(s.expNal),      'var(--danger)');
+      set('dds-kassa',   fmt(s.kassaBalance), s.kassaBalance >= 0 ? 'var(--success)' : 'var(--danger)');
+
+      // Р/счёт
+      set('dds-beznal-gross', fmt(s.totalBeznal));
+      set('dds-beznal-net',   fmt(s.totalBeznalNet), 'var(--success)');
+      set('dds-exp-bnk',      fmt(s.expBnk),         'var(--danger)');
+      set('dds-bank',         fmt(s.bankBalance), s.bankBalance >= 0 ? 'var(--success)' : 'var(--danger)');
+
+      // Дебиторка
+      set('dds-debt',       fmt(s.totalDebt), '#f59e0b');
+      set('dds-debt-count', s.debtCount + ' заказов без оплаты');
+
+      // Таблица нал
+      var nalTbody = document.getElementById('dds-nal-tbody');
+      if (nalTbody) nalTbody.innerHTML = d.nalRows.length
+        ? d.nalRows.map(function(r) {
+            return '<tr><td style="font-size:11px;color:var(--text3)">' + (r.date||'') + '</td>' +
+              '<td style="font-size:12px">' + (r.desc||'') + '</td>' +
+              '<td style="text-align:right;font-weight:600;color:var(--success)">' + (Number(r.amount)||0).toLocaleString('ru') + ' Br</td></tr>';
+          }).join('')
+        : '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:12px">Нет нал оплат</td></tr>';
+
+      // Таблица безнал
+      var bnkTbody = document.getElementById('dds-bnk-tbody');
+      if (bnkTbody) bnkTbody.innerHTML = d.beznalRows.length
+        ? d.beznalRows.map(function(r) {
+            return '<tr><td style="font-size:11px;color:var(--text3)">' + (r.date||'') + '</td>' +
+              '<td style="font-size:12px">' + (r.desc||'') +
+                '<div style="font-size:10px;color:var(--text3)">−15% = ' + (Number(r.fee)||0).toFixed(2) + ' Br</div></td>' +
+              '<td style="text-align:right;font-weight:600;color:var(--accent)">' + (Number(r.net)||0).toLocaleString('ru') + ' Br</td></tr>';
+          }).join('')
+        : '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:12px">Нет безнал оплат</td></tr>';
+
+      // Расходы (все вместе)
+      var expTbody = document.getElementById('dds-expense-tbody');
+      var allExp   = (d.expNalRows||[]).concat(d.expBnkRows||[]).sort(function(a,b){ return String(a.date).localeCompare(String(b.date)); });
+      if (expTbody) expTbody.innerHTML = allExp.length
+        ? allExp.map(function(r) {
+            return '<tr><td style="font-size:11px;color:var(--text3)">' + (r.date||'') + '</td>' +
+              '<td style="font-size:11px"><span style="padding:1px 5px;border-radius:6px;background:var(--bg-hover)">' + (r.category||'') + '</span></td>' +
+              '<td style="text-align:right;font-weight:600;color:var(--danger)">' + (Number(r.amount)||0).toLocaleString('ru') + ' Br</td></tr>';
+          }).join('')
+        : '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:12px">Нет расходов</td></tr>';
+
+      App._ddsData = d;
+    })
+    .withFailureHandler(function(e){ toast('Ошибка ДДС: '+e.message,'error'); })
+    .getDDS(range.from||null, range.to||null);
+}
+
+/* ===== ОПЛАТА ЗАКАЗА ===== */
+
+App._payOrderPrice    = 0;
+App._payOrderPaid     = 0;
+App._payTypeSelected  = 'Нал';
+
+function selectPayType(type, btn) {
+  App._payTypeSelected = type;
+  document.getElementById('pay-type-selected').value = type;
+  document.querySelectorAll('#modal-pay-order .ctype-btn').forEach(function(b){ b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+}
+
+function openPayOrderModal(orderId, clientName, price, currentDueDate) {
+  document.getElementById('pay-order-id').value = orderId;
+  App._payOrderPrice = Number(price) || 0;
+  App._payTypeSelected = 'Нал';
+
+  // Сброс
+  var amtEl  = document.getElementById('pay-amount');
+  var cmmEl  = document.getElementById('pay-comment');
+  var nextEl = document.getElementById('pay-next-date');
+  if (amtEl)  amtEl.value = '';
+  if (cmmEl)  cmmEl.value = '';
+  // Предзаполняем текущий срок если был передан
+  if (nextEl) {
+    var m = currentDueDate ? String(currentDueDate).match(/^(\d{2})\.(\d{2})\.(\d{4})/) : null;
+    nextEl.value = m ? m[3] + '-' + m[2] + '-' + m[1] : '';
+  }
+  document.querySelectorAll('#modal-pay-order .ctype-btn').forEach(function(b){ b.classList.remove('active'); });
+  var nalBtn = document.getElementById('pay-type-nal');
+  if (nalBtn) nalBtn.classList.add('active');
+
+  // Загружаем историю платежей и остаток
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) return;
+      var d = resp.data;
+      App._payOrderPaid = d.totalPaid || 0;
+      var remaining = Math.max(0, App._payOrderPrice - App._payOrderPaid);
+
+      var desc = document.getElementById('pay-order-desc');
+      if (desc) desc.innerHTML =
+        '<div style="font-weight:600;margin-bottom:4px">' + (clientName||'') + '</div>' +
+        '<div style="display:flex;gap:16px;font-size:12px">' +
+          '<span>Сумма заказа: <b>' + App._payOrderPrice.toLocaleString('ru') + ' Br</b></span>' +
+          '<span style="color:var(--success)">Оплачено: <b>' + d.totalPaid.toLocaleString('ru') + ' Br</b></span>' +
+          '<span style="color:' + (remaining>0?'var(--danger)':'var(--success)') + '">Остаток: <b>' + remaining.toLocaleString('ru') + ' Br</b></span>' +
+        '</div>';
+
+      var hint = document.getElementById('pay-remaining-hint');
+      if (hint) hint.textContent = 'Остаток к оплате: ' + remaining.toLocaleString('ru') + ' Br';
+      if (amtEl) amtEl.value = remaining > 0 ? remaining : '';
+
+      // История
+      var hist = document.getElementById('pay-history');
+      var histList = document.getElementById('pay-history-list');
+      if (d.payments && d.payments.length > 0 && hist && histList) {
+        hist.style.display = 'block';
+        histList.innerHTML = d.payments.map(function(p) {
+          return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)">' +
+            '<span style="color:var(--text3)">' + (p['Дата']||'') + ' — ' + (p['Способ оплаты']||'') + '</span>' +
+            '<span style="font-weight:600;color:var(--success)">' + (Number(p['Сумма'])||0).toLocaleString('ru') + ' Br</span>' +
+          '</div>';
+        }).join('');
+      } else if (hist) {
+        hist.style.display = 'none';
+      }
+    })
+    .withFailureHandler(function(){})
+    .getOrderPaymentSummary(orderId);
+
+  openModal('modal-pay-order');
+}
+
+function confirmPayOrder() {
+  var id       = (document.getElementById('pay-order-id')||{}).value;
+  var amount   = Number((document.getElementById('pay-amount')||{}).value||0);
+  var payType  = App._payTypeSelected || 'Нал';
+  var comment  = ((document.getElementById('pay-comment')||{}).value||'').trim();
+  var nextDate = ((document.getElementById('pay-next-date')||{}).value||'').trim();
+
+  if (!id)     { toast('Ошибка: нет ID заказа','error'); return; }
+  if (!amount) { toast('Укажите сумму','error'); return; }
+
+  var btn = document.getElementById('pay-submit-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (btn) { btn.disabled = false; btn.textContent = 'Принять платёж'; }
+      if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
+
+      // Если задан следующий срок — сохраняем его (даже если оплата полная,
+      // бэкенд updateOrderPaymentStatus_ сам сбросит срок при полном закрытии)
+      if (nextDate) {
+        google.script.run.setOrderDueDate(id, nextDate);
+      }
+
+      toast(payType==='Безнал' ? 'Безнал → р/счёт зафиксирован' : 'Нал → касса зафиксирован', 'success');
+      closeModal('modal-pay-order');
+      if (App.currentPage==='orders')     loadOrders();
+      if (App.currentPage==='dds')        loadDDS();
+      if (App.currentPage==='debt')       loadDebt();
+      if (App.currentPage==='order-card') openOrderCard(id);
+    })
+    .withFailureHandler(function(e){ if(btn){btn.disabled=false;btn.textContent='Принять платёж';} toast('Ошибка: '+e.message,'error'); })
+    .addOrderPayment(id, { amount: amount, payType: payType, comment: comment });
+}
+
+function printDDS() {
+  var d = App._ddsData;
+  if (!d) { toast('Сначала загрузите данные','error'); return; }
+  var s = d.summary;
+  var fmt = function(n){ return (Number(n)||0).toFixed(2) + ' Br'; };
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>ДДС</title>' +
+    '<style>body{font-family:Arial,sans-serif;font-size:11px;margin:15mm}' +
+    'h2{text-align:center;font-size:13px}h3{font-size:11px;border-bottom:1px solid #ccc;padding-bottom:3px}' +
+    'table{width:100%;border-collapse:collapse;margin:6px 0}td,th{border:1px solid #ccc;padding:3px 5px}' +
+    'th{background:#f0f0f0}.pos{color:green}.neg{color:red}' +
+    '@media print{.no-print{display:none}}</style></head><body>' +
+    '<div class="no-print"><button onclick="window.print()">Печать</button></div>' +
+    '<h2>ДВИЖЕНИЕ ДЕНЕЖНЫХ СРЕДСТВ</h2>' +
+    '<h3>Итого за период</h3>' +
+    '<table><tr><td>Приход нал</td><td class="pos" style="text-align:right">' + fmt(s.totalNal) + '</td></tr>' +
+    '<tr><td>Приход безнал</td><td class="pos" style="text-align:right">' + fmt(s.totalBeznal) + '</td></tr>' +
+    '<tr><td>Дебиторка (не поступило)</td><td style="text-align:right;color:#f59e0b">' + fmt(s.totalDebt) + '</td></tr>' +
+    '<tr><td>Расходы</td><td class="neg" style="text-align:right">' + fmt(s.totalExpenses) + '</td></tr>' +
+    '<tr style="font-weight:bold"><td>Остаток</td><td style="text-align:right;color:' + (s.balance>=0?'green':'red') + '">' + fmt(s.balance) + '</td></tr></table>' +
+    '<h3>Приходы</h3><table><thead><tr><th>Дата</th><th>Описание</th><th>Тип</th><th>Сумма</th></tr></thead><tbody>' +
+    d.incomeRows.map(function(r){ return '<tr><td>' + (r.date||'') + '</td><td>' + (r.desc||'') + '</td><td>' + r.type + '</td><td class="pos" style="text-align:right">' + fmt(r.amount) + '</td></tr>'; }).join('') +
+    '</tbody></table><h3>Расходы</h3><table><thead><tr><th>Дата</th><th>Категория</th><th>Описание</th><th>Сумма</th></tr></thead><tbody>' +
+    d.expenseRows.map(function(r){ return '<tr><td>' + (r.date||'') + '</td><td>' + (r.category||'') + '</td><td>' + (r.desc||'') + '</td><td class="neg" style="text-align:right">' + fmt(r.amount) + '</td></tr>'; }).join('') +
+    '</tbody></table></body></html>';
+  var w = window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); }
+}
+
+/* ===== РАСЧЁТ ЗП ===== */
+
+App._salaryData = null;
+
+function calcSalary() {
+  var range = getPeriodRangeFromUI('sal');
+  var res    = document.getElementById('salary-result');
+  if (res) res.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3)">Считаем...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
+      App._salaryData = resp.data;
+      renderSalary(resp.data);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
+    .calcSalaryForPeriod(range.from||null, range.to||null);
+}
+
+function renderSalary(data) {
+  var res = document.getElementById('salary-result');
+  if (!res) return;
+  var fmt = function(n){ return (Number(n)||0).toLocaleString('ru') + ' Br'; };
+
+  var cards = data.employees.map(function(e) {
+    var ini = e.name.split(' ').slice(0,2).map(function(s){ return s[0]||''; }).join('');
+    var orderRows = e.orders.slice(0,5).map(function(o){
+      return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid var(--border)">' +
+        '<span style="color:var(--text3)">' + (o.date||'') + ' ' + (o.contract||'') + ' — ' + (o.client||'') + '</span>' +
+        '<span>' + (Number(o.gross)||0).toFixed(0) + ' Br</span>' +
+      '</div>';
+    }).join('');
+
+    return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px;break-inside:avoid">' +
+      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">' +
+        '<div style="width:44px;height:44px;border-radius:50%;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--accent);font-size:15px;flex-shrink:0">' + ini + '</div>' +
+        '<div><div style="font-weight:700;font-size:14px">' + e.name + '</div><div style="font-size:11px;color:var(--text3)">' + e.position + ' · ' + e.orderCount + ' заказов</div></div>' +
+      '</div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:12px;margin-bottom:10px">' +
+        '<div><span style="color:var(--text3)">Ставка: </span><b>' + fmt(e.baseSalary) + '</b></div>' +
+        '<div><span style="color:var(--text3)">Бонус менеджер: </span><b style="color:var(--accent)">' + fmt(e.managerBonus) + '</b></div>' +
+        '<div><span style="color:var(--text3)">Бонус мастер: </span><b style="color:var(--accent)">' + fmt(e.masterBonus) + '</b></div>' +
+        '<div><span style="color:var(--text3)">Итого: </span><b style="font-size:15px;color:var(--success)">' + fmt(e.total) + '</b></div>' +
+      '</div>' +
+      (orderRows ? '<div style="font-size:11px;color:var(--text3);margin-bottom:4px">Участвовал в заказах:</div>' + orderRows : '') +
+    '</div>';
+  }).join('');
+
+  res.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding:12px 16px;background:var(--bg-card);border-radius:10px;border:1px solid var(--border)">' +
+      '<span style="font-size:13px;color:var(--text2)">Итого к выплате за период</span>' +
+      '<span style="font-size:20px;font-weight:700;color:var(--success)">' + fmt(data.grandTotal) + '</span>' +
+    '</div>' +
+    '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">' + cards + '</div>';
+}
+
+function printSalary() {
+  var d = App._salaryData;
+  if (!d) { toast('Сначала рассчитайте ЗП','error'); return; }
+  var fmt = function(n){ return (Number(n)||0).toFixed(2); };
+  var rows = d.employees.map(function(e){
+    return '<tr><td>' + e.name + '</td><td>' + e.position + '</td><td>' + e.orderCount + '</td>' +
+      '<td style="text-align:right">' + fmt(e.baseSalary) + '</td>' +
+      '<td style="text-align:right">' + fmt(e.managerBonus) + '</td>' +
+      '<td style="text-align:right">' + fmt(e.masterBonus) + '</td>' +
+      '<td style="text-align:right;font-weight:bold">' + fmt(e.total) + '</td></tr>';
+  }).join('');
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Расчёт ЗП</title>' +
+    '<style>body{font-family:Arial;font-size:11px;margin:15mm}h2{text-align:center;font-size:13px}' +
+    'table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccc;padding:3px 5px}th{background:#f0f0f0}' +
+    '@media print{.no-print{display:none}}</style></head><body>' +
+    '<div class="no-print"><button onclick="window.print()">Печать</button></div>' +
+    '<h2>РАСЧЁТ ЗАРАБОТНОЙ ПЛАТЫ</h2>' +
+    '<table><thead><tr><th>Сотрудник</th><th>Должность</th><th>Заказов</th><th>Ставка</th><th>Бонус (мен.)</th><th>Бонус (мастер)</th><th>ИТОГО</th></tr></thead>' +
+    '<tbody>' + rows + '</tbody>' +
+    '<tfoot><tr><td colspan="6" style="text-align:right;font-weight:bold">Итого к выплате:</td>' +
+    '<td style="font-weight:bold;text-align:right">' + fmt(d.grandTotal) + ' Br</td></tr></tfoot>' +
+    '</table></body></html>';
+  var w = window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); }
+}
+
+/* ===== КАРТОЧКА ЗАКАЗА ===== */
+
+App._currentOrderId = null;
+
+function openOrderCard(orderId) {
+  App._currentOrderId = orderId;
+  goPage('order-card');
+  var content = document.getElementById('order-card-content');
+  if (content) content.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</div>';
+
+  var loadCard = function() {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp||!resp.ok) { toast('Ошибка загрузки заказа','error'); return; }
+        renderOrderCard(resp.data);
+      })
+      .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
+      .getOrderFull(orderId);
+  };
+
+  // Справочник материалов нужен для выпадающего списка в редакторе расхода плёнки
+  if (App._materials && App._materials.length) {
+    loadCard();
+  } else {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        App._materials = (resp && resp.ok) ? (resp.data || []) : [];
+        loadCard();
+      })
+      .withFailureHandler(function(){ loadCard(); })
+      .getMaterials(null);
+  }
+}
+
+function renderOrderCard(order) {
+  var content = document.getElementById('order-card-content');
+  if (!content) return;
+  var fmt = function(n){ return (Number(n)||0).toLocaleString('ru') + ' Br'; };
+
+  var materials = order.materials || [];
+  var expenses  = order.expenses  || [];
+
+  var statusColors = { 'Новый':'var(--accent)', 'В работе':'#f59e0b', 'Готов':'var(--success)', 'Выдан':'var(--text3)', 'Отменён':'var(--danger)' };
+  var statusColor  = statusColors[order['Статус']] || 'var(--text3)';
+
+  App._currentOrder = order;
+
+  var oid       = order['ID'];
+  var price     = Number(order['Стоимость заказа']) || 0;
+  var paid      = Number(order._paid) || 0;
+  var remaining = (order._remaining !== undefined) ? Number(order._remaining) : Math.max(0, price - paid);
+  var payType   = String(order['Тип оплаты'] || '').trim();
+  var payStatus = String(order['Статус оплаты'] || '').trim() || 'Не оплачен';
+  var isPaid    = payStatus === 'Оплачен';
+  var isLegal   = order._clientType === 'юр';
+  var verified  = String(order['Проверено'] || '') === 'Да';
+
+  var payStatusColor = isPaid ? 'var(--success)' : (payStatus === 'Частично' ? 'var(--blue)' : 'var(--danger)');
+
+  var matRows = renderCardMatRows();
+
+  var expRows = expenses.map(function(e) {
+    return '<tr><td>' + (e['Название']||'—') + '</td><td style="text-align:right;font-weight:600">' + fmt(e['Сумма']) + '</td></tr>';
+  }).join('') || '<tr><td colspan="2" style="text-align:center;color:var(--text3);padding:8px">Нет расходов</td></tr>';
+
+  // История платежей
+  var payHistory = (order.payments && order.payments.length)
+    ? order.payments.map(function(p){
+        return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">' +
+          '<span style="color:var(--text3)">' + (p['Дата']||'') + ' · ' + (p['Способ оплаты']||'') + '</span>' +
+          '<span style="font-weight:600;color:var(--success)">' + fmt(p['Сумма']) + '</span></div>';
+      }).join('')
+    : '<div style="font-size:12px;color:var(--text3);padding:4px 0">Платежей пока нет</div>';
+
+  // Опции типа оплаты
+  var payTypeOpts = ['','Нал','Безнал','Отсрочка','Рассрочка'].map(function(t){
+    var label = t === '' ? '— не указано —' : t;
+    return '<option value="' + t + '"' + (t===payType?' selected':'') + '>' + label + '</option>';
+  }).join('');
+
+  // Срок оплаты в формате для input[type=date]
+  var dueIso = '';
+  var dm = String(order['Срок оплаты']||'').match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+  if (dm) dueIso = dm[3] + '-' + dm[2] + '-' + dm[1];
+
+  // ── График рассрочки ──
+  var sched = order.schedule || [];
+  var schedRows = sched.map(function(s){
+    var paidS = s['Оплачен'] === 'Да';
+    return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)">' +
+      '<span style="color:' + (paidS?'var(--success)':'var(--text3)') + '">' + (paidS?'✓':'○') + ' №' + (s['№']||'') + ' · ' + (s['Дата']||'') + '</span>' +
+      '<span style="font-weight:600;color:' + (paidS?'var(--success)':'var(--text)') + '">' + fmt(s['Сумма']) + '</span></div>';
+  }).join('');
+  var inpS = 'font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:7px;background:var(--inp);color:var(--text)';
+  var splitControl = (!isPaid)
+    ? '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">' +
+        '<input id="sched-months" type="number" min="1" max="36" value="3" style="' + inpS + ';width:58px">' +
+        '<span style="font-size:12px;color:var(--text3)">мес. с</span>' +
+        '<input id="sched-start" type="date" value="' + dueIso + '" style="' + inpS + '">' +
+        '<button class="btn" onclick="createInstallmentPlanCard(\'' + oid + '\')" style="padding:5px 11px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:7px">Разбить поровну</button>' +
+      '</div>'
+    : '';
+  var scheduleBlock =
+    '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+        '<div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">График рассрочки</div>' +
+        (sched.length ? '<button class="btn btn-ghost" onclick="deleteScheduleCard(\'' + oid + '\')" style="padding:2px 8px;font-size:11px;color:var(--danger)">Удалить</button>' : '') +
+      '</div>' +
+      splitControl + schedRows +
+      (sched.length && order._finalPay ? '<div style="font-size:11px;color:var(--text2);margin-top:6px">Полная оплата до: <b>' + order._finalPay + '</b></div>' : '') +
+    '</div>';
+
+  content.innerHTML =
+    // Баннер проверки директором (компактно)
+    '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:' +
+        (verified ? 'var(--green-soft)' : 'var(--yellow-soft)') + '">' +
+      '<span style="font-weight:600;font-size:13px;color:' + (verified ? 'var(--success)' : 'var(--warning)') + '">' +
+        (verified ? '✓ Данные проверены директором' : '⚠ Данные не проверены — сверьте расход плёнки, расходы и кто клеил') +
+      '</span>' +
+      '<button class="btn" onclick="verifyOrderCard(\'' + oid + '\')" style="padding:5px 12px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid ' +
+        (verified ? 'var(--border)' : 'rgba(46,204,113,.4)') + ';background:' + (verified ? 'transparent' : 'var(--green-soft)') +
+        ';color:' + (verified ? 'var(--text2)' : 'var(--success)') + '">' +
+        (verified ? 'Снять проверку' : 'Отметить проверенным') +
+      '</button>' +
+    '</div>' +
+
+    // Шапка заказа (компактно)
+    '<div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-bottom:12px;padding:14px 16px;background:var(--bg-card);border-radius:12px;border:1px solid var(--border)">' +
+      '<div>' +
+        '<div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">' + (order['Услуга']||'') + (isLegal ? ' · <span style="color:var(--purple)">Юрлицо</span>' : '') + '</div>' +
+        '<div style="font-size:18px;font-weight:700">' + (order['Номер договора']||order['ID']) + '</div>' +
+        '<div style="font-size:12px;color:var(--text2)">' + (order['Дата']||'') + (order['Дата выполнения'] ? ' → ' + order['Дата выполнения'] : '') + '</div>' +
+      '</div>' +
+      '<div style="display:flex;align-items:center;gap:14px">' +
+        '<div style="text-align:right">' +
+          '<div style="font-size:20px;font-weight:700">' + fmt(price) + '</div>' +
+          '<span style="font-size:11px;padding:2px 9px;border-radius:20px;background:' + payStatusColor + '22;color:' + payStatusColor + '">' + payStatus + '</span>' +
+        '</div>' +
+        '<select style="font-size:12px;font-weight:700;padding:5px 8px;border-radius:8px;border:1px solid var(--border);background:var(--inp);color:' + statusColor + '" onchange="changeOrderStatus(\'' + oid + '\', this)">' +
+          ['Новый','В работе','Готов','Выдан','Отменён'].map(function(s){ return '<option' + (s===order['Статус']?' selected':'') + '>' + s + '</option>'; }).join('') +
+        '</select>' +
+      '</div>' +
+    '</div>' +
+
+    // ── ТЕЛО КАРТОЧКИ: две колонки (эффективно используем ширину) ──
+    '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:12px;align-items:start">' +
+
+      // ЛЕВАЯ КОЛОНКА — операционные данные
+      '<div style="display:flex;flex-direction:column;gap:12px;min-width:0">' +
+
+        // Клиент и авто — единый компактный блок (поля в 2 колонки)
+        cardSection_('Клиент и автомобиль' + (isLegal ? ' · юрлицо' : ''),
+          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 18px">' +
+            infoLine_('Имя', order['Клиент']) +
+            infoLine_('Авто', order['Авто']) +
+            infoLine_('Телефон', order['Телефон']) +
+            infoLine_('Госномер', order['Госномер']) +
+            infoLine_('VIN', order['VIN']) +
+          '</div>') +
+
+        // Материалы (редактируемый расход плёнки)
+        '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">' +
+            '<span style="font-weight:600">Материалы (расход плёнки)</span>' +
+            '<div style="display:flex;gap:6px">' +
+              '<button class="btn" onclick="addCardMatLine()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--bg-card2);color:var(--text);border:1px solid var(--border);border-radius:7px">+ Добавить</button>' +
+              '<button class="btn" onclick="saveCardMaterials()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:7px">💾 Сохранить</button>' +
+            '</div>' +
+          '</div>' +
+          '<table class="data-table" style="border:none">' +
+            '<thead><tr><th>Материал</th><th style="text-align:center">Кол-во</th><th style="text-align:center">м²</th><th style="text-align:center">Цена/м²</th><th>Тип</th><th style="text-align:right">Стоимость</th></tr></thead>' +
+            '<tbody id="card-mat-tbody">' + matRows + '</tbody>' +
+          '</table>' +
+        '</div>' +
+
+        // Расходы (редактируемые)
+        '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">' +
+            '<span style="font-weight:600">Расходы (такси, арматура…)</span>' +
+            '<div style="display:flex;gap:6px">' +
+              '<button class="btn" onclick="addCardExpLine()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--bg-card2);color:var(--text);border:1px solid var(--border);border-radius:7px">+ Добавить</button>' +
+              '<button class="btn" onclick="saveCardExpenses()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:7px">💾</button>' +
+            '</div>' +
+          '</div>' +
+          '<table class="data-table" style="border:none"><tbody id="card-exp-tbody">' + renderCardExpRows() + '</tbody></table>' +
+        '</div>' +
+
+      '</div>' +  // /левая колонка
+
+      // ПРАВАЯ КОЛОНКА — персонал, оплата, финитог
+      '<div style="display:flex;flex-direction:column;gap:12px;min-width:0">' +
+
+        renderCardPersonnel() +
+
+        // Оплата
+        '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+            '<div style="font-weight:600">Оплата</div>' +
+            (!isPaid ? '<button class="btn btn-primary" onclick="openPayOrderModal(\'' + oid + '\',\'' + String(order['Клиент']||'').replace(/'/g,"\\'") + '\',' + price + ',\'' + String(order['Срок оплаты']||'') + '\')" style="padding:6px 14px;font-weight:600">✓ Принять оплату</button>' : '<span style="color:var(--success);font-weight:700">✓ Оплачен</span>') +
+          '</div>' +
+          '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">' +
+            finBox_('Сумма', fmt(price), '') +
+            finBox_('Оплачено', fmt(paid), 'var(--success)') +
+            finBox_('Остаток', fmt(remaining), remaining>0?'var(--danger)':'var(--success)') +
+          '</div>' +
+          '<label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Условия оплаты (−15% при Безнал)</label>' +
+          '<select onchange="updateOrderCardField(\'' + oid + '\',{payType:this.value})" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--inp);color:var(--text);margin-bottom:8px">' + payTypeOpts + '</select>' +
+          '<label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Срок оплаты / следующий взнос</label>' +
+          '<input type="date" value="' + dueIso + '" onchange="setOrderCardDueDate(\'' + oid + '\', this.value)" style="width:100%;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--inp);color:var(--text);margin-bottom:10px">' +
+          '<div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">История платежей</div>' +
+          payHistory +
+          scheduleBlock +
+        '</div>' +
+
+        // Финансовый итог
+        '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px">' +
+          '<div style="font-weight:600;margin-bottom:10px">Финансовый итог</div>' +
+          finLine_('Стоимость заказа', fmt(order['Стоимость заказа']), '') +
+          finLine_('Итого материалы', '−' + fmt(order['Итого материалы']), 'var(--text3)') +
+          finLine_('Итого расходы',   '−' + fmt(order['Итого расходы']),   'var(--text3)') +
+          (payType==='Безнал' ? finLine_('Безнал −15%', '−' + fmt(Number(order['Стоимость заказа'])*0.15), 'var(--text3)') : '') +
+          '<div style="border-top:1px solid var(--border);margin:8px 0"></div>' +
+          finLine_('Валовая прибыль', fmt(order['Валовая прибыль']), 'var(--success)') +
+          finLine_('Бонус менеджера', fmt(order['Бонус менеджера']), 'var(--accent)') +
+          finLine_('Бонус мастера',   fmt(order['Бонус оклейщика']), 'var(--accent)') +
+          '<div style="border-top:2px solid var(--border);margin:8px 0"></div>' +
+          finLine_('Маржинальная',    fmt(order['Маржинальная прибыль']), 'var(--success)', true) +
+        '</div>' +
+
+      '</div>' +  // /правая колонка
+
+    '</div>';
+}
+
+/* --- Карточка заказа: редактор расхода плёнки --- */
+
+// Опции <select> материала из справочника (App._materials)
+function cardMatOptions_(selectedId) {
+  var opts = '<option value="">— выбрать материал —</option>';
+  (App._materials || []).forEach(function(m) {
+    opts += '<option value="' + (m['ID']||'') + '"' +
+      ' data-unit="'  + (m['Единица']||'пм') + '"' +
+      ' data-price="' + (m['Цена']||0) + '"' +
+      ' data-roll="'  + (m['Ширина рулона']||1.52) + '"' +
+      (String(m['ID']) === String(selectedId) ? ' selected' : '') + '>' +
+      (m['Название']||'') + '</option>';
+  });
+  return opts;
+}
+
+// Построить строки таблицы материалов карточки из App._currentOrder.materials
+function renderCardMatRows() {
+  var mats = (App._currentOrder && App._currentOrder.materials) || [];
+  if (!mats.length) {
+    return '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:14px">Материалы не добавлены — нажмите «+ Добавить»</td></tr>';
+  }
+  var inp = 'padding:3px 6px;border:1px solid var(--border);border-radius:5px;background:var(--inp);color:var(--text);font-size:12px';
+  return mats.map(function(m, i) {
+    var isOst = m['Тип'] === 'остаток';
+    var sqm   = Number(m['Кол-во м²']) || 0;
+    var cost  = Number(m['Стоимость']) || 0;
+    var hasRef = (App._materials || []).length > 0;
+    var matCell = hasRef
+      ? '<select class="cardmat-mat" data-i="' + i + '" onchange="onCardMatSelect(' + i + ')" style="' + inp + ';min-width:150px">' + cardMatOptions_(m['Материал ID']) + '</select>'
+      : '<input class="cardmat-name" data-i="' + i + '" value="' + String(m['Название']||'').replace(/"/g,'&quot;') + '" placeholder="название плёнки" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';min-width:150px">';
+    return '<tr>' +
+      '<td>' + matCell + '</td>' +
+      '<td style="text-align:center;white-space:nowrap">' +
+        '<input class="cardmat-qty" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(m['Кол-во'])||0) + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:70px;text-align:left"> ' +
+        '<select class="cardmat-unit" data-i="' + i + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + '">' +
+          '<option value="пм"' + ((m['Единица']||'пм')==='пм'?' selected':'') + '>пм</option>' +
+          '<option value="м²"' + (m['Единица']==='м²'?' selected':'') + '>м²</option>' +
+        '</select>' +
+      '</td>' +
+      '<td style="text-align:center">' + sqm.toFixed(2) + ' м²</td>' +
+      '<td style="text-align:center;white-space:nowrap">' +
+        '<input class="cardmat-price" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(m['Цена за м²'])||0) + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:72px;text-align:left"> Br/м²' +
+      '</td>' +
+      '<td><select class="cardmat-type" data-i="' + i + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + '">' +
+          '<option value="расход"' + (!isOst?' selected':'') + '>расход</option>' +
+          '<option value="остаток"' + (isOst?' selected':'') + '>остаток</option>' +
+        '</select></td>' +
+      '<td style="text-align:right;white-space:nowrap"><span style="font-weight:600">' + (isOst ? '—' : (cost.toLocaleString('ru') + ' Br')) + '</span> ' +
+        '<button onclick="removeCardMatLine(' + i + ')" title="Удалить" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px">✕</button></td>' +
+    '</tr>';
+  }).join('');
+}
+
+// Пересчитать производные поля всех материалов и перерисовать таблицу
+function refreshCardMats() {
+  (App._currentOrder.materials || []).forEach(function(m) {
+    var unit  = m['Единица'] || 'пм';
+    var roll  = Number(m['Ширина рулона']) || 1.52;
+    var price = Number(m['Цена за м²']) || 0;
+    var qty   = Number(m['Кол-во']) || 0;
+    var sqm   = (unit === 'пм') ? Math.round(qty * roll * 100) / 100 : qty;
+    m['Кол-во м²']  = sqm;
+    m['Стоимость']  = (m['Тип'] === 'остаток') ? 0 : Math.round(sqm * price * 100) / 100;
+  });
+  var tb = document.getElementById('card-mat-tbody');
+  if (tb) tb.innerHTML = renderCardMatRows();
+}
+
+// Изменение кол-ва / единицы / типа / названия в строке
+function onCardMatEdit(i) {
+  var m = App._currentOrder && App._currentOrder.materials[i];
+  if (!m) return;
+  var q  = document.querySelector('.cardmat-qty[data-i="'   + i + '"]');
+  var u  = document.querySelector('.cardmat-unit[data-i="'  + i + '"]');
+  var t  = document.querySelector('.cardmat-type[data-i="'  + i + '"]');
+  var nm = document.querySelector('.cardmat-name[data-i="'  + i + '"]');
+  var pr = document.querySelector('.cardmat-price[data-i="' + i + '"]');
+  if (q)  m['Кол-во']    = Number(q.value) || 0;
+  if (u)  m['Единица']   = u.value;
+  if (t)  m['Тип']       = t.value;
+  if (nm) m['Название']  = nm.value;
+  if (pr) m['Цена за м²'] = Number(pr.value) || 0;
+  refreshCardMats();
+}
+
+// Выбор материала из справочника
+function onCardMatSelect(i) {
+  var m = App._currentOrder && App._currentOrder.materials[i];
+  if (!m) return;
+  var sel = document.querySelector('.cardmat-mat[data-i="' + i + '"]');
+  if (!sel) return;
+  var opt = sel.options[sel.selectedIndex];
+  m['Материал ID']   = opt.value || '';
+  m['Название']      = opt.value ? opt.textContent : '';
+  m['Единица']       = (opt.dataset.unit) || 'пм';
+  m['Цена за м²']    = Number(opt.dataset.price) || 0;
+  m['Ширина рулона'] = Number(opt.dataset.roll) || 1.52;
+  // подхватываем введённое кол-во
+  var q = document.querySelector('.cardmat-qty[data-i="' + i + '"]');
+  if (q) m['Кол-во'] = Number(q.value) || 0;
+  refreshCardMats();
+}
+
+function addCardMatLine() {
+  if (!App._currentOrder) return;
+  if (!App._currentOrder.materials) App._currentOrder.materials = [];
+  App._currentOrder.materials.push({
+    'Материал ID':'', 'Название':'', 'Единица':'пм', 'Кол-во':0,
+    'Ширина рулона':1.52, 'Цена за м²':0, 'Тип':'расход', 'Кол-во м²':0, 'Стоимость':0
+  });
+  refreshCardMats();
+}
+
+function removeCardMatLine(i) {
+  if (!App._currentOrder || !App._currentOrder.materials) return;
+  App._currentOrder.materials.splice(i, 1);
+  refreshCardMats();
+}
+
+function saveCardMaterials() {
+  var o = App._currentOrder;
+  if (!o) return;
+  var lines = (o.materials || []).map(function(m) {
+    return {
+      materialId:  m['Материал ID'] || '',
+      name:        m['Название']     || '',
+      unit:        m['Единица']      || 'пм',
+      qty:         Number(m['Кол-во']) || 0,
+      rollWidth:   Number(m['Ширина рулона']) || 1.52,
+      pricePerSqm: Number(m['Цена за м²']) || 0,
+      type:        m['Тип'] === 'остаток' ? 'остаток' : 'расход',
+    };
+  });
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка сохранения: ' + (resp?resp.error:''), 'error'); return; }
+      // Пересчитываем финансы заказа и обновляем карточку
+      google.script.run
+        .withSuccessHandler(function(){ toast('Расход плёнки обновлён, финансы пересчитаны', 'success'); openOrderCard(o['ID']); })
+        .withFailureHandler(function(e){ toast('Ошибка пересчёта: ' + e.message, 'error'); })
+        .recalcOrderFinance(o['ID']);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .saveOrderMaterials(o['ID'], lines);
+}
+
+/* --- Карточка заказа: редактор персонала (кто клеил) --- */
+function renderCardPersonnel() {
+  var o    = App._currentOrder || {};
+  var emps = App.employees || [];
+  var mgr  = String(o['Менеджер'] || '');
+  var mastersList = String(o['Оклейщики'] || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  var inp  = 'font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:7px;background:var(--inp);color:var(--text);width:100%';
+
+  var mgrOpts = '<option value="">— менеджер —</option>' + emps.map(function(e){
+    var n = e['ФИО'] || e['Имя'] || '';
+    return n ? '<option' + (n === mgr ? ' selected' : '') + '>' + n + '</option>' : '';
+  }).join('');
+
+  var masterChecks = emps.length
+    ? emps.map(function(e){
+        var n = e['ФИО'] || e['Имя'] || '';
+        if (!n) return '';
+        var on = mastersList.indexOf(n) >= 0;
+        return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">' +
+          '<input type="checkbox" class="card-master-cb" value="' + n.replace(/"/g,'&quot;') + '"' + (on ? ' checked' : '') + '> ' + n + '</label>';
+      }).join('')
+    : '<div style="font-size:11px;color:var(--text3)">Список сотрудников пуст — добавьте в разделе «Сотрудники»</div>';
+
+  return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:12px">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+      '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2)">Персонал · кто клеил</div>' +
+      '<button class="btn" onclick="saveCardPersonnel()" title="Сохранить персонал" style="padding:3px 9px;font-size:11px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:6px">💾</button>' +
+    '</div>' +
+    '<label style="font-size:10px;color:var(--text3)">Менеджер</label>' +
+    '<select id="card-mgr" style="' + inp + ';margin:2px 0 8px">' + mgrOpts + '</select>' +
+    '<div style="font-size:10px;color:var(--text3);margin-bottom:2px">Мастера (оклейщики)</div>' +
+    '<div style="max-height:118px;overflow:auto">' + masterChecks + '</div>' +
+  '</div>';
+}
+
+function saveCardPersonnel() {
+  var o = App._currentOrder;
+  if (!o) return;
+  var mgr = (document.getElementById('card-mgr') || {}).value || '';
+  var masters = [];
+  document.querySelectorAll('.card-master-cb:checked').forEach(function(cb){ masters.push(cb.value); });
+  updateOrderCardField(o['ID'], { manager: mgr, masters: masters.join(', ') });
+}
+
+/* --- Карточка заказа: редактор расходов (такси, арматура) --- */
+function renderCardExpRows() {
+  var exps = (App._currentOrder && App._currentOrder.expenses) || [];
+  if (!exps.length) {
+    return '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:12px">Расходы не добавлены — «+ Добавить»</td></tr>';
+  }
+  var inp = 'padding:3px 7px;border:1px solid var(--border);border-radius:5px;background:var(--inp);color:var(--text);font-size:12px';
+  return exps.map(function(e, i) {
+    return '<tr>' +
+      '<td><input class="cardexp-name" data-i="' + i + '" value="' + String(e['Название']||'').replace(/"/g,'&quot;') + '" placeholder="Такси / Арматура…" onchange="onCardExpEdit(' + i + ')" style="' + inp + ';width:100%"></td>' +
+      '<td style="text-align:right;white-space:nowrap"><input class="cardexp-amount" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(e['Сумма'])||0) + '" onchange="onCardExpEdit(' + i + ')" style="' + inp + ';width:88px;text-align:left"> Br</td>' +
+      '<td style="text-align:right"><button onclick="removeCardExpLine(' + i + ')" title="Удалить" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px">✕</button></td>' +
+    '</tr>';
+  }).join('');
+}
+
+function onCardExpEdit(i) {
+  var e = App._currentOrder && App._currentOrder.expenses[i];
+  if (!e) return;
+  var n = document.querySelector('.cardexp-name[data-i="'   + i + '"]');
+  var a = document.querySelector('.cardexp-amount[data-i="' + i + '"]');
+  if (n) e['Название'] = n.value;
+  if (a) e['Сумма']    = Number(a.value) || 0;
+}
+
+function addCardExpLine() {
+  if (!App._currentOrder) return;
+  if (!App._currentOrder.expenses) App._currentOrder.expenses = [];
+  App._currentOrder.expenses.push({ 'Название':'', 'Сумма':0 });
+  var tb = document.getElementById('card-exp-tbody');
+  if (tb) tb.innerHTML = renderCardExpRows();
+}
+
+function removeCardExpLine(i) {
+  if (!App._currentOrder || !App._currentOrder.expenses) return;
+  App._currentOrder.expenses.splice(i, 1);
+  var tb = document.getElementById('card-exp-tbody');
+  if (tb) tb.innerHTML = renderCardExpRows();
+}
+
+function saveCardExpenses() {
+  var o = App._currentOrder;
+  if (!o) return;
+  (o.expenses || []).forEach(function(_, i){ onCardExpEdit(i); }); // подхватить значения инпутов
+  var lines = (o.expenses || [])
+    .filter(function(e){ return (String(e['Название']||'').trim()) || (Number(e['Сумма']) > 0); })
+    .map(function(e){ return { name: e['Название'] || '', amount: Number(e['Сумма']) || 0 }; });
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка сохранения: ' + (resp?resp.error:''), 'error'); return; }
+      google.script.run
+        .withSuccessHandler(function(){ toast('Расходы сохранены, финансы пересчитаны', 'success'); openOrderCard(o['ID']); })
+        .withFailureHandler(function(e){ toast('Ошибка пересчёта: ' + e.message, 'error'); })
+        .recalcOrderFinance(o['ID']);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .saveOrderExpenses(o['ID'], lines);
+}
+
+/* --- Карточка заказа: проверка директором --- */
+function verifyOrderCard(orderId) {
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast(resp.data.verified ? 'Заказ отмечен проверенным' : 'Проверка снята', 'success');
+      openOrderCard(orderId);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .toggleOrderVerification(orderId);
+}
+
+/* --- Карточка заказа: смена условий оплаты / срока --- */
+function updateOrderCardField(orderId, payload) {
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast('Сохранено', 'success');
+      openOrderCard(orderId);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .updateOrder(orderId, payload);
+}
+
+function setOrderCardDueDate(orderId, val) {
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast('Срок оплаты сохранён', 'success');
+      openOrderCard(orderId);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .setOrderDueDate(orderId, val);
+}
+
+/* --- Карточка заказа: график рассрочки --- */
+function createInstallmentPlanCard(orderId) {
+  var months = Number((document.getElementById('sched-months') || {}).value) || 0;
+  var start  = (document.getElementById('sched-start') || {}).value || '';
+  if (months < 1) { toast('Укажите число месяцев', 'error'); return; }
+  if (!start)     { toast('Укажите дату первого взноса', 'error'); return; }
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast('График: ' + resp.data.months + ' взносов по ~' + resp.data.perPayment + ' Br', 'success');
+      openOrderCard(orderId);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .createInstallmentPlan(orderId, { months: months, startDate: start });
+}
+
+function deleteScheduleCard(orderId) {
+  if (!confirm('Удалить график рассрочки?')) return;
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast('График удалён', 'success');
+      openOrderCard(orderId);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .deletePaymentSchedule(orderId);
+}
+
+function finBox_(label, value, color) {
+  return '<div style="background:var(--bg-card2);border:1px solid var(--border);border-radius:10px;padding:10px 12px;text-align:center">' +
+    '<div style="font-size:11px;color:var(--text3);margin-bottom:3px">' + label + '</div>' +
+    '<div style="font-size:16px;font-weight:700;color:' + (color||'var(--text)') + '">' + value + '</div></div>';
+}
+
+function cardSection_(title, content) {
+  return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:12px">' +
+    '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin-bottom:6px">' + title + '</div>' +
+    content + '</div>';
+}
+
+function infoLine_(label, value) {
+  if (!value) return '<div style="display:flex;gap:8px;margin-bottom:3px;font-size:12.5px"><span style="color:var(--text3);min-width:72px">' + label + ':</span><span style="color:var(--text3)">—</span></div>';
+  return '<div style="display:flex;gap:8px;margin-bottom:3px;font-size:12.5px">' +
+    '<span style="color:var(--text3);min-width:72px">' + label + ':</span>' +
+    '<span style="font-weight:500">' + value + '</span></div>';
+}
+
+function finLine_(label, value, color, bold) {
+  return '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px' + (bold?';font-weight:700':'') + '">' +
+    '<span style="color:var(--text2)">' + label + '</span>' +
+    '<span style="font-weight:600;color:' + (color||'') + '">' + value + '</span></div>';
+}
+
+function printOrderContract() {
+  var id = App._currentOrderId;
+  if (!id) return;
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
+      var w = window.open('','_blank'); if(w){ w.document.write(resp.data); w.document.close(); }
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
+    .generateContractHtml(id);
+}
+
+function printOrderNarad() {
+  var id = App._currentOrderId;
+  if (!id) return;
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
+      var w = window.open('','_blank'); if(w){ w.document.write(resp.data); w.document.close(); }
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
+    .generateOrderNaradHtml(id);
 }
 
 /* ===== ИНИЦИАЛИЗАЦИЯ ===== */
 function init() {
   refreshSync();
-
   var lbl = document.getElementById('theme-label');
   if (lbl) lbl.textContent = App._theme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
 
@@ -527,39 +3427,20 @@ function init() {
     .withSuccessHandler(function(resp) {
       var loader = document.getElementById('app-loading');
       if (loader) loader.classList.add('hidden');
-
       var dash = document.getElementById('page-dashboard');
       if (dash) dash.classList.add('active');
-
-      console.log('initApp response:', resp);
-
-      if (!resp) {
-        toast('Сервер не вернул данные. Обнови страницу.', 'error');
-        return;
-      }
-
+      if (!resp) { toast('Сервер не вернул данные', 'error'); return; }
       var data;
-      if (resp.ok === true && resp.data) {
-        data = resp.data;
-      } else if (resp.brand || resp.config || resp.employees) {
-        data = resp;
-      } else if (resp.ok === false) {
-        toast('Ошибка сервера: ' + (resp.error || 'unknown'), 'error');
-        return;
-      } else {
-        toast('Неизвестный формат ответа', 'error');
-        return;
-      }
-
+      if (resp.ok === true && resp.data) { data = resp.data; }
+      else if (resp.brand || resp.config || resp.employees) { data = resp; }
+      else { toast('Ошибка: ' + (resp.error || 'unknown'), 'error'); return; }
       if (data.brand) applyBrand(data.brand);
-      App.config    = data.config;
+      App.config = data.config;
       App.employees = data.employees || [];
-
-      if (data.config && data.config.positions) {
-        fillPositions(data.config.positions);
-      }
-
-      renderDashboard();
+      if (data.config && data.config.positions) fillPositions(data.config.positions);
+      if (data.config && data.config.leadSources) fillLeadSources(data.config.leadSources);
+      else if (window.CONFIG_LEAD_SOURCES) fillLeadSources(window.CONFIG_LEAD_SOURCES);
+      onDashPeriodChange();   // заполняет календари текущим месяцем и грузит данные
       refreshSync();
     })
     .withFailureHandler(function(err) {
@@ -567,8 +3448,6 @@ function init() {
       if (loader) loader.classList.add('hidden');
       var dash = document.getElementById('page-dashboard');
       if (dash) dash.classList.add('active');
-
-      console.error('initApp FAILED:', err);
       toast('Ошибка: ' + err.message, 'error');
     })
     .initApp();

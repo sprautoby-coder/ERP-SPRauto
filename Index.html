@@ -9,13 +9,7 @@
 </head>
 <body data-theme="dark">
 
-<!-- FAB -->
-<div class="fab-wrap">
-  <button class="fab-main" onclick="openModal('modal-new-order')">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-  </button>
-  <div class="fab-label">Новый заказ</div>
-</div>
+<!-- FAB убран — кнопка действия в шапке страницы -->
 
 <!-- SIDEBAR -->
 <aside class="sidebar">
@@ -33,10 +27,13 @@
     <a class="nav-item active" data-page="dashboard" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Дашборд</span></a>
     <a class="nav-item" data-page="orders" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg><span>Заказы</span></a>
     <a class="nav-item" data-page="clients" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg><span>Клиенты</span></a>
+    <a class="nav-item" data-page="materials" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-2.18c.07-.44.18-.86.18-1a3 3 0 0 0-6 0c0 .14.11.56.18 1H10C8.9 6 8 6.9 8 8v12c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-7-1a1 1 0 1 1 2 0c0 .14-.05.27-.09.4L14.9 5h-1.81l-.09-.41A1 1 0 0 1 13 5zm7 15H10V8h2v2h6V8h2v12z"/></svg><span>Материалы</span></a>
     <div class="nav-label">Финансы</div>
     <a class="nav-item" data-page="finance" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg><span>Финансы</span></a>
+    <a class="nav-item" data-page="dds" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg><span>ДДС</span></a>
     <a class="nav-item" data-page="expenses" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zm-7 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm3-8h-6V6a3 3 0 0 1 6 0v1z"/></svg><span>Расходы</span></a>
     <a class="nav-item" data-page="debt" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M11 7h2v2h-2V7zm0 4h2v6h-2v-6zm1-9C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/></svg><span>Дебиторка</span></a>
+    <a class="nav-item" data-page="salary" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg><span>Расчёт ЗП</span></a>
     <div class="nav-label">Работа</div>
     <a class="nav-item" data-page="team" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg><span>Сотрудники</span></a>
     <a class="nav-item" data-page="services" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6 6 9 1.6 4.7C.4 7.1.9 10.1 2.9 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.5-.4.5-1.1.1-1.4z"/></svg><span>Услуги</span></a>
@@ -60,10 +57,14 @@
       <div class="topbar-sync"><div class="sync-dot"></div><span id="sync-time"></span></div>
     </div>
     <div class="topbar-right">
-      <button class="btn btn-ghost" onclick="loadCurrentPage()">
+      <button class="btn btn-ghost" onclick="loadCurrentPage()" title="Обновить">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
         Обновить
       </button>
+      <button class="btn btn-ghost" onclick="openModal('modal-new-order')" title="Новый заказ" style="margin-right:4px">
+        + Заказ
+      </button>
+      <button class="btn btn-primary" id="topbar-action-btn" style="display:none">+ Действие</button>
     </div>
   </header>
 
@@ -75,23 +76,144 @@
 
   <!-- ДАШБОРД -->
   <div class="content page" id="page-dashboard">
-    <div id="dash-alerts"></div>
     <div class="section-header">
-      <div class="section-title">Ключевые показатели</div>
+      <div class="section-title-big">Дашборд</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select class="form-select" id="dash-period" onchange="onDashPeriodChange()" style="height:38px;font-size:13px;min-width:150px">
+          <option value="month" selected>Этот месяц</option>
+          <option value="prev_month">Прошлый месяц</option>
+          <option value="quarter">Квартал</option>
+          <option value="year">Год</option>
+          <option value="all">Всё время</option>
+        </select>
+        <input type="date" class="form-input" id="dash-from" onchange="onDashDateEdit()" title="Дата начала периода" style="height:38px;width:150px">
+        <span style="color:var(--text3)">—</span>
+        <input type="date" class="form-input" id="dash-to" onchange="onDashDateEdit()" title="Дата окончания периода" style="height:38px;width:150px">
+        <button class="btn-cta" onclick="openModal('modal-new-order')"><span class="cta-plus">+</span>Новый заказ</button>
+      </div>
     </div>
+
     <div class="kpi-grid" id="dash-kpi">
       <div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div>
     </div>
+
     <div class="quick-actions">
       <div class="quick-actions-title">Быстрые действия</div>
       <div class="quick-actions-grid">
         <button class="qa-btn qa-btn-primary" onclick="openModal('modal-new-order')"><div class="qa-icon">📋</div><div class="qa-label">Новый заказ</div><div class="qa-sub">Оклейка, тонировка...</div></button>
-        <button class="qa-btn" onclick="openModal('modal-new-payment')"><div class="qa-icon">💵</div><div class="qa-label">Принять оплату</div><div class="qa-sub">Нал или безнал</div></button>
+        <button class="qa-btn" onclick="openModal('modal-new-client')"><div class="qa-icon">👤</div><div class="qa-label">Новый клиент</div><div class="qa-sub">Физ. или юр. лицо</div></button>
         <button class="qa-btn" onclick="openModal('modal-new-expense')"><div class="qa-icon">💸</div><div class="qa-label">Записать расход</div><div class="qa-sub">Материалы, аренда...</div></button>
         <button class="qa-btn" onclick="goPage('team')"><div class="qa-icon">👥</div><div class="qa-label">Команда</div><div class="qa-sub">Сотрудники и ЗП</div></button>
       </div>
     </div>
+
+    <!-- Последние заказы — внизу, отдельной таблицей -->
+    <div id="dash-recent" style="margin-top:22px"></div>
   </div>
+
+  <!-- КЛИЕНТЫ -->
+  <div class="content page" id="page-clients">
+    <div class="section-header">
+      <div class="section-title-big">Клиенты</div>
+      <button class="btn btn-primary" onclick="openModal('modal-new-client')">+ Добавить</button>
+    </div>
+
+    <!-- Статистика клиентов -->
+    <div class="clients-kpi-row" id="clients-kpi-row">
+      <div class="clients-kpi-card">
+        <div class="clients-kpi-label">Всего клиентов</div>
+        <div class="clients-kpi-val" id="ckpi-total">—</div>
+      </div>
+      <div class="clients-kpi-card">
+        <div class="clients-kpi-label">Физ. лиц</div>
+        <div class="clients-kpi-val" id="ckpi-fiz">—</div>
+      </div>
+      <div class="clients-kpi-card">
+        <div class="clients-kpi-label">Юр. лиц</div>
+        <div class="clients-kpi-val" id="ckpi-yur">—</div>
+      </div>
+      <div class="clients-kpi-card">
+        <div class="clients-kpi-label">Общая выручка</div>
+        <div class="clients-kpi-val" id="ckpi-sum">—</div>
+      </div>
+    </div>
+
+    <!-- Поиск, фильтры и переключатель вида -->
+    <div class="clients-toolbar">
+      <div class="search-wrap" style="flex:1;min-width:180px;">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <input class="search-input" id="clients-search" type="text" placeholder="Поиск по имени, телефону, авто..." oninput="filterClients()">
+      </div>
+      <div class="filter-tabs">
+        <button class="filter-tab active" onclick="setClientFilter('all', this)">Все</button>
+        <button class="filter-tab" onclick="setClientFilter('физ', this)">Физ. лица</button>
+        <button class="filter-tab" onclick="setClientFilter('юр', this)">Юр. лица</button>
+      </div>
+      <select class="form-select" id="clients-source-filter" onchange="filterClients()" style="min-width:130px;height:36px;font-size:13px;">
+        <option value="">Все источники</option>
+      </select>
+      <!-- Переключатель вида -->
+      <div class="view-toggle">
+        <button class="view-btn active" id="view-btn-table" onclick="setClientsView('table')" title="Таблица">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M3 5h18v2H3zm0 6h18v2H3zm0 6h18v2H3z"/></svg>
+        </button>
+        <button class="view-btn" id="view-btn-cards" onclick="setClientsView('cards')" title="Карточки">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8v8H3zm0 10h8v8H3zm10-10h8v8h-8zm0 10h8v8h-8z"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div id="clients-error" class="alert alert-red" style="display:none"><span>!</span><span id="clients-error-text"></span></div>
+
+    <!-- ВИД: ТАБЛИЦА -->
+    <div class="clients-table-wrap" id="clients-table-wrap">
+      <table class="clients-table" id="clients-table">
+        <thead>
+          <tr>
+            <th class="ct-col-name" onclick="sortClients('name')">
+              Клиент <span class="ct-sort-icon" id="sort-icon-name">↕</span>
+            </th>
+            <th class="ct-col-type">Тип</th>
+            <th class="ct-col-phone">Телефон</th>
+            <th class="ct-col-auto">Авто / Госномер</th>
+            <th class="ct-col-source">Источник</th>
+            <th class="ct-col-orders" onclick="sortClients('orders')">
+              Заказов <span class="ct-sort-icon" id="sort-icon-orders">↕</span>
+            </th>
+            <th class="ct-col-sum" onclick="sortClients('sum')">
+              Сумма <span class="ct-sort-icon" id="sort-icon-sum">↕</span>
+            </th>
+            <th class="ct-col-actions"></th>
+          </tr>
+        </thead>
+        <tbody id="clients-tbody">
+          <tr><td colspan="8" class="ct-loading">
+            <div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>
+            <div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>
+            <div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>
+          </td></tr>
+        </tbody>
+      </table>
+      <div class="ct-footer" id="clients-table-footer"></div>
+    </div>
+
+    <!-- ВИД: КАРТОЧКИ -->
+    <div class="clients-cards-wrap clients-list" id="clients-cards-wrap" style="display:none;">
+      <div class="kpi-skeleton" style="min-height:80px"></div>
+      <div class="kpi-skeleton" style="min-height:80px"></div>
+      <div class="kpi-skeleton" style="min-height:80px"></div>
+    </div>
+  </div>
+
+  <!-- КАРТОЧКА КЛИЕНТА -->
+  <div class="content page" id="page-client-card">
+    <div class="section-header">
+      <button class="btn btn-ghost" onclick="goPage('clients')">← Назад</button>
+      <button class="btn btn-primary" onclick="openEditClientModal()">Редактировать</button>
+    </div>
+    <div id="client-card-content"></div>
+  </div>
+
 
   <!-- СОТРУДНИКИ -->
   <div class="content page" id="page-team">
@@ -142,211 +264,1067 @@
     <div style="margin-top:20px"><button class="btn btn-primary" onclick="saveAllSettings()">Сохранить настройки</button></div>
   </div>
 
-  <!-- ЗАГЛУШКИ -->
-  <div class="content page" id="page-orders"><div class="stub-page"><div class="stub-icon">📋</div><div class="stub-title">Заказы</div><div class="stub-desc">Следующий этап</div></div></div>
-  <div class="content page" id="page-clients"><div class="stub-page"><div class="stub-icon">👤</div><div class="stub-title">Клиенты</div><div class="stub-desc">Следующий этап</div></div></div>
-  <div class="content page" id="page-finance"><div class="stub-page"><div class="stub-icon">💰</div><div class="stub-title">Финансы</div><div class="stub-desc">Следующий этап</div></div></div>
-  <div class="content page" id="page-expenses"><div class="stub-page"><div class="stub-icon">💸</div><div class="stub-title">Расходы</div><div class="stub-desc">Следующий этап</div></div></div>
-  <div class="content page" id="page-debt"><div class="stub-page"><div class="stub-icon">🧾</div><div class="stub-title">Дебиторка</div><div class="stub-desc">Следующий этап</div></div></div>
-  <div class="content page" id="page-services"><div class="stub-page"><div class="stub-icon">🛠</div><div class="stub-title">Услуги</div><div class="stub-desc">Следующий этап</div></div></div>
-  <div class="content page" id="page-inventory"><div class="stub-page"><div class="stub-icon">📦</div><div class="stub-title">Склад</div><div class="stub-desc">Следующий этап</div></div></div>
+  <!-- ЗАКАЗЫ -->
+  <div class="content page" id="page-orders">
+    <div class="section-header">
+      <div class="section-title-big">Заказы</div>
+      <button class="btn btn-primary" onclick="openModal('modal-new-order')">+ Новый заказ</button>
+    </div>
+
+    <!-- KPI заказов -->
+    <div class="clients-kpi-row" id="orders-kpi-row">
+      <div class="clients-kpi-card">
+        <div class="clients-kpi-label">Всего заказов</div>
+        <div class="clients-kpi-val" id="okpi-total">—</div>
+      </div>
+      <div class="clients-kpi-card">
+        <div class="clients-kpi-label">Выручка</div>
+        <div class="clients-kpi-val" id="okpi-revenue">—</div>
+      </div>
+      <div class="clients-kpi-card">
+        <div class="clients-kpi-label">Средний чек</div>
+        <div class="clients-kpi-val" id="okpi-avg">—</div>
+      </div>
+      <div class="clients-kpi-card">
+        <div class="clients-kpi-label">В работе</div>
+        <div class="clients-kpi-val" id="okpi-inwork">—</div>
+      </div>
+    </div>
+
+    <!-- Панель фильтров -->
+    <div class="clients-toolbar">
+      <div class="search-wrap" style="flex:1;min-width:180px;">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <input class="search-input" id="orders-search" type="text" placeholder="Клиент, авто, госномер..." oninput="filterOrders()">
+      </div>
+      <div class="filter-tabs" id="orders-status-tabs">
+        <button class="filter-tab active" onclick="setOrderStatusFilter('all', this)">Все</button>
+        <button class="filter-tab" onclick="setOrderStatusFilter('Новый', this)">Новые</button>
+        <button class="filter-tab" onclick="setOrderStatusFilter('В работе', this)">В работе</button>
+        <button class="filter-tab" onclick="setOrderStatusFilter('Готов', this)">Готов</button>
+        <button class="filter-tab" onclick="setOrderStatusFilter('Выдан', this)">Выданы</button>
+      </div>
+      <select class="form-select" id="orders-service-filter" onchange="filterOrders()" style="min-width:130px;height:36px;font-size:13px;">
+        <option value="">Все услуги</option>
+        <option value="Оклейка PPF">Оклейка PPF</option>
+        <option value="Тонировка">Тонировка</option>
+        <option value="Полировка">Полировка</option>
+        <option value="Керамика">Керамика</option>
+        <option value="Антихром">Антихром</option>
+        <option value="Шумоизоляция">Шумоизоляция</option>
+      </select>
+    </div>
+
+    <div id="orders-error" class="alert alert-red" style="display:none"><span>!</span><span id="orders-error-text"></span></div>
+
+    <!-- Таблица заказов -->
+    <div class="clients-table-wrap" id="orders-table-wrap">
+      <table class="clients-table" id="orders-table">
+        <thead>
+          <tr>
+            <th style="width:96px"></th>
+            <th style="min-width:110px">Договор</th>
+            <th style="min-width:80px">Дата</th>
+            <th style="min-width:150px">Клиент</th>
+            <th style="min-width:130px">Авто / Госномер</th>
+            <th style="min-width:110px">Услуга</th>
+            <th style="min-width:90px;text-align:right">Сумма</th>
+            <th style="min-width:70px;text-align:center">Оплата</th>
+            <th style="min-width:100px;text-align:center">Статус</th>
+            <th style="min-width:100px">Менеджер</th>
+            <th style="width:40px"></th>
+          </tr>
+        </thead>
+        <tbody id="orders-tbody">
+          <tr><td colspan="10" class="ct-loading">
+            <div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>
+            <div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>
+            <div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>
+          </td></tr>
+        </tbody>
+      </table>
+      <div class="ct-footer" id="orders-table-footer"></div>
+    </div>
+  </div>
+  <!-- ФИНАНСЫ -->
+  <div class="content page" id="page-finance">
+    <div class="section-header">
+      <div class="section-title-big">Финансы</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select class="form-select" id="fin-period" onchange="onFinPeriodChange()" style="height:36px;font-size:13px;min-width:140px">
+          <option value="month" selected>Этот месяц</option>
+          <option value="prev_month">Прошлый месяц</option>
+          <option value="quarter">Квартал</option>
+          <option value="year">Год</option>
+          <option value="all">Всё время</option>
+          <option value="custom">Произвольный…</option>
+        </select>
+        <div id="fin-custom-range" style="display:none;gap:6px;align-items:center">
+          <input type="date" class="form-input" id="fin-from" onchange="loadFinance()" style="height:36px;font-size:13px;width:138px">
+          <span style="color:var(--text3)">—</span>
+          <input type="date" class="form-input" id="fin-to"   onchange="loadFinance()" style="height:36px;font-size:13px;width:138px">
+        </div>
+      </div>
+    </div>
+    <div class="kpi-grid" id="fin-kpi" style="margin-bottom:20px">
+      <div class="kpi-card"><div class="kpi-label">Выручка</div><div class="kpi-value" id="fin-revenue">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Валовая прибыль</div><div class="kpi-value" id="fin-gross">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Расходы</div><div class="kpi-value" id="fin-expenses">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Чистая прибыль</div><div class="kpi-value" id="fin-net">—</div></div>
+    </div>
+    <!-- Разбивка по услугам -->
+    <div class="section-header" style="margin-bottom:10px"><div class="section-title">По направлениям</div></div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Услуга</th><th style="text-align:right">Заказов</th><th style="text-align:right">Выручка</th><th style="text-align:right">Валовая прибыль</th><th style="text-align:right">Доля выручки</th></tr></thead>
+        <tbody id="fin-services-tbody"><tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</td></tr></tbody>
+      </table>
+    </div>
+    <!-- Расходы по категориям -->
+    <div class="section-header" style="margin:20px 0 10px"><div class="section-title">Расходы по категориям</div></div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr><th>Категория</th><th style="text-align:right">Сумма</th><th style="text-align:right">Доля</th></tr></thead>
+        <tbody id="fin-exp-tbody"><tr><td colspan="3" style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- РАСХОДЫ -->
+  <div class="content page" id="page-expenses">
+
+    <!-- Панель периода + кнопка добавления -->
+    <div class="section-header" style="flex-wrap:wrap;gap:8px;align-items:flex-start">
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select class="form-select" id="exp-period" onchange="onExpPeriodChange()" style="height:36px;font-size:13px;min-width:140px">
+          <option value="week">Неделя</option>
+          <option value="month" selected>Этот месяц</option>
+          <option value="prev_month">Прошлый месяц</option>
+          <option value="quarter">Квартал</option>
+          <option value="year">Год</option>
+          <option value="all">Всё время</option>
+          <option value="custom">Произвольный…</option>
+        </select>
+        <div id="exp-custom-range" style="display:none;gap:6px;align-items:center">
+          <input type="date" class="form-input" id="exp-from" onchange="loadExpenses()" style="height:36px;font-size:13px;width:138px">
+          <span style="color:var(--text3)">—</span>
+          <input type="date" class="form-input" id="exp-to"   onchange="loadExpenses()" style="height:36px;font-size:13px;width:138px">
+        </div>
+        <button class="btn btn-ghost" id="exp-compare-btn" onclick="toggleExpCompare()" style="height:36px;font-size:12px;white-space:nowrap">⚖️ Сравнить</button>
+        <div id="exp-compare-range" style="display:none;gap:6px;align-items:center">
+          <span style="font-size:11px;color:var(--text3);white-space:nowrap">vs</span>
+          <input type="date" class="form-input" id="exp-cmp-from" onchange="loadExpenses()" style="height:36px;font-size:13px;width:138px">
+          <span style="color:var(--text3)">—</span>
+          <input type="date" class="form-input" id="exp-cmp-to"   onchange="loadExpenses()" style="height:36px;font-size:13px;width:138px">
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="openModal('modal-new-expense')" style="white-space:nowrap">+ Добавить расход</button>
+    </div>
+
+    <!-- KPI с дельтой при сравнении -->
+    <div class="clients-kpi-row" style="margin-bottom:16px">
+      <div class="clients-kpi-card">
+        <div class="clients-kpi-label">Итого расходов</div>
+        <div class="clients-kpi-val" id="exp-total">—</div>
+        <div style="font-size:11px;margin-top:2px;min-height:14px" id="exp-total-delta"></div>
+      </div>
+      <div class="clients-kpi-card">
+        <div class="clients-kpi-label">Аренда + ЖКХ</div>
+        <div class="clients-kpi-val" id="exp-fixed">—</div>
+        <div style="font-size:11px;margin-top:2px;min-height:14px" id="exp-fixed-delta"></div>
+      </div>
+      <div class="clients-kpi-card">
+        <div class="clients-kpi-label">Маркетинг</div>
+        <div class="clients-kpi-val" id="exp-marketing">—</div>
+        <div style="font-size:11px;margin-top:2px;min-height:14px" id="exp-marketing-delta"></div>
+      </div>
+      <div class="clients-kpi-card">
+        <div class="clients-kpi-label">Транспорт</div>
+        <div class="clients-kpi-val" id="exp-transport">—</div>
+        <div style="font-size:11px;margin-top:2px;min-height:14px" id="exp-transport-delta"></div>
+      </div>
+    </div>
+
+    <!-- Фильтры строк -->
+    <div class="clients-toolbar" style="margin-bottom:12px">
+      <select class="form-select" id="exp-cat-filter" onchange="filterExpenses()" style="height:36px;font-size:13px;min-width:160px">
+        <option value="">Все категории</option>
+        <option>Материалы</option><option>Аренда</option><option>Коммунальные</option>
+        <option>Зарплата</option><option>Бонусы</option><option>Маркетинг</option>
+        <option>Налоги</option><option>Транспорт</option><option>Инструмент</option>
+        <option>Закупка товаров</option><option>Изъятие владельца</option><option>Прочее</option>
+      </select>
+      <div class="search-wrap" style="flex:1">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <input class="search-input" id="exp-search" placeholder="Поиск по описанию или категории..." oninput="filterExpenses()">
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          <th>Дата</th>
+          <th>Категория</th>
+          <th>Описание</th>
+          <th style="text-align:right">Сумма</th>
+          <th>Оплата</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="expenses-tbody"><tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</td></tr></tbody>
+      </table>
+      <div class="ct-footer" id="expenses-footer"></div>
+    </div>
+  </div>
+
+  <!-- ДЕБИТОРКА -->
+  <div class="content page" id="page-debt">
+    <div class="section-header">
+      <div class="section-title-big">Дебиторка и рассрочки</div>
+    </div>
+    <div class="clients-kpi-row" style="margin-bottom:16px">
+      <div class="clients-kpi-card"><div class="clients-kpi-label">Всего к получению</div><div class="clients-kpi-val" id="debt-total">—</div></div>
+      <div class="clients-kpi-card"><div class="clients-kpi-label">Заказов</div><div class="clients-kpi-val" id="debt-count">—</div></div>
+      <div class="clients-kpi-card" style="border-color:rgba(220,53,69,.3)"><div class="clients-kpi-label" style="color:var(--danger)">Просрочено</div><div class="clients-kpi-val" id="debt-overdue" style="color:var(--danger)">—</div></div>
+      <div class="clients-kpi-card" style="border-color:rgba(245,158,11,.3)"><div class="clients-kpi-label" style="color:#f59e0b">Рассрочка</div><div class="clients-kpi-val" id="debt-partial" style="color:#f59e0b">—</div></div>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead><tr>
+          <th>Договор</th>
+          <th>Клиент</th>
+          <th>Авто / Услуга</th>
+          <th style="text-align:right">Остаток</th>
+          <th>Срок оплаты</th>
+          <th>Действия</th>
+        </tr></thead>
+        <tbody id="debt-tbody"><tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</td></tr></tbody>
+      </table>
+      <div class="ct-footer" id="debt-footer"></div>
+    </div>
+  </div>
+
+  <!-- УСЛУГИ -->
+  <div class="content page" id="page-services">
+    <div class="section-header">
+      <div class="section-title-big">Услуги</div>
+      <button class="btn btn-primary" onclick="openModal('modal-new-service')">+ Добавить услугу</button>
+    </div>
+    <div class="table-wrap" style="margin-top:16px">
+      <table class="data-table">
+        <thead><tr><th>Услуга</th><th>Тип расчёта</th><th style="text-align:right">% мастеру</th><th style="text-align:right">% менеджеру</th><th>Статус</th><th></th></tr></thead>
+        <tbody id="services-tbody">
+          <tr><td colspan="6" style="padding:16px">
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:8px" id="services-cards"></div>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- СКЛАД -->
+  <div class="content page" id="page-inventory">
+    <div class="section-header"><div class="section-title-big">Склад</div></div>
+    <div style="padding:48px;text-align:center;color:var(--text3)">
+      <div style="font-size:48px;margin-bottom:12px">📦</div>
+      <div style="font-size:16px;font-weight:600;margin-bottom:6px">Модуль склада</div>
+      <div style="font-size:13px">В разработке — управление остатками плёнок</div>
+    </div>
+  </div>
+
+  <!-- ДДС -->
+  <div class="content page" id="page-dds">
+    <div class="section-header">
+      <div class="section-title-big">ДДС — Движение денег</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select class="form-select" id="dds-period" onchange="onDdsPeriodChange()" style="height:36px;font-size:13px;min-width:140px">
+          <option value="month" selected>Этот месяц</option>
+          <option value="prev_month">Прошлый месяц</option>
+          <option value="quarter">Квартал</option>
+          <option value="year">Год</option>
+          <option value="all">Всё время</option>
+          <option value="custom">Произвольный…</option>
+        </select>
+        <div id="dds-custom-range" style="display:none;gap:6px;align-items:center">
+          <input type="date" class="form-input" id="dds-from" onchange="loadDDS()" style="height:36px;font-size:13px;width:138px">
+          <span style="color:var(--text3)">—</span>
+          <input type="date" class="form-input" id="dds-to"   onchange="loadDDS()" style="height:36px;font-size:13px;width:138px">
+        </div>
+        <button class="btn btn-ghost" onclick="printDDS()">Распечатать</button>
+      </div>
+    </div>
+    <!-- KPI — три потока -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+      <!-- Касса -->
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin-bottom:8px">Касса (нал)</div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:2px"><span>Поступления</span><span id="dds-nal" style="color:var(--success);font-weight:600">—</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:8px"><span>Расходы наличными</span><span id="dds-exp-nal" style="color:var(--danger);font-weight:600">—</span></div>
+        <div style="border-top:1px solid var(--border);padding-top:8px;display:flex;justify-content:space-between;font-weight:700;font-size:16px"><span>Остаток</span><span id="dds-kassa">—</span></div>
+      </div>
+      <!-- Расчётный счёт -->
+      <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:16px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin-bottom:8px">Расчётный счёт (безнал)</div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:2px"><span>Поступления (до −15%)</span><span id="dds-beznal-gross" style="font-weight:600">—</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:2px"><span>После комиссии банка</span><span id="dds-beznal-net" style="color:var(--success);font-weight:600">—</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:8px"><span>Расходы безналично</span><span id="dds-exp-bnk" style="color:var(--danger);font-weight:600">—</span></div>
+        <div style="border-top:1px solid var(--border);padding-top:8px;display:flex;justify-content:space-between;font-weight:700;font-size:16px"><span>Остаток</span><span id="dds-bank">—</span></div>
+      </div>
+      <!-- Дебиторка -->
+      <div style="background:var(--bg-card);border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:16px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#f59e0b;margin-bottom:8px">Дебиторка (не получено)</div>
+        <div style="font-size:28px;font-weight:700;color:#f59e0b;margin-bottom:4px" id="dds-debt">—</div>
+        <div style="font-size:12px;color:var(--text3)" id="dds-debt-count">— заказов без оплаты</div>
+        <div style="margin-top:10px;font-size:11px;color:var(--text3)">Нажмите «Оплачено» в заказе<br>чтобы перенести в кассу или на счёт</div>
+      </div>
+    </div>
+    <!-- Три колонки таблиц -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+      <div>
+        <div class="section-title" style="margin-bottom:8px">Нал → Касса</div>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Дата</th><th>Клиент / Договор</th><th style="text-align:right">Сумма</th></tr></thead>
+          <tbody id="dds-nal-tbody"></tbody>
+        </table></div>
+      </div>
+      <div>
+        <div class="section-title" style="margin-bottom:8px">Безнал → Р/счёт</div>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Дата</th><th>Клиент / Договор</th><th style="text-align:right">Нетто</th></tr></thead>
+          <tbody id="dds-bnk-tbody"></tbody>
+        </table></div>
+      </div>
+      <div>
+        <div class="section-title" style="margin-bottom:8px">Расходы</div>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Дата</th><th>Категория</th><th style="text-align:right">Сумма</th></tr></thead>
+          <tbody id="dds-expense-tbody"></tbody>
+        </table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- РАСЧЁТ ЗП -->
+  <div class="content page" id="page-salary">
+    <div class="section-header">
+      <div class="section-title-big">Расчёт заработной платы</div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <select class="form-select" id="sal-period" onchange="onSalPeriodChange()" style="height:36px;font-size:13px;min-width:140px">
+          <option value="month" selected>Этот месяц</option>
+          <option value="prev_month">Прошлый месяц</option>
+          <option value="quarter">Квартал</option>
+          <option value="half">Полмесяца (цикл)</option>
+          <option value="all">Всё время</option>
+          <option value="custom">Произвольный…</option>
+        </select>
+        <div id="sal-custom-range" style="display:none;gap:6px;align-items:center">
+          <input type="date" class="form-input" id="sal-from" style="height:36px;font-size:13px;width:138px">
+          <span style="color:var(--text3)">—</span>
+          <input type="date" class="form-input" id="sal-to"   style="height:36px;font-size:13px;width:138px">
+        </div>
+        <button class="btn btn-primary" onclick="calcSalary()">Рассчитать</button>
+        <button class="btn btn-ghost" onclick="printSalary()">Распечатать</button>
+      </div>
+    </div>
+    <div id="salary-result">
+      <div style="text-align:center;padding:48px;color:var(--text3)">
+        <div style="font-size:36px;margin-bottom:12px">💰</div>
+        <div>Выберите период и нажмите «Рассчитать»</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- КАРТОЧКА ЗАКАЗА -->
+  <div class="content page" id="page-order-card">
+    <div class="section-header">
+      <button class="btn btn-ghost" onclick="goPage('orders')">← Назад к заказам</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" id="order-card-contract-btn" onclick="printOrderContract()">Договор</button>
+        <button class="btn btn-ghost" id="order-card-narad-btn" onclick="printOrderNarad()">Заказ-наряд</button>
+      </div>
+    </div>
+    <div id="order-card-content" style="padding:4px 0"></div>
+  </div>
+
+  <!-- СТРАНИЦА: СПРАВОЧНИК МАТЕРИАЛОВ -->
+  <div class="content page" id="page-materials">
+    <div class="section-header">
+      <div class="section-title-big">Справочник материалов</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="clearAllMaterials()" style="color:var(--danger)" title="Удалить все материалы">🗑 Очистить</button>
+        <button class="btn btn-ghost" onclick="importMaterialsFromRaschet()" id="btn-import-mat">⬇ Импорт из таблицы</button>
+        <button class="btn btn-primary" onclick="openModal('modal-new-material')">+ Добавить материал</button>
+      </div>
+    </div>
+    <div id="materials-error" style="display:none;color:var(--danger);padding:12px 0"></div>
+    <div class="table-wrap">
+      <table class="data-table" style="table-layout:fixed;width:100%">
+        <colgroup>
+          <col><col style="width:120px"><col style="width:75px"><col style="width:60px">
+          <col style="width:90px"><col style="width:85px"><col style="width:85px"><col style="width:180px">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Название</th>
+            <th>Категория</th>
+            <th>Услуга</th>
+            <th>Ед.</th>
+            <th>Ширина</th>
+            <th style="text-align:right">Цена</th>
+            <th style="text-align:center">Статус</th>
+            <th style="text-align:right">Действия</th>
+          </tr>
+        </thead>
+        <tbody id="materials-tbody"><tr><td colspan="8" style="text-align:center;color:var(--text3);padding:32px">Загрузка...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
 </main>
 
-<!-- МОДАЛКА: НОВЫЙ ЗАКАЗ -->
-<div class="modal-overlay" id="modal-new-order" onclick="closeModalOnOverlay(event)">
-  <div class="modal" style="max-width:520px">
-    <div class="modal-header"><div class="modal-title">Новый заказ</div><button class="modal-close" onclick="closeModal('modal-new-order')">&#10005;</button></div>
+<!-- МОДАЛКА: НОВЫЙ КЛИЕНТ -->
+<div class="modal-dialog-bg" id="modal-new-client" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-header">
+      <div class="modal-title">Новый клиент</div>
+      <button class="modal-close" onclick="closeModal('modal-new-client')">&#10005;</button>
+    </div>
     <div class="modal-body">
-      <div class="form-row"><label class="form-label">Услуга *</label>
-        <select class="form-select"><option>Оклейка PPF</option><option>Тонировка</option><option>Полировка</option><option>Керамика</option><option>Антихром</option></select>
-      </div>
-
-      <div class="form-section-title">Клиент</div>
-      <div class="form-row"><label class="form-label">Тип клиента</label>
-        <div style="display:flex;gap:6px;margin-bottom:4px">
-          <button type="button" class="ctype-btn active" onclick="setClientType('phys',this)">&#128100; Физлицо</button>
-          <button type="button" class="ctype-btn" onclick="setClientType('legal',this)">&#127970; Юрлицо</button>
+      <!-- Тип клиента -->
+      <div class="form-row">
+        <label class="form-label">Тип клиента</label>
+        <div style="display:flex;gap:8px">
+          <button class="ctype-btn active" onclick="setClientType('физ',this)">👤 Физ. лицо</button>
+          <button class="ctype-btn" onclick="setClientType('юр',this)">🏢 Юр. лицо</button>
         </div>
       </div>
-
+      <!-- Поля физ. лица -->
       <div id="client-phys-fields">
-        <div class="form-row"><label class="form-label">ФИО *</label><input class="form-input" id="order-client-fio" placeholder="Иванов Иван Иванович"></div>
-        <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="order-client-phone" placeholder="+375 XX XXX-XX-XX"></div>
-        <div class="form-row"><label class="form-label">Паспорт (серия и номер)</label><input class="form-input" id="order-client-passport"></div>
-        <div class="form-grid">
-          <div class="form-row"><label class="form-label">Кем выдан</label><input class="form-input" id="order-client-passport-by"></div>
-          <div class="form-row"><label class="form-label">Дата выдачи</label><input class="form-input" id="order-client-passport-date" type="date"></div>
-        </div>
-        <div class="form-row"><label class="form-label">Адрес</label><input class="form-input" id="order-client-address"></div>
+        <div class="form-row"><label class="form-label">ФИО *</label><input class="form-input" id="cl-fio" placeholder="Иванов Иван Иванович"></div>
+        <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="cl-phone" type="tel" placeholder="+375 29 000-00-00"></div>
+        <div class="form-row"><label class="form-label">Email</label><input class="form-input" id="cl-email" type="email" placeholder="email@mail.com"></div>
+        <div class="form-row"><label class="form-label">Паспорт</label><input class="form-input" id="cl-passport" placeholder="AB 1234567"></div>
       </div>
-
+      <!-- Поля юр. лица -->
       <div id="client-legal-fields" style="display:none">
-        <div class="form-row"><label class="form-label">Название организации *</label><input class="form-input" id="order-org-name" placeholder="ООО Название"></div>
-        <div class="form-grid">
-          <div class="form-row"><label class="form-label">УНП / ИНН</label><input class="form-input" id="order-org-unp"></div>
-          <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="order-org-phone"></div>
-        </div>
-        <div class="form-row"><label class="form-label">Юридический адрес</label><input class="form-input" id="order-org-address"></div>
-        <div class="form-grid">
-          <div class="form-row"><label class="form-label">Расчётный счёт (IBAN)</label><input class="form-input" id="order-org-iban"></div>
-          <div class="form-row"><label class="form-label">Банк</label><input class="form-input" id="order-org-bank"></div>
-        </div>
-        <div class="form-row"><label class="form-label">BIC</label><input class="form-input" id="order-org-bic"></div>
-        <div class="form-section-title">Контактное лицо</div>
-        <div class="form-grid">
-          <div class="form-row"><label class="form-label">ФИО</label><input class="form-input" id="order-org-contact"></div>
-          <div class="form-row"><label class="form-label">Должность</label><input class="form-input" id="order-org-contact-pos"></div>
-        </div>
-        <div class="form-row"><label class="form-label">Основание полномочий</label><input class="form-input" id="order-org-basis" placeholder="Устав / Доверенность"></div>
-        <div class="form-row"><label class="form-label">Email</label><input class="form-input" id="order-org-email" type="email"></div>
+        <div class="form-row"><label class="form-label">Название организации *</label><input class="form-input" id="cl-org-name" placeholder="ООО Компания"></div>
+        <div class="form-row"><label class="form-label">УНП</label><input class="form-input" id="cl-unp" placeholder="123456789"></div>
+        <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="cl-legal-phone" type="tel" placeholder="+375 17 000-00-00"></div>
+        <div class="form-row"><label class="form-label">Email</label><input class="form-input" id="cl-legal-email" type="email"></div>
+        <div class="form-row"><label class="form-label">Директор</label><input class="form-input" id="cl-director" placeholder="Иванов И.И."></div>
+        <div class="form-row"><label class="form-label">Контактное лицо</label><input class="form-input" id="cl-contact" placeholder="Петров П.П."></div>
+        <div class="form-row"><label class="form-label">Юр. адрес</label><input class="form-input" id="cl-address" placeholder="г. Минск, ул. ..."></div>
+        <div class="form-row"><label class="form-label">Банк. реквизиты</label><input class="form-input" id="cl-bank" placeholder="BY00 XXXX 0000 0000 0000 0000 0000"></div>
       </div>
-
-      <div class="form-section-title">Автомобиль</div>
-      <div class="form-grid">
-        <div class="form-row"><label class="form-label">Марка</label><input class="form-input" id="order-car-make" placeholder="VOLKSWAGEN"></div>
-        <div class="form-row"><label class="form-label">Модель</label><input class="form-input" id="order-car-model" placeholder="Golf 8"></div>
+      <!-- Общие поля -->
+      <div class="form-row">
+        <label class="form-label">Источник лида</label>
+        <select class="form-select" id="cl-source">
+          <option value="">-- выбери --</option>
+        </select>
       </div>
-      <div class="form-grid">
-        <div class="form-row"><label class="form-label">Год</label><input class="form-input" id="order-car-year" type="number" placeholder="2024"></div>
-        <div class="form-row"><label class="form-label">Гос. номер</label><input class="form-input" id="order-car-plate" placeholder="1234 AB-7"></div>
+      <!-- Добавить авто сразу -->
+      <div class="form-row" style="border-top:1px solid var(--border);padding-top:14px;margin-top:4px">
+        <label class="form-label" style="font-weight:600">Автомобиль (необязательно)</label>
       </div>
-      <div class="form-row"><label class="form-label">VIN</label><input class="form-input" id="order-car-vin" style="font-family:monospace"></div>
-
-      <div class="form-section-title">Параметры работы</div>
-      <div class="form-grid">
-        <div class="form-row"><label class="form-label">Мастер</label><select class="form-select" id="order-master"><option>-- выбери --</option></select></div>
-        <div class="form-row"><label class="form-label">Стоимость, Br</label><input class="form-input" id="order-price" type="number" placeholder="2320"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-row"><label class="form-label">Марка</label><input class="form-input" id="cl-car-brand" placeholder="BMW"></div>
+        <div class="form-row"><label class="form-label">Модель</label><input class="form-input" id="cl-car-model" placeholder="X5"></div>
+        <div class="form-row"><label class="form-label">Госномер</label><input class="form-input" id="cl-car-plate" placeholder="1234 AB-7"></div>
+        <div class="form-row"><label class="form-label">VIN</label><input class="form-input" id="cl-car-vin" placeholder="WBA..."></div>
       </div>
-      <div class="form-row"><label class="form-label">Условия оплаты</label>
-        <div style="display:flex;gap:6px">
-          <button type="button" class="ctype-btn active" onclick="setPayType(this)">Полная</button>
-          <button type="button" class="ctype-btn" onclick="setPayType(this)">Предоплата</button>
-          <button type="button" class="ctype-btn" onclick="setPayType(this)">Рассрочка</button>
-        </div>
-      </div>
-      <div class="form-row"><label class="form-label">Срок оплаты</label><input class="form-input" type="date"></div>
+      <div class="form-row"><label class="form-label">Заметки</label><textarea class="form-input" id="cl-notes" rows="2" placeholder="Дополнительная информация..."></textarea></div>
     </div>
-    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-new-order')">Отмена</button><button class="btn btn-primary">Создать заказ</button></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-new-client')">Отмена</button>
+      <button class="btn btn-primary" id="cl-submit-btn" onclick="submitNewClient()">Сохранить клиента</button>
+    </div>
   </div>
 </div>
 
-<!-- МОДАЛКА: ОПЛАТА -->
-<div class="modal-overlay" id="modal-new-payment" onclick="closeModalOnOverlay(event)">
-  <div class="modal" style="max-width:400px">
-    <div class="modal-header"><div class="modal-title">Принять оплату</div><button class="modal-close" onclick="closeModal('modal-new-payment')">&#10005;</button></div>
-    <div class="modal-body">
-      <div class="form-row"><label class="form-label">Сумма, Br</label><input class="form-input" type="number"></div>
-      <div class="form-row"><label class="form-label">Способ</label><select class="form-select"><option>Наличные</option><option>Безнал</option></select></div>
+<!-- МОДАЛКА: РЕДАКТИРОВАТЬ КЛИЕНТА -->
+<div class="modal-dialog-bg" id="modal-edit-client" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-header">
+      <div class="modal-title">Редактировать клиента</div>
+      <button class="modal-close" onclick="closeModal('modal-edit-client')">&#10005;</button>
     </div>
-    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-new-payment')">Отмена</button><button class="btn btn-green">Записать</button></div>
+    <div class="modal-body">
+      <div class="form-row"><label class="form-label">Имя / Название *</label><input class="form-input" id="edit-cl-name"></div>
+      <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="edit-cl-phone" type="tel"></div>
+      <div class="form-row"><label class="form-label">Email</label><input class="form-input" id="edit-cl-email" type="email"></div>
+      <div id="edit-cl-phys-fields">
+        <div class="form-row"><label class="form-label">Паспорт</label><input class="form-input" id="edit-cl-passport"></div>
+      </div>
+      <div id="edit-cl-legal-fields" style="display:none">
+        <div class="form-row"><label class="form-label">УНП</label><input class="form-input" id="edit-cl-unp"></div>
+        <div class="form-row"><label class="form-label">Директор</label><input class="form-input" id="edit-cl-director"></div>
+        <div class="form-row"><label class="form-label">Контактное лицо</label><input class="form-input" id="edit-cl-contact"></div>
+        <div class="form-row"><label class="form-label">Юр. адрес</label><input class="form-input" id="edit-cl-address"></div>
+        <div class="form-row"><label class="form-label">Банк. реквизиты</label><input class="form-input" id="edit-cl-bank"></div>
+      </div>
+      <div class="form-row"><label class="form-label">Источник лида</label>
+        <select class="form-select" id="edit-cl-source"><option value="">-- выбери --</option></select>
+      </div>
+      <div class="form-row"><label class="form-label">Заметки</label><textarea class="form-input" id="edit-cl-notes" rows="2"></textarea></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-client')">Отмена</button>
+      <button class="btn btn-primary" id="edit-cl-submit-btn" onclick="submitEditClient()">Сохранить</button>
+    </div>
   </div>
 </div>
 
-<!-- МОДАЛКА: РАСХОД -->
-<div class="modal-overlay" id="modal-new-expense" onclick="closeModalOnOverlay(event)">
-  <div class="modal" style="max-width:400px">
-    <div class="modal-header"><div class="modal-title">Новый расход</div><button class="modal-close" onclick="closeModal('modal-new-expense')">&#10005;</button></div>
-    <div class="modal-body">
-      <div class="form-row"><label class="form-label">Категория</label><select class="form-select"><option>Материалы</option><option>Аренда</option><option>Коммунальные</option><option>Маркетинг</option><option>Прочее</option></select></div>
-      <div class="form-row"><label class="form-label">Сумма, Br</label><input class="form-input" type="number"></div>
-      <div class="form-row"><label class="form-label">Описание</label><input class="form-input"></div>
+<!-- МОДАЛКА: РЕДАКТИРОВАТЬ МАТЕРИАЛ -->
+<div class="modal-dialog-bg" id="modal-edit-material" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-header">
+      <div class="modal-title">Редактировать материал</div>
+      <button class="modal-close" onclick="closeModal('modal-edit-material')">&#10005;</button>
     </div>
-    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-new-expense')">Отмена</button><button class="btn btn-primary">Сохранить</button></div>
+    <div class="modal-body">
+      <input type="hidden" id="edit-mat-id">
+      <div class="form-row">
+        <label class="form-label">Название *</label>
+        <input class="form-input" id="edit-mat-name" placeholder="Spectroll E15">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Категория</label>
+          <select class="form-select" id="edit-mat-category">
+            <option value="">— выбрать —</option>
+            <option>PPF плёнка</option><option>Тонировочная плёнка</option>
+            <option>Антихром</option><option>Защита фар</option>
+            <option>Химия</option><option>Расходник</option><option>Инструмент</option>
+          </select>
+        </div>
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Услуга</label>
+          <select class="form-select" id="edit-mat-service">
+            <option value="Универсальная">Универсальная</option>
+            <option value="PPF">Оклейка PPF</option>
+            <option value="TINT">Тонировка</option>
+            <option value="POLISH">Полировка</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Единица</label>
+          <select class="form-select" id="edit-mat-unit" onchange="toggleEditRollWidth()">
+            <option value="пм">пм (погонные метры)</option>
+            <option value="м²">м² (кв. метры)</option>
+            <option value="шт">шт</option>
+            <option value="л">л (литры)</option>
+            <option value="кг">кг</option>
+          </select>
+        </div>
+        <div class="form-row" style="margin:0" id="edit-mat-roll-wrap">
+          <label class="form-label">Ширина рулона, м</label>
+          <input class="form-input" id="edit-mat-roll-width" type="number" step="0.01" placeholder="1.52">
+        </div>
+      </div>
+      <div class="form-row" style="margin-top:12px">
+        <label class="form-label">Цена за единицу, Br *</label>
+        <input class="form-input" id="edit-mat-price" type="number" step="0.01" placeholder="65.00">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-material')">Отмена</button>
+      <button class="btn btn-primary" id="edit-mat-submit-btn" onclick="submitEditMaterial()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: НОВЫЙ ЗАКАЗ -->
+<div class="modal-dialog-bg" id="modal-new-order" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:580px">
+    <div class="modal-header">
+      <div class="modal-title">Новый заказ</div>
+      <button class="modal-close" onclick="closeModal('modal-new-order')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Услуга -->
+      <div class="form-row">
+        <label class="form-label">Услуга *</label>
+        <select class="form-select" id="ord-service">
+          <option value="">— выбрать —</option>
+          <option value="PPF">Оклейка PPF</option>
+          <option value="TINT">Тонировка</option>
+          <option value="POLISH">Полировка</option>
+          <option value="CERAMIC">Керамика</option>
+          <option value="ANTICHR">Антихром</option>
+          <option value="SOUND">Шумоизоляция</option>
+          <option value="CHEMIE">Химчистка</option>
+        </select>
+      </div>
+
+      <!-- Клиент -->
+      <div class="form-row">
+        <label class="form-label">Телефон клиента</label>
+        <div style="display:flex;gap:8px">
+          <input class="form-input" id="ord-client-phone" placeholder="+375 XX XXX-XX-XX" style="flex:1" oninput="orderSearchClient()">
+          <button class="btn btn-ghost" style="white-space:nowrap" onclick="orderSearchClient()">Найти</button>
+        </div>
+        <div id="ord-client-found" style="display:none;margin-top:6px;padding:8px 10px;background:var(--bg-card);border-radius:8px;font-size:13px;"></div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Имя клиента *</label>
+        <input class="form-input" id="ord-client-name" placeholder="ФИО или название организации">
+        <input type="hidden" id="ord-client-id">
+      </div>
+
+      <!-- Автомобиль -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Авто (марка, модель)</label>
+          <input class="form-input" id="ord-car" placeholder="Toyota Camry">
+        </div>
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Госномер</label>
+          <input class="form-input" id="ord-plate" placeholder="1234 АВ-7">
+        </div>
+      </div>
+
+      <!-- Дата и срок выполнения -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Дата заказа</label>
+          <input class="form-input" id="ord-date" type="date">
+        </div>
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Срок выполнения</label>
+          <input class="form-input" id="ord-due-date" type="date">
+        </div>
+      </div>
+
+      <!-- МАТЕРИАЛЫ — динамические строки -->
+      <div style="margin-top:14px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <label class="form-label" style="margin:0">Материалы</label>
+          <button class="btn btn-ghost" style="padding:3px 10px;font-size:12px" onclick="addMaterialLine()">+ Добавить</button>
+        </div>
+        <div id="ord-materials-list"></div>
+        <div id="ord-materials-empty" style="color:var(--text3);font-size:12px;padding:4px 0;text-align:center">Материалы не добавлены — нажмите «+ Добавить»</div>
+      </div>
+
+      <!-- РАСХОДЫ — динамические строки -->
+      <div style="margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <label class="form-label" style="margin:0">Расходы (такси, арматура...)</label>
+          <button class="btn btn-ghost" style="padding:3px 10px;font-size:12px" onclick="addExpenseLine()">+ Добавить</button>
+        </div>
+        <div id="ord-expenses-list"></div>
+        <div id="ord-expenses-empty" style="color:var(--text3);font-size:12px;padding:4px 0;text-align:center">Расходы не добавлены — нажмите «+ Добавить»</div>
+      </div>
+
+      <!-- Цена и оплата -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Стоимость заказа, Br *</label>
+          <input class="form-input" id="ord-price" type="number" placeholder="0" oninput="recalcOrderPreview()">
+        </div>
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Условия оплаты</label>
+          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+            <button class="ctype-btn" id="pay-nal"    onclick="setOrderPayType('Нал',       this)">Нал</button>
+            <button class="ctype-btn" id="pay-beznal" onclick="setOrderPayType('Безнал',    this)">Безнал</button>
+            <button class="ctype-btn" id="pay-otsr"   onclick="setOrderPayType('Отсрочка',  this)">Отсрочка</button>
+            <button class="ctype-btn" id="pay-rass"   onclick="setOrderPayType('Рассрочка', this)">Рассрочка</button>
+          </div>
+          <input type="hidden" id="ord-paytype" value="">
+          <div style="font-size:11px;color:var(--text3);margin-top:4px">Способ оплаты узнаём по факту. Влияет на −15% только «Безнал».</div>
+        </div>
+      </div>
+
+      <!-- Срок оплаты (для отсрочки/рассрочки) -->
+      <div id="ord-duepay-row" style="margin-top:12px;display:none">
+        <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end">
+          <div class="form-row" style="margin:0">
+            <label class="form-label" id="ord-duepay-label">Срок оплаты / первого взноса</label>
+            <input class="form-input" id="ord-duepay" type="date">
+          </div>
+          <div class="form-row" id="ord-rassr-months-wrap" style="margin:0;display:none">
+            <label class="form-label">Платежей (мес.)</label>
+            <input class="form-input" id="ord-rassr-months" type="number" min="1" max="36" value="3" style="width:110px">
+          </div>
+        </div>
+        <!-- Предоплата сразу -->
+        <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;margin-top:10px">
+          <div class="form-row" style="margin:0">
+            <label class="form-label">Предоплата сейчас, Br (необязательно)</label>
+            <input class="form-input" id="ord-prepay" type="number" min="0" step="0.01" placeholder="0">
+          </div>
+          <div class="form-row" style="margin:0">
+            <label class="form-label">Куда</label>
+            <select class="form-select" id="ord-prepay-method" style="width:120px"><option value="Нал">Нал</option><option value="Безнал">Безнал</option></select>
+          </div>
+        </div>
+        <div id="ord-rassr-hint" style="display:none;font-size:11px;color:var(--text3);margin-top:4px">Остаток (за вычетом предоплаты) разобьётся на равные ежемесячные взносы от даты первого взноса.</div>
+      </div>
+
+      <!-- Персонал -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Менеджер</label>
+          <select class="form-select" id="ord-manager"><option value="">— выбрать —</option></select>
+        </div>
+        <div class="form-row" style="margin:0;position:relative">
+          <label class="form-label">Мастер(а)</label>
+          <button type="button" class="form-input" style="text-align:left;cursor:pointer;color:var(--text2)" onclick="toggleMastersDropdown(event)">
+            <span id="ord-masters-label">— выбрать —</span>
+          </button>
+          <div id="masters-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:8px;margin-top:4px">
+            <div id="ord-masters-wrap"></div>
+          </div>
+          <input type="hidden" id="ord-masters" value="">
+        </div>
+
+      <!-- Превью расчёта -->
+      <div id="ord-finance-preview" style="display:none;margin-top:14px;padding:10px 14px;background:var(--bg-card);border-radius:8px;font-size:13px;">
+        <div style="font-weight:600;margin-bottom:6px;color:var(--text-secondary)">Предварительный расчёт</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">
+          <span style="color:var(--text3)">Итого материалы:</span>   <span id="prev-mat-total" style="color:var(--text3)">0 Br</span>
+          <span style="color:var(--text3)">Итого расходы:</span>     <span id="prev-exp-total" style="color:var(--text3)">0 Br</span>
+          <span style="border-top:1px solid var(--border);padding-top:4px">Валовая прибыль:</span>
+          <span id="prev-gross" style="font-weight:600;border-top:1px solid var(--border);padding-top:4px">—</span>
+          <span>Бонус менеджера:</span>     <span id="prev-mgr"    style="color:var(--accent)">—</span>
+          <span>Бонус мастера:</span>       <span id="prev-master" style="color:var(--accent)">—</span>
+          <span>Маржинальная прибыль:</span><span id="prev-margin" style="font-weight:600;color:var(--success)">—</span>
+        </div>
+      </div>
+
+      <!-- Заметки -->
+      <div class="form-row" style="margin-top:12px">
+        <label class="form-label">Заметки</label>
+        <textarea class="form-input" id="ord-notes" rows="2" placeholder="Доп. информация..."></textarea>
+      </div>
+
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-new-order')">Отмена</button>
+      <button class="btn btn-primary" id="ord-submit-btn" onclick="submitNewOrder()">Создать заказ</button>
+    </div>
   </div>
 </div>
 
 <!-- МОДАЛКА: НОВЫЙ СОТРУДНИК -->
-<div class="modal-overlay" id="modal-new-employee" onclick="closeModalOnOverlay(event)">
+<div class="modal-dialog-bg" id="modal-new-employee" onclick="closeModalOnOverlay(event)">
   <div class="modal" style="max-width:480px">
     <div class="modal-header"><div class="modal-title">Новый сотрудник</div><button class="modal-close" onclick="closeModal('modal-new-employee')">&#10005;</button></div>
     <div class="modal-body">
-      <div class="form-row"><label class="form-label">ФИО *</label><input class="form-input" id="emp-fio" placeholder="Карпов Андрей"></div>
-      <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="emp-phone" placeholder="+375..."></div>
-      <div class="form-row"><label class="form-label">Email</label><input class="form-input" id="emp-email" type="email"></div>
-      <div class="form-row"><label class="form-label">Должность *</label><select class="form-select" id="emp-position"><option value="">-- выбери --</option></select></div>
-      <div class="form-grid">
-        <div class="form-row"><label class="form-label">Ставка, Br</label><input class="form-input" id="emp-salary" type="number" placeholder="4500"></div>
-        <div class="form-row"><label class="form-label">% бонуса</label><input class="form-input" id="emp-bonus" type="number" placeholder="5"></div>
+      <div class="form-row"><label class="form-label">ФИО *</label><input class="form-input" id="emp-fio" placeholder="Фамилия Имя Отчество"></div>
+      <div class="form-row"><label class="form-label">Должность *</label>
+        <select class="form-select" id="emp-position">
+          <option value="">— Выбери должность —</option>
+          <option>Оклейщик</option>
+          <option>Тонировщик</option>
+          <option>Арматурщик</option>
+          <option>Менеджер</option>
+          <option>Администратор</option>
+          <option>Директор</option>
+          <option>Зам. директора</option>
+          <option>Начальник склада</option>
+        </select>
       </div>
-      <div class="form-row"><label class="form-label">Заметки</label><input class="form-input" id="emp-notes"></div>
+      <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="emp-phone" type="tel" placeholder="+375 29 000-00-00"></div>
+      <div class="form-row"><label class="form-label">Email</label><input class="form-input" id="emp-email" type="email"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-row"><label class="form-label">Базовая ставка, Br</label><input class="form-input" id="emp-salary" type="number" placeholder="0"></div>
+        <div class="form-row"><label class="form-label">% бонуса</label><input class="form-input" id="emp-bonus" type="number" placeholder="0"></div>
+      </div>
+      <div class="form-row"><label class="form-label">Заметки</label><textarea class="form-input" id="emp-notes" rows="2"></textarea></div>
     </div>
-    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-new-employee')">Отмена</button><button class="btn btn-primary" id="emp-submit-btn" onclick="submitNewEmployee()">Сохранить</button></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-new-employee')">Отмена</button>
+      <button class="btn btn-primary" id="emp-submit-btn" onclick="submitNewEmployee()">Сохранить</button>
+    </div>
   </div>
 </div>
 
 <!-- МОДАЛКА: РЕДАКТИРОВАТЬ СОТРУДНИКА -->
-<div class="modal-overlay" id="modal-edit-employee" onclick="closeModalOnOverlay(event)">
+<div class="modal-dialog-bg" id="modal-edit-employee" onclick="closeModalOnOverlay(event)">
   <div class="modal" style="max-width:480px">
-    <div class="modal-header"><div class="modal-title">Редактировать</div><button class="modal-close" onclick="closeModal('modal-edit-employee')">&#10005;</button></div>
+    <div class="modal-header"><div class="modal-title">Редактировать сотрудника</div><button class="modal-close" onclick="closeModal('modal-edit-employee')">&#10005;</button></div>
     <div class="modal-body">
       <div class="form-row"><label class="form-label">ФИО *</label><input class="form-input" id="edit-emp-fio"></div>
-      <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="edit-emp-phone"></div>
+      <div class="form-row"><label class="form-label">Должность *</label>
+        <select class="form-select" id="edit-emp-position">
+          <option value="">— Выбери должность —</option>
+          <option>Оклейщик</option>
+          <option>Тонировщик</option>
+          <option>Арматурщик</option>
+          <option>Менеджер</option>
+          <option>Администратор</option>
+          <option>Директор</option>
+          <option>Зам. директора</option>
+          <option>Начальник склада</option>
+        </select>
+      </div>
+      <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="edit-emp-phone" type="tel"></div>
       <div class="form-row"><label class="form-label">Email</label><input class="form-input" id="edit-emp-email" type="email"></div>
-      <div class="form-row"><label class="form-label">Должность *</label><select class="form-select" id="edit-emp-position"><option value="">-- выбери --</option></select></div>
-      <div class="form-grid">
-        <div class="form-row"><label class="form-label">Ставка, Br</label><input class="form-input" id="edit-emp-salary" type="number"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div class="form-row"><label class="form-label">Базовая ставка, Br</label><input class="form-input" id="edit-emp-salary" type="number"></div>
         <div class="form-row"><label class="form-label">% бонуса</label><input class="form-input" id="edit-emp-bonus" type="number"></div>
       </div>
-      <div class="form-row"><label class="form-label">Заметки</label><input class="form-input" id="edit-emp-notes"></div>
+      <div class="form-row"><label class="form-label">Заметки</label><textarea class="form-input" id="edit-emp-notes" rows="2"></textarea></div>
     </div>
-    <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('modal-edit-employee')">Отмена</button><button class="btn btn-primary" id="edit-emp-submit-btn" onclick="submitEditEmployee()">Сохранить</button></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-edit-employee')">Отмена</button>
+      <button class="btn btn-primary" id="edit-emp-submit-btn" onclick="submitEditEmployee()">Сохранить</button>
+    </div>
   </div>
 </div>
 
-<div class="toast" id="toast"></div>
+<!-- МОДАЛКА: НОВЫЙ МАТЕРИАЛ -->
+<div class="modal-dialog-bg" id="modal-new-material" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <div class="modal-title">Новый материал</div>
+      <button class="modal-close" onclick="closeModal('modal-new-material')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <label class="form-label">Название *</label>
+        <input class="form-input" id="mat-name" placeholder="Spectroll E15">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Категория</label>
+          <select class="form-select" id="mat-category">
+            <option value="">— выбрать —</option>
+            <option>PPF плёнка</option>
+            <option>Тонировочная плёнка</option>
+            <option>Антихром</option>
+            <option>Защита фар</option>
+            <option>Химия</option>
+            <option>Расходник</option>
+            <option>Инструмент</option>
+          </select>
+        </div>
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Услуга</label>
+          <select class="form-select" id="mat-service">
+            <option value="Универсальная">Универсальная</option>
+            <option value="PPF">Оклейка PPF</option>
+            <option value="TINT">Тонировка</option>
+            <option value="POLISH">Полировка</option>
+            <option value="ANTICHR">Антихром</option>
+          </select>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Единица *</label>
+          <select class="form-select" id="mat-unit" onchange="toggleRollWidth()">
+            <option value="пм">пм (погонные м)</option>
+            <option value="м²">м²</option>
+            <option value="шт">шт</option>
+            <option value="л">л</option>
+            <option value="кг">кг</option>
+          </select>
+        </div>
+        <div class="form-row" style="margin:0" id="mat-roll-wrap">
+          <label class="form-label">Ширина рулона, м</label>
+          <input class="form-input" id="mat-roll-width" type="number" value="1.52" step="0.01" placeholder="1.52">
+        </div>
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Цена, Br *</label>
+          <input class="form-input" id="mat-price" type="number" placeholder="0.00" step="0.01">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-new-material')">Отмена</button>
+      <button class="btn btn-primary" id="mat-submit-btn" onclick="submitNewMaterial()">Сохранить</button>
+    </div>
+  </div>
+</div>
 
-<script>
-var App={page:'dashboard',brand:null,config:null,employees:[],settings:{},pendingLogo:null,editingId:null,editingIdx:null,theme:localStorage.getItem('spr-theme')||'dark'};
-document.body.setAttribute('data-theme',App.theme);
+<!-- МОДАЛКА: ОПЛАТА ЗАКАЗА -->
+<div class="modal-dialog-bg" id="modal-pay-order" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:400px">
+    <div class="modal-header">
+      <div class="modal-title">Принять оплату</div>
+      <button class="modal-close" onclick="closeModal('modal-pay-order')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="pay-order-id">
+      <div id="pay-order-desc" style="margin-bottom:16px;padding:12px;background:var(--bg-card);border-radius:8px;font-size:13px"></div>
 
-function toggleTheme(){App.theme=App.theme==='dark'?'light':'dark';document.body.setAttribute('data-theme',App.theme);localStorage.setItem('spr-theme',App.theme);var l=document.getElementById('theme-label');if(l)l.textContent=App.theme==='dark'?'Светлая тема':'Тёмная тема';}
+      <!-- Сумма платежа -->
+      <div class="form-row">
+        <label class="form-label">Сумма платежа, Br</label>
+        <input class="form-input" id="pay-amount" type="number" step="0.01" placeholder="Вся сумма или часть">
+        <div style="font-size:11px;color:var(--text3);margin-top:3px" id="pay-remaining-hint"></div>
+      </div>
 
-var PT={dashboard:'Дашборд',orders:'Заказы',clients:'Клиенты',finance:'Финансы',expenses:'Расходы',debt:'Дебиторка',team:'Сотрудники',services:'Услуги',inventory:'Склад',settings:'Настройки'};
+      <!-- Куда поступает -->
+      <div class="form-label" style="margin-bottom:8px">Куда поступает?</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <button class="ctype-btn" id="pay-type-nal" onclick="selectPayType('Нал',this)" style="padding:14px 8px;flex-direction:column;display:flex;align-items:center;gap:4px">
+          <span style="font-size:22px">💵</span>
+          <span style="font-weight:700">Наличные</span>
+          <span style="font-size:11px;color:var(--text3)">в кассу</span>
+        </button>
+        <button class="ctype-btn" id="pay-type-bnk" onclick="selectPayType('Безнал',this)" style="padding:14px 8px;flex-direction:column;display:flex;align-items:center;gap:4px">
+          <span style="font-size:22px">🏦</span>
+          <span style="font-weight:700">Безнал</span>
+          <span style="font-size:11px;color:var(--text3)">на р/счёт</span>
+        </button>
+      </div>
+      <input type="hidden" id="pay-type-selected" value="Нал">
 
-function goPage(n){App.page=n;document.querySelectorAll('.page').forEach(function(e){e.classList.remove('active');});var t=document.getElementById('page-'+n);if(t)t.classList.add('active');document.querySelectorAll('.nav-item').forEach(function(e){e.classList.toggle('active',e.dataset.page===n);});var h=document.getElementById('topbar-title');if(h)h.textContent=PT[n]||n;window.scrollTo(0,0);loadCurrentPage();}
-document.querySelectorAll('.nav-item').forEach(function(el){el.addEventListener('click',function(e){e.preventDefault();goPage(el.dataset.page);});});
+      <!-- Комментарий -->
+      <div class="form-row" style="margin-top:12px">
+        <label class="form-label">Комментарий (необязательно)</label>
+        <input class="form-input" id="pay-comment" placeholder="Примечание к платежу...">
+      </div>
 
-function refreshSync(){var n=new Date(),p=function(x){return String(x).padStart(2,'0');};var el=document.getElementById('sync-time');if(el)el.textContent=p(n.getDate())+'.'+p(n.getMonth()+1)+' '+p(n.getHours())+':'+p(n.getMinutes());}
+      <!-- Следующий срок платежа -->
+      <div class="form-row" id="pay-next-date-row" style="margin-top:10px">
+        <label class="form-label">Следующий платёж до (если долг остаётся)</label>
+        <input class="form-input" type="date" id="pay-next-date">
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">Оставьте пустым если оплата закрывает весь долг</div>
+      </div>
 
-function toast(m,t){var el=document.getElementById('toast');if(!el)return;el.textContent=m;el.className='toast show '+(t||'');clearTimeout(App._tt);App._tt=setTimeout(function(){el.classList.remove('show');},3500);}
+      <!-- История платежей -->
+      <div id="pay-history" style="margin-top:12px;display:none">
+        <div class="form-label" style="margin-bottom:6px">История платежей</div>
+        <div id="pay-history-list" style="max-height:120px;overflow-y:auto;font-size:12px"></div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-pay-order')">Отмена</button>
+      <button class="btn btn-primary" id="pay-submit-btn" onclick="confirmPayOrder()">Принять платёж</button>
+    </div>
+  </div>
+</div>
 
-function openModal(id){var el=document.getElementById(id);if(el){el.classList.add('open');document.body.style.overflow='hidden';}}
-function closeModal(id){var el=document.getElementById(id);if(el){el.classList.remove('open');document.body.style.overflow='';}}
-function closeModalOnOverlay(e){if(e.target===e.currentTarget)closeModal(e.currentTarget.id);}
+<!-- МОДАЛКА: УСТАНОВИТЬ СРОК ОПЛАТЫ -->
+<div class="modal-dialog-bg" id="modal-set-due-date" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:360px">
+    <div class="modal-header">
+      <div class="modal-title">Срок оплаты</div>
+      <button class="modal-close" onclick="closeModal('modal-set-due-date')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div id="set-due-date-client" style="font-weight:600;margin-bottom:12px;font-size:14px"></div>
+      <div class="form-row">
+        <label class="form-label">Когда ожидается оплата?</label>
+        <input class="form-input" type="date" id="set-due-date-input">
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">Оставьте пустым чтобы убрать срок</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-set-due-date')">Отмена</button>
+      <button class="btn btn-primary" id="set-due-date-btn" onclick="confirmSetDueDate()">Сохранить</button>
+    </div>
+  </div>
+</div>
 
-function applyBrand(b){if(!b)return;App.brand=b;var nm=document.getElementById('brand-name');if(nm)nm.textContent=b.companyName||'SPRauto';var sl=document.getElementById('brand-slogan');if(sl)sl.textContent=b.companySlogan||'ERP';if(b.logoDataUrl){var wrap=document.getElementById('brand-logo-wrap');if(wrap)wrap.innerHTML='<img class="logo-img" src="'+b.logoDataUrl+'" alt="Logo">';}if(b.accentColor){document.documentElement.style.setProperty('--accent',b.accentColor);document.documentElement.style.setProperty('--accent-soft',b.accentColor+'20');document.documentElement.style.setProperty('--accent-glow',b.accentColor+'45');}document.title=(b.companyName||'SPRauto')+' ERP';}
+<!-- МОДАЛКА: НОВЫЙ РАСХОД -->
+<div class="modal-dialog-bg" id="modal-new-expense" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <div class="modal-title">Записать расход</div>
+      <button class="modal-close" onclick="closeModal('modal-new-expense')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Дата</label>
+          <input class="form-input" id="exp-date" type="date">
+        </div>
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Сумма, Br *</label>
+          <input class="form-input" id="exp-amount" type="number" step="0.01" placeholder="0.00">
+        </div>
+      </div>
+      <div class="form-row" style="margin-top:12px">
+        <label class="form-label">Категория *</label>
+        <select class="form-select" id="exp-category">
+          <option value="">— выбрать —</option>
+          <option>Материалы</option>
+          <option>Аренда</option>
+          <option>Коммунальные</option>
+          <option>Зарплата</option>
+          <option>Бонусы</option>
+          <option>Маркетинг</option>
+          <option>Налоги</option>
+          <option>Транспорт</option>
+          <option>Инструмент</option>
+          <option>Закупка товаров</option>
+          <option>Изъятие владельца</option>
+          <option>Прочее</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Описание</label>
+        <input class="form-input" id="exp-description" placeholder="Что оплачено...">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Способ оплаты</label>
+          <select class="form-select" id="exp-pay-method">
+            <option value="Нал">Нал</option>
+            <option value="Безнал">Безнал</option>
+            <option value="Карта">Карта</option>
+          </select>
+        </div>
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Связан с заказом</label>
+          <input class="form-input" id="exp-order-id" placeholder="ЗАК-00001 (опц.)">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-new-expense')">Отмена</button>
+      <button class="btn btn-primary" id="exp-submit-btn" onclick="submitNewExpense()">Сохранить</button>
+    </div>
+  </div>
+</div>
 
-function fillPositions(positions){['emp-position','edit-emp-position','order-master'].forEach(function(sid){var sel=document.getElementById(sid);if(!sel||!positions)return;var cur=sel.value;sel.innerHTML='<option value="">-- выбери --</option>';positions.forEach(function(p){var o=document.createElement('option');o.value=p;o.textContent=p;sel.appendChild(o);});if(cur)sel.value=cur;});}
+<!-- МОДАЛКА: НОВАЯ УСЛУГА -->
+<div class="modal-dialog-bg" id="modal-new-service" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <div class="modal-title">Новая услуга</div>
+      <button class="modal-close" onclick="closeModal('modal-new-service')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row"><label class="form-label">Название *</label><input class="form-input" id="svc-name" placeholder="Оклейка PPF"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">% мастеру</label>
+          <input class="form-input" id="svc-master-pct" type="number" placeholder="35">
+        </div>
+        <div class="form-row" style="margin:0">
+          <label class="form-label">% менеджеру</label>
+          <input class="form-input" id="svc-mgr-pct" type="number" placeholder="10">
+        </div>
+      </div>
+      <div class="form-row" style="margin-top:12px">
+        <label class="form-label">Тип расчёта</label>
+        <select class="form-select" id="svc-calc-type">
+          <option value="area">По площади (м²)</option>
+          <option value="elements">По элементам</option>
+          <option value="fixed">Фиксированная цена</option>
+          <option value="hourly">Почасовая</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-new-service')">Отмена</button>
+      <button class="btn btn-primary" onclick="submitNewService()">Сохранить</button>
+    </div>
+  </div>
+</div>
 
-function loadCurrentPage(){refreshSync();if(App.page==='dashboard')renderDashboard();if(App.page==='team')loadTeam();if(App.page==='settings')loadSettings();}
+<div id="toast"></div>
 
-function renderDashboard(){var c=App.employees?App.employees.length:0;var grid=document.getElementById('dash-kpi');if(!grid)return;grid.innerHTML=kpi('Сотрудников',c,'активных')+kpi('Заказов','--','след. этап')+kpi('Выручка','--','след. этап')+kpi('Прибыль','--','след. этап');}
-function kpi(l,v,s){return '<div class="kpi-card"><div class="kpi-label">'+l+'</div><div class="kpi-value">'+v+'</div><div class="kpi-sub">'+s+'</div></div>';}
-
-function loadTeam(){var grid=document.getElementById('team-grid');var err=document.getElementById('team-error');if(!grid)return;grid.innerHTML='<div class="kpi-skeleton" style="min-height:220px"></div>'.repeat(3);if(err)err.style.display='none';google.script.run.withSuccessHandler(function(resp){if(!resp||!resp.ok){if(err){err.style.display='flex';document.getElementById('team-error-text').textContent=resp?resp.error:'Нет данных';}grid.innerHTML='';return;}App.employees=resp.data||[];renderTeam(App.employees);}).withFailureHandler(function(e){if(err){err.style.display='flex';document.getElementById('team-error-text').textContent=e.message;}grid.innerHTML='';}).getEmployees(false);}
-
-function renderTeam(employees){var grid=document.getElementById('team-grid');if(!grid)return;if(!employees||!employees.length){grid.innerHTML='<div style="text-align:center;padding:60px;color:var(--text3);grid-column:1/-1"><div style="font-size:48px;margin-bottom:12px">&#128101;</div><div style="font-size:15px;font-weight:600">Нет сотрудников</div></div>';return;}grid.innerHTML=employees.map(function(e,idx){var fio=e['ФИО']||'--';var status=e['Статус']||'--';var pos=e['Основная должность']||'--';var salary=Number(e['Базовая ставка'])||0;var bonus=Number(e['% бонуса'])||0;var phone=e['Телефон']||'';var ini=fio.split(' ').slice(0,2).map(function(s){return s&&s[0]?s[0].toUpperCase():'';}).join('');var active=status==='Работает';var sc=active?'status-work':status==='Отпуск'?'status-vac':'status-off';return '<div class="team-card"><div class="team-status '+sc+'">'+status+'</div><div class="team-head"><div class="team-avatar">'+ini+'</div><div><div class="team-name">'+fio+'</div><div class="team-role">'+pos+'</div>'+(phone?'<div class="team-phone">'+phone+'</div>':'')+'</div></div><div class="team-stats"><div class="team-stat"><div class="team-stat-label">Ставка</div><div class="team-stat-value">'+salary.toLocaleString('ru')+' Br</div></div><div class="team-stat"><div class="team-stat-label">% бонус</div><div class="team-stat-value">'+bonus+'%</div></div></div><div class="team-actions"><button class="btn-action" onclick="openEditEmployee('+idx+')">Изменить</button><button class="btn-action '+(active?'btn-action-red':'btn-action-green')+'" onclick="toggleStatus('+idx+')">'+(active?'Отключить':'Восстановить')+'</button></div></div>';}).join('');}
-
-function submitNewEmployee(){var fio=document.getElementById('emp-fio').value.trim();var pos=document.getElementById('emp-position').value;if(!fio){toast('Укажи ФИО','error');return;}if(!pos){toast('Выбери должность','error');return;}var btn=document.getElementById('emp-submit-btn');if(btn){btn.disabled=true;btn.textContent='Сохраняем...';}toast('Сохраняем...','info');google.script.run.withSuccessHandler(function(resp){if(btn){btn.disabled=false;btn.textContent='Сохранить';}if(!resp||!resp.ok){toast('Ошибка: '+(resp?resp.error:''),'error');return;}toast('Добавлен: '+(resp.data?resp.data['ФИО']:fio),'success');closeModal('modal-new-employee');['emp-fio','emp-phone','emp-email','emp-salary','emp-bonus','emp-notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});document.getElementById('emp-position').value='';if(App.page==='team')loadTeam();}).withFailureHandler(function(e){if(btn){btn.disabled=false;btn.textContent='Сохранить';}toast('Ошибка: '+e.message,'error');}).createEmployee({fio:fio,phone:document.getElementById('emp-phone').value.trim(),email:document.getElementById('emp-email').value.trim(),position:pos,baseSalary:Number(document.getElementById('emp-salary').value)||0,bonusPct:Number(document.getElementById('emp-bonus').value)||0,notes:document.getElementById('emp-notes').value.trim()});}
-
-function openEditEmployee(idx){var e=App.employees[idx];if(!e)return;App.editingIdx=idx;App.editingId=e['ID'];document.getElementById('edit-emp-fio').value=e['ФИО']||'';document.getElementById('edit-emp-phone').value=e['Телефон']||'';document.getElementById('edit-emp-email').value=e['Email']||'';document.getElementById('edit-emp-salary').value=e['Базовая ставка']||'';document.getElementById('edit-emp-bonus').value=e['% бонуса']||'';document.getElementById('edit-emp-notes').value=e['Заметки']||'';var sel=document.getElementById('edit-emp-position');if(sel){if(sel.options.length<=1&&App.config&&App.config.positions)fillPositions(App.config.positions);sel.value=e['Основная должность']||'';}openModal('modal-edit-employee');}
-
-function submitEditEmployee(){var id=App.editingId;if(!id){toast('Нет ID','error');return;}var fio=document.getElementById('edit-emp-fio').value.trim();var pos=document.getElementById('edit-emp-position').value;if(!fio){toast('Укажи ФИО','error');return;}if(!pos){toast('Выбери должность','error');return;}var btn=document.getElementById('edit-emp-submit-btn');if(btn){btn.disabled=true;btn.textContent='Сохраняем...';}google.script.run.withSuccessHandler(function(resp){if(btn){btn.disabled=false;btn.textContent='Сохранить';}if(!resp||!resp.ok){toast('Ошибка: '+(resp?resp.error:''),'error');return;}toast('Обновлено','success');closeModal('modal-edit-employee');if(App.page==='team')loadTeam();}).withFailureHandler(function(e){if(btn){btn.disabled=false;btn.textContent='Сохранить';}toast('Ошибка: '+e.message,'error');}).updateEmployee(id,{fio:fio,phone:document.getElementById('edit-emp-phone').value.trim(),email:document.getElementById('edit-emp-email').value.trim(),position:pos,baseSalary:Number(document.getElementById('edit-emp-salary').value)||0,bonusPct:Number(document.getElementById('edit-emp-bonus').value)||0,notes:document.getElementById('edit-emp-notes').value.trim()});}
-
-function toggleStatus(idx){var e=App.employees[idx];if(!e)return;var ns=e['Статус']==='Работает'?'Не работает':'Работает';if(!confirm((ns==='Не работает'?'Отключить':'Восстановить')+' '+e['ФИО']+'?'))return;toast('Обновляем...','info');google.script.run.withSuccessHandler(function(resp){if(!resp||!resp.ok){toast('Ошибка','error');return;}toast('Статус изменён','success');if(App.page==='team')loadTeam();}).withFailureHandler(function(e){toast('Ошибка: '+e.message,'error');}).updateEmployeeStatus(e['ID'],ns);}
-
-function loadSettings(){google.script.run.withSuccessHandler(function(resp){if(resp&&resp.ok){App.settings=resp.data||{};fillSettingsForm(App.settings);}}).withFailureHandler(function(e){toast('Ошибка: '+e.message,'error');}).getSettings();}
-function fillSettingsForm(s){var f=function(id,key){var el=document.getElementById(id);if(el&&s[key]!==undefined)el.value=s[key];};f('set-company-name','company_name');f('set-company-slogan','company_slogan');f('set-unp','unp');f('set-address','address');f('set-phone','phone');f('set-email','email');f('set-currency','currency');f('set-bonus-pool','bonus_pool_pct');f('set-cycle-1','cycle_day_1');f('set-cycle-2','cycle_day_2');}
-function saveAllSettings(){var s={},g=function(id,key){var el=document.getElementById(id);if(el)s[key]=el.value;};g('set-company-name','company_name');g('set-company-slogan','company_slogan');g('set-unp','unp');g('set-address','address');g('set-phone','phone');g('set-email','email');g('set-currency','currency');g('set-bonus-pool','bonus_pool_pct');g('set-cycle-1','cycle_day_1');g('set-cycle-2','cycle_day_2');if(App.pendingLogo)s['logo_dataurl']=App.pendingLogo;toast('Сохраняем...','info');google.script.run.withSuccessHandler(function(resp){if(!resp||!resp.ok){toast('Ошибка','error');return;}toast('Сохранено','success');App.pendingLogo=null;if(App.brand){App.brand.companyName=s['company_name']||App.brand.companyName;App.brand.companySlogan=s['company_slogan']||App.brand.companySlogan;if(s['logo_dataurl'])App.brand.logoDataUrl=s['logo_dataurl'];}applyBrand(App.brand);}).withFailureHandler(function(e){toast('Ошибка: '+e.message,'error');}).saveSettings(s);}
-
-function handleLogoUpload(input){var file=input.files[0];if(!file)return;if(file.size>512*1024){toast('Файл > 500 КБ','error');input.value='';return;}var reader=new FileReader();reader.onload=function(e){App.pendingLogo=e.target.result;var wrap=document.getElementById('brand-logo-wrap');if(wrap)wrap.innerHTML='<img class="logo-img" src="'+e.target.result+'" alt="Logo">';toast('Логотип загружен. Нажми Сохранить в Настройках','info');};reader.readAsDataURL(file);}
-
-function setClientType(type,btn){btn.closest('div').querySelectorAll('.ctype-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');document.getElementById('client-phys-fields').style.display=type==='phys'?'block':'none';document.getElementById('client-legal-fields').style.display=type==='legal'?'block':'none';}
-function setPayType(btn){btn.closest('div').querySelectorAll('.ctype-btn').forEach(function(b){b.classList.remove('active');});btn.classList.add('active');}
-
-function init(){var lbl=document.getElementById('theme-label');if(lbl)lbl.textContent=App.theme==='dark'?'Светлая тема':'Тёмная тема';refreshSync();google.script.run.withSuccessHandler(function(resp){var loader=document.getElementById('app-loading');if(loader)loader.classList.add('hidden');var dash=document.getElementById('page-dashboard');if(dash)dash.classList.add('active');if(!resp){toast('Обнови страницу','error');return;}var data=resp.ok&&resp.data?resp.data:(resp.brand||resp.config?resp:null);if(!data){toast('Ошибка данных','error');return;}if(data.brand)applyBrand(data.brand);App.config=data.config;App.employees=data.employees||[];if(data.config&&data.config.positions)fillPositions(data.config.positions);renderDashboard();refreshSync();}).withFailureHandler(function(err){var loader=document.getElementById('app-loading');if(loader)loader.classList.add('hidden');var dash=document.getElementById('page-dashboard');if(dash)dash.classList.add('active');toast('Ошибка: '+err.message,'error');}).initApp();}
-
-if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',init);}else{init();}
-</script>
+<?!= include('Scripts') ?>
+<?!= include('ScriptsApi') ?>
 </body>
 </html>
+

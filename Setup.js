@@ -60,12 +60,106 @@ function addNewSheets() {
 }
 
 /**
- * Схема ТОЛЬКО НОВЫХ листов (v1.1)
+ * Схема ТОЛЬКО НОВЫХ листов (v1.2)
  * Существующие листы здесь не перечислены — они не будут тронуты
  */
 function getNewSheetsSchema() {
   return {
-    
+
+    // Заказы (v1.3) — материалы и расходы теперь в отдельных листах
+    ORDERS: [
+      'ID',                    // ЗАК-00001
+      'Номер договора',        // 04/01-XXX или 12/01-XXX
+      'Дата',
+      'Дата выполнения',
+      'Статус',                // Новый / В работе / Готов / Выдан / Отменён
+      'Клиент ID',
+      'Клиент',
+      'Телефон',
+      'Авто',
+      'Госномер',
+      'VIN',
+      'Услуга',
+      'Стоимость заказа',
+      'Тип оплаты',            // Нал / Безнал / Отсрочка / Рассрочка / '' — УСЛОВИЯ (редактируются), задаёт −15%
+      'Статус оплаты',         // Не оплачен / Частично / Оплачен — ФАКТ (только платежами)
+      'Безнал',                // legacy-зеркало статуса: Да/Нет/Частично/'' (новый код не использует как источник)
+      'Срок оплаты',           // dd.MM.yyyy — когда ожидается оплата / следующий взнос
+      'Менеджер',
+      'Оклейщики',
+      'Итого материалы',       // сумма из Расход материалов (тип=расход)
+      'Итого расходы',         // сумма из Расходы заказа
+      'Валовая прибыль',       // считается автоматически
+      'Бонус менеджера',
+      'Бонус оклейщика',
+      'Маржинальная прибыль',
+      'Заметки',
+      'Проверено',             // Да / Нет — проверка данных директором
+      'Создан',
+      'Обновлён',
+    ],
+
+    // Справочник материалов (v1.3)
+    MATERIALS: [
+      'ID',
+      'Название',
+      'Категория',             // PPF плёнка / Тонировочная плёнка / Антихром / Химия / Расходник
+      'Услуга',                // PPF / Тонировка / Полировка / Универсальная
+      'Единица',               // пм / м² / шт / л / кг
+      'Цена',                  // цена за единицу (для пм — цена за м²)
+      'Ширина рулона',         // метры, только для единицы "пм" (обычно 1.52)
+      'Активен',               // Да / Нет
+      'Создан',
+      'Обновлён',
+    ],
+
+    // Расход материалов по заказу (v1.3)
+    ORDER_MATERIALS: [
+      'ID',
+      'Заказ ID',
+      'Материал ID',
+      'Название',              // денормализовано для быстрого чтения
+      'Единица',               // пм / м²
+      'Кол-во',                // введённое количество
+      'Ширина рулона',         // снимок из справочника на момент заполнения
+      'Кол-во м²',             // расчётное: пм × ширина или напрямую м²
+      'Цена за м²',            // снимок цены из справочника
+      'Тип',                   // расход / остаток
+      'Стоимость',             // 0 если остаток, иначе Кол-во м² × Цена за м²
+      'Создан',
+    ],
+
+    // Расходы по заказу — такси, арматура и т.д. (v1.3)
+    ORDER_EXPENSES: [
+      'ID',
+      'Заказ ID',
+      'Название',              // Такси / Арматура / произвольное
+      'Сумма',
+      'Создан',
+    ],
+
+    // Платежи по заказам — рассрочка и частичные оплаты (v1.4)
+    PAYMENTS: [
+      'ID',
+      'Заказ ID',
+      'Дата',
+      'Сумма',
+      'Способ оплаты',         // Нал / Безнал
+      'Комментарий',
+      'Создан',
+    ],
+
+    // График платежей (рассрочка) — плановые взносы (v1.9)
+    SCHEDULE: [
+      'ID',
+      'Заказ ID',
+      '№',                     // порядковый номер взноса
+      'Дата',                  // dd.MM.yyyy — плановая дата взноса
+      'Сумма',                 // плановая сумма взноса
+      'Оплачен',               // Да / Нет
+      'Создан',
+    ],
+
     // Единая база клиентов (физ. и юр. лица)
     CLIENTS: [
       'ID',
@@ -107,6 +201,219 @@ function getNewSheetsSchema() {
     ],
     
   };
+}
+
+// ─── МИГРАЦИЯ v1.4: колонка «Срок оплаты» в листе Заказы ────────────────────
+
+/**
+ * Добавить колонку «Срок оплаты» в существующий лист Заказы.
+ * Запустить ОДИН РАЗ после обновления до v1.4.
+ * Вставляет колонку сразу после «Безнал».
+ */
+function addDueDateColumn() {
+  const sheet   = getTab('DATABASE', 'ORDERS');
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  if (headers.indexOf('Срок оплаты') >= 0) {
+    Logger.log('Колонка "Срок оплаты" уже существует — пропуск');
+    return 'Уже есть';
+  }
+
+  const beznalIdx = headers.indexOf('Безнал');
+  if (beznalIdx < 0) throw new Error('Колонка "Безнал" не найдена в листе Заказы');
+
+  // Вставляем пустую колонку после "Безнал"
+  sheet.insertColumnAfter(beznalIdx + 1);
+
+  // Пишем заголовок с форматированием
+  const hCell = sheet.getRange(1, beznalIdx + 2);
+  hCell.setValue('Срок оплаты');
+  hCell.setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff');
+
+  sheet.autoResizeColumn(beznalIdx + 2);
+  Logger.log('Добавлена колонка "Срок оплаты" на позицию ' + (beznalIdx + 2));
+  return 'Готово: колонка "Срок оплаты" добавлена';
+}
+
+// ─── МИГРАЦИЯ v1.5: «Тип оплаты» и «Проверено» ──────────────────────────────
+
+/**
+ * Добавить колонки «Тип оплаты» и «Проверено» в лист Заказы.
+ * Запустить ОДИН РАЗ после обновления до v1.5.
+ * Безопасно: пропускает колонку если она уже есть.
+ */
+function addPaymentColumns() {
+  const sheet   = getTab('DATABASE', 'ORDERS');
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  const styleHeader = function(cell) {
+    cell.setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff');
+  };
+
+  // «Тип оплаты» — вставляем после «Безнал»
+  if (headers.indexOf('Тип оплаты') < 0) {
+    const afterIdx = headers.indexOf('Срок оплаты') >= 0
+      ? headers.indexOf('Срок оплаты')
+      : headers.indexOf('Безнал');
+    if (afterIdx < 0) throw new Error('Не найдена опорная колонка');
+    sheet.insertColumnAfter(afterIdx + 1);
+    const cell = sheet.getRange(1, afterIdx + 2);
+    cell.setValue('Тип оплаты');
+    styleHeader(cell);
+    sheet.autoResizeColumn(afterIdx + 2);
+    Logger.log('Добавлена «Тип оплаты»');
+  } else {
+    Logger.log('«Тип оплаты» уже есть — пропуск');
+  }
+
+  // Перечитываем заголовки после возможной вставки
+  const headers2 = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+  // «Проверено» — добавляем в конец (перед «Создан»)
+  if (headers2.indexOf('Проверено') < 0) {
+    const createIdx = headers2.indexOf('Создан');
+    const insertAt  = createIdx >= 0 ? createIdx : headers2.length;
+    sheet.insertColumnBefore(insertAt + 1);
+    const cell2 = sheet.getRange(1, insertAt + 1);
+    cell2.setValue('Проверено');
+    styleHeader(cell2);
+    // Заполняем существующие строки значением «Нет»
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      sheet.getRange(2, insertAt + 1, lastRow - 1, 1).setValue('Нет');
+    }
+    sheet.autoResizeColumn(insertAt + 1);
+    Logger.log('Добавлена «Проверено»');
+  } else {
+    Logger.log('«Проверено» уже есть — пропуск');
+  }
+
+  return 'Миграция v1.5 выполнена';
+}
+
+// ─── МИГРАЦИЯ v1.6: чистая модель оплаты («Статус оплаты») ───────────────────
+
+/**
+ * ЕДИНАЯ миграция модели оплаты. Запустить ОДИН РАЗ после обновления до v1.6.
+ *
+ * 1. Гарантирует наличие колонок: «Срок оплаты», «Тип оплаты», «Статус оплаты», «Проверено».
+ * 2. Бэкфилл существующих строк:
+ *    - «Статус оплаты» считается по платежам (лист Платежи) и сумме заказа.
+ *    - «Тип оплаты» (если пусто) восстанавливается из legacy «Безнал»: Да→Безнал, Нет→Нал.
+ *    - «Проверено» пустое → «Нет».
+ *
+ * Безопасна для повторного запуска (колонки не дублируются, бэкфилл идемпотентен).
+ */
+function migratePaymentModel() {
+  // Сначала гарантируем, что все листы модуля заказов существуют
+  // (Платежи, Расход материалов, Расходы заказа, Справочник материалов и т.д.).
+  // addNewSheets() безопасен — существующие листы с данными не трогает.
+  try {
+    addNewSheets();
+  } catch (e) {
+    Logger.log('addNewSheets предупреждение: ' + e.message);
+  }
+
+  const sheet = getTab('DATABASE', 'ORDERS');
+
+  const styleHeader = function(cell) {
+    cell.setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff');
+  };
+
+  // Вставить колонку с заголовком после опорной (по имени). Возвращает индекс (0-based) новой колонки.
+  const ensureColumnAfter = function(colName, afterNames) {
+    let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (headers.indexOf(colName) >= 0) return; // уже есть
+    let afterIdx = -1;
+    for (let k = 0; k < afterNames.length && afterIdx < 0; k++) {
+      afterIdx = headers.indexOf(afterNames[k]);
+    }
+    if (afterIdx < 0) afterIdx = headers.length - 1; // в конец, если опорная не найдена
+    sheet.insertColumnAfter(afterIdx + 1);
+    const cell = sheet.getRange(1, afterIdx + 2);
+    cell.setValue(colName);
+    styleHeader(cell);
+    sheet.autoResizeColumn(afterIdx + 2);
+    Logger.log('Добавлена колонка «' + colName + '»');
+  };
+
+  ensureColumnAfter('Срок оплаты',   ['Безнал', 'Стоимость заказа']);
+  ensureColumnAfter('Тип оплаты',    ['Срок оплаты', 'Безнал']);
+  ensureColumnAfter('Статус оплаты', ['Тип оплаты', 'Срок оплаты']);
+  // «Проверено» — перед «Создан»
+  let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (headers.indexOf('Проверено') < 0) {
+    const createIdx = headers.indexOf('Создан');
+    const insertAt  = createIdx >= 0 ? createIdx : headers.length;
+    sheet.insertColumnBefore(insertAt + 1);
+    const cell = sheet.getRange(1, insertAt + 1);
+    cell.setValue('Проверено');
+    styleHeader(cell);
+    Logger.log('Добавлена колонка «Проверено»');
+  }
+
+  // ─── Бэкфилл строк ───
+  const data    = sheet.getDataRange().getValues();
+  const hdr      = data[0];
+  const idIdx    = hdr.indexOf('ID');
+  const priceIdx = hdr.indexOf('Стоимость заказа');
+  const typeIdx  = hdr.indexOf('Тип оплаты');
+  const statIdx  = hdr.indexOf('Статус оплаты');
+  const bzIdx    = hdr.indexOf('Безнал');
+  const verIdx   = hdr.indexOf('Проверено');
+
+  // Сумма платежей по каждому заказу (лист Платежи может быть пустым/новым)
+  const paidByOrder = {};
+  try {
+    readSheetAsObjects('DATABASE', 'PAYMENTS').forEach(function(p) {
+      if (!p['ID']) return;
+      const oid = String(p['Заказ ID']);
+      paidByOrder[oid] = (paidByOrder[oid] || 0) + (Number(p['Сумма']) || 0);
+    });
+  } catch (e) {
+    Logger.log('Лист Платежи недоступен, бэкфилл по платежам пропущен: ' + e.message);
+  }
+
+  let updated = 0;
+  for (let i = 1; i < data.length; i++) {
+    const id = String(data[i][idIdx] || '');
+    if (!id) continue;
+
+    const price = Number(data[i][priceIdx]) || 0;
+    const paid  = paidByOrder[id] || 0;
+    const legacyBeznal = String(data[i][bzIdx] || '').trim();
+
+    // Статус оплаты
+    let status;
+    if (paid <= 0) {
+      // нет платежей — но legacy мог быть «Да»/«Нет» (старая разметка «оплачено»)
+      status = (legacyBeznal === 'Да' || legacyBeznal === 'Нет') ? 'Оплачен'
+             : (legacyBeznal === 'Частично') ? 'Частично'
+             : 'Не оплачен';
+    } else if (paid >= price) {
+      status = 'Оплачен';
+    } else {
+      status = 'Частично';
+    }
+    if (statIdx >= 0 && !String(data[i][statIdx] || '').trim()) {
+      sheet.getRange(i + 1, statIdx + 1).setValue(status);
+    }
+
+    // Тип оплаты (только если пусто)
+    if (typeIdx >= 0 && !String(data[i][typeIdx] || '').trim()) {
+      const guessed = legacyBeznal === 'Да' ? 'Безнал' : legacyBeznal === 'Нет' ? 'Нал' : '';
+      if (guessed) sheet.getRange(i + 1, typeIdx + 1).setValue(guessed);
+    }
+
+    // Проверено
+    if (verIdx >= 0 && !String(data[i][verIdx] || '').trim()) {
+      sheet.getRange(i + 1, verIdx + 1).setValue('Нет');
+    }
+    updated++;
+  }
+
+  Logger.log('migratePaymentModel: обработано строк ' + updated);
+  return 'Миграция v1.6 выполнена: колонки + бэкфилл (' + updated + ' строк)';
 }
 
 // ─── Оригинальная функция (оставляем для истории) ────────────────────────────
