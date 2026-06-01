@@ -1723,12 +1723,12 @@ function renderMaterialsTable(list) {
         (active ? 'var(--success)' : 'var(--text3)') + '">' +
         (active ? 'Активен' : 'Архив') + '</span></td>' +
       '<td style="text-align:right;white-space:nowrap">' +
-        '<button class="btn btn-ghost" style="padding:3px 7px;font-size:11px;margin-right:3px" ' +
-          'onclick=\'openEditMaterial(' + JSON.stringify(m) + ')\'>✏</button>' +
+        '<button class="btn btn-ghost" style="padding:3px 9px;font-size:11px;margin-right:4px;color:var(--accent);font-weight:600" ' +
+          'onclick=\'openEditMaterial(' + JSON.stringify(m).replace(/'/g, "\\u0027") + ')\'>Изменить</button>' +
         (active
-          ? '<button class="btn btn-ghost" style="padding:3px 7px;font-size:11px;color:var(--text3);margin-right:3px" onclick="deactivateMat(\'' + id + '\')">Архив</button>'
-          : '<button class="btn btn-ghost" style="padding:3px 7px;font-size:11px;color:var(--success);margin-right:3px" onclick="restoreMat(\'' + id + '\')">Восст.</button>') +
-        '<button class="btn btn-ghost" style="padding:3px 7px;font-size:11px;color:var(--danger)" title="Удалить навсегда" onclick="deleteMatRow(\'' + id + '\',\'' + String(m['Название']||'').replace(/'/g,"\\'") + '\')">🗑</button>' +
+          ? '<button class="btn btn-ghost" style="padding:3px 9px;font-size:11px;color:var(--text3);margin-right:4px" onclick="deactivateMat(\'' + id + '\')">Архив</button>'
+          : '<button class="btn btn-ghost" style="padding:3px 9px;font-size:11px;color:var(--success);margin-right:4px" onclick="restoreMat(\'' + id + '\')">Восст.</button>') +
+        '<button class="btn btn-ghost" style="padding:3px 9px;font-size:11px;color:var(--danger)" title="Удалить навсегда" onclick="deleteMatRow(\'' + id + '\',\'' + String(m['Название']||'').replace(/'/g,"\\'") + '\')">Удалить</button>' +
       '</td>' +
       '</tr>';
   }).join('');
