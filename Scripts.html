@@ -1258,19 +1258,24 @@ function loadOrders(force) {
 }
 
 function loadOrdersKpi() {
-  google.script.run
-    .withSuccessHandler(function(resp) {
-      if (!resp || !resp.ok) return;
-      var s = resp.data;
-      var fmt = function(n){ return Number(n).toLocaleString('ru') + ' Br'; };
-      var el = function(id, v){ var e = document.getElementById(id); if(e) e.textContent = v; };
-      el('okpi-total',   s.totalCount);
-      el('okpi-revenue', fmt(s.totalRevenue));
-      el('okpi-avg',     fmt(s.avgCheck));
-      el('okpi-inwork',  s.inWork);
-    })
-    .withFailureHandler(function(){})
-    .getOrdersStats();
+  // KPI считаем из уже загруженного App.orders — без отдельного round-trip к серверу.
+  // Логика 1-в-1 повторяет бывший getOrdersStats (всего/выручка по ВСЕМ заказам,
+  // включая отменённые; в работе = «В работе» или «Новый»).
+  var list = App.orders || [];
+  var totalCount = 0, totalRevenue = 0, inWork = 0;
+  list.forEach(function(o) {
+    if (!o['ID']) return;
+    totalCount++;
+    totalRevenue += Number(o['Стоимость заказа']) || 0;
+    if (o['Статус'] === 'В работе' || o['Статус'] === 'Новый') inWork++;
+  });
+  var avg = totalCount > 0 ? totalRevenue / totalCount : 0;
+  var fmt = function(n){ return Math.round(n).toLocaleString('ru') + ' Br'; };
+  var el = function(id, v){ var e = document.getElementById(id); if(e) e.textContent = v; };
+  el('okpi-total',   totalCount);
+  el('okpi-revenue', fmt(totalRevenue));
+  el('okpi-avg',     fmt(avg));
+  el('okpi-inwork',  inWork);
 }
 
 function setOrderStatusFilter(status, btn) {
