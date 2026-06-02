@@ -170,8 +170,23 @@ function getSheetId(key) {
   return id;
 }
 
+/**
+ * Кэш открытых книг на время ОДНОГО исполнения скрипта.
+ * Каждый google.script.run — это свежее V8-исполнение, поэтому кэш живёт
+ * только в рамках одного запроса и сбрасывается сам. Риска устаревания нет:
+ * SpreadsheetApp.openById возвращает живую ссылку (не снимок данных), а
+ * openById — самая дорогая операция в Apps Script. Один getOrders открывал
+ * книгу DATABASE 4 раза (ORDERS/CLIENTS/PAYMENTS/SCHEDULE) — теперь 1 раз.
+ * ВАЖНО: кэшируем только хэндл книги, НЕ данные листов (иначе read-after-write
+ * в одном вызове мог бы вернуть устаревшие данные).
+ */
+const _BOOK_CACHE = {};
+
 function openBook(key) {
-  return SpreadsheetApp.openById(getSheetId(key));
+  if (_BOOK_CACHE[key]) return _BOOK_CACHE[key];
+  const book = SpreadsheetApp.openById(getSheetId(key));
+  _BOOK_CACHE[key] = book;
+  return book;
 }
 
 function getTab(bookKey, tabKey) {
