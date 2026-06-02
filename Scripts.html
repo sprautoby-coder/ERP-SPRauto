@@ -334,11 +334,15 @@ function fillLeadSources(sources) {
 /* ===== ЗАГРУЗКА СТРАНИЦ ===== */
 function loadCurrentPage() {
   refreshSync();
+  // force = принудительное обновление (кнопка «Обновить»); иначе кэш-аware загрузчики
+  // рисуют из кэша мгновенно и обновляются в фоне
+  var force = !!App._forceReload;
+  App._forceReload = false;
   if (App.currentPage === 'dashboard') renderDashboard();
-  if (App.currentPage === 'team')      loadTeam();
-  if (App.currentPage === 'clients')   loadClients();
-  if (App.currentPage === 'orders')    loadOrders();
-  if (App.currentPage === 'materials') loadMaterials();
+  if (App.currentPage === 'team')      loadTeam(force);
+  if (App.currentPage === 'clients')   loadClients(force);
+  if (App.currentPage === 'orders')    loadOrders(force);
+  if (App.currentPage === 'materials') loadMaterials(force);
   if (App.currentPage === 'settings')  loadSettings();
   if (App.currentPage === 'expenses')  loadExpenses();
   if (App.currentPage === 'finance')   loadFinance();
@@ -348,26 +352,36 @@ function loadCurrentPage() {
   if (App.currentPage === 'salary')    {} // ручной запуск
 }
 
+// Принудительное обновление (кнопка «Обновить» в шапке)
+function forceRefresh() {
+  App._forceReload = true;
+  loadCurrentPage();
+}
+
 /* Дашборд — реальная реализация renderDashboard() ниже (раздел «ДАШБОРД (данные)») */
 
 /* ===== КЛИЕНТЫ: ЗАГРУЗКА ===== */
-function loadClients() {
+function loadClients(force) {
   var tbody = document.getElementById('clients-tbody');
   var err = document.getElementById('clients-error');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="8" class="ct-loading">' +
-    '<div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>'.repeat(4) +
-    '</td></tr>';
   if (err) err.style.display = 'none';
+
+  var hasCache = App.clients && App.clients.length;
+  if (hasCache && !force) {
+    renderClients(App.clients);
+  } else {
+    tbody.innerHTML = '<tr><td colspan="8" class="ct-loading">' +
+      '<div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>'.repeat(4) +
+      '</td></tr>';
+  }
 
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) {
-        tbody.innerHTML = '';
-        if (err) {
-          err.style.display = 'flex';
-          var txt = document.getElementById('clients-error-text');
-          if (txt) txt.textContent = 'Ошибка: ' + (resp ? resp.error : 'нет данных');
+        if (!hasCache) {
+          tbody.innerHTML = '';
+          if (err) { err.style.display = 'flex'; var t1 = document.getElementById('clients-error-text'); if (t1) t1.textContent = 'Ошибка: ' + (resp ? resp.error : 'нет данных'); }
         }
         return;
       }
@@ -376,11 +390,9 @@ function loadClients() {
       renderClients(App.clients);
     })
     .withFailureHandler(function(e){
-      tbody.innerHTML = '';
-      if (err) {
-        err.style.display = 'flex';
-        var txt = document.getElementById('clients-error-text');
-        if (txt) txt.textContent = 'Ошибка: ' + e.message;
+      if (!hasCache) {
+        tbody.innerHTML = '';
+        if (err) { err.style.display = 'flex'; var t2 = document.getElementById('clients-error-text'); if (t2) t2.textContent = 'Ошибка: ' + e.message; }
       }
     })
     .getClients({});
@@ -899,21 +911,25 @@ function openAddVehicleModal() {
 // Отдельный кеш только для страницы команды — не перезаписывается другими операциями
 App._teamList = [];
 
-function loadTeam() {
+function loadTeam(force) {
   var grid = document.getElementById('team-grid');
   var err = document.getElementById('team-error');
   if (!grid) return;
-  grid.innerHTML = '<div class="kpi-skeleton" style="min-height:200px;grid-column:1/-1;"></div>';
   if (err) err.style.display = 'none';
+
+  var hasCache = App._teamList && App._teamList.length;
+  if (hasCache && !force) {
+    renderTeam(App._teamList);
+  } else {
+    grid.innerHTML = '<div class="kpi-skeleton" style="min-height:200px;grid-column:1/-1;"></div>';
+  }
 
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) {
-        grid.innerHTML = '';
-        if (err) {
-          err.style.display = 'flex';
-          var txt = document.getElementById('team-error-text');
-          if (txt) txt.textContent = 'Ошибка: ' + (resp ? resp.error : 'нет данных');
+        if (!hasCache) {
+          grid.innerHTML = '';
+          if (err) { err.style.display = 'flex'; var t1 = document.getElementById('team-error-text'); if (t1) t1.textContent = 'Ошибка: ' + (resp ? resp.error : 'нет данных'); }
         }
         return;
       }
@@ -922,11 +938,9 @@ function loadTeam() {
       renderTeam(App._teamList);
     })
     .withFailureHandler(function(e){
-      grid.innerHTML = '';
-      if (err) {
-        err.style.display = 'flex';
-        var txt = document.getElementById('team-error-text');
-        if (txt) txt.textContent = 'Ошибка: ' + e.message;
+      if (!hasCache) {
+        grid.innerHTML = '';
+        if (err) { err.style.display = 'flex'; var t3 = document.getElementById('team-error-text'); if (t3) t3.textContent = 'Ошибка: ' + e.message; }
       }
     })
     .getEmployees(false);
@@ -1122,27 +1136,33 @@ function handleLogoUpload(input) {
 App.orders       = [];
 App._orderFilter = 'all';
 
-function loadOrders() {
+function loadOrders(force) {
   var tbody = document.getElementById('orders-tbody');
   var err   = document.getElementById('orders-error');
   if (!tbody) return;
   if (err) err.style.display = 'none';
-  tbody.innerHTML = '<tr><td colspan="11" class="ct-loading"><div class="kpi-skeleton" style="min-height:48px;margin:4px 0"></div><div class="kpi-skeleton" style="min-height:48px;margin:4px 0"></div></td></tr>';
+
+  // Кэш: если данные уже есть и не форсим — рисуем мгновенно, обновляем в фоне
+  var hasCache = App.orders && App.orders.length;
+  if (hasCache && !force) {
+    filterOrders();      // учитывает текущий фильтр/поиск
+    loadOrdersKpi();
+  } else {
+    tbody.innerHTML = '<tr><td colspan="11" class="ct-loading"><div class="kpi-skeleton" style="min-height:48px;margin:4px 0"></div><div class="kpi-skeleton" style="min-height:48px;margin:4px 0"></div></td></tr>';
+  }
 
   google.script.run
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) {
-        if (err) { err.style.display='flex'; document.getElementById('orders-error-text').textContent = resp ? resp.error : 'Нет ответа'; }
-        tbody.innerHTML = '';
+        if (!hasCache) { if (err) { err.style.display='flex'; document.getElementById('orders-error-text').textContent = resp ? resp.error : 'Нет ответа'; } tbody.innerHTML = ''; }
         return;
       }
       App.orders = resp.data || [];
-      renderOrders(App.orders);
+      filterOrders();
       loadOrdersKpi();
     })
     .withFailureHandler(function(e) {
-      if (err) { err.style.display='flex'; document.getElementById('orders-error-text').textContent = e.message; }
-      tbody.innerHTML = '';
+      if (!hasCache) { if (err) { err.style.display='flex'; document.getElementById('orders-error-text').textContent = e.message; } tbody.innerHTML = ''; }
     })
     .getOrders({});
 }
@@ -1645,7 +1665,8 @@ function submitNewOrder() {
     var dueRow = document.getElementById('ord-duepay-row'); if (dueRow) dueRow.style.display = 'none';
     document.querySelectorAll('#modal-new-order .ctype-btn').forEach(function(b){ b.classList.remove('active'); });
     App._foundClient = null;
-    if (App.currentPage === 'orders') loadOrders();
+    App.clients = [];     // мог появиться новый клиент — обновим список при заходе
+    if (App.currentPage === 'orders') loadOrders(true);  // принудительно — показать новый заказ сразу
   };
 
   google.script.run
@@ -1687,23 +1708,29 @@ function submitNewOrder() {
 
 /* ===== СТРАНИЦА СПРАВОЧНИКА МАТЕРИАЛОВ ===== */
 
-function loadMaterials() {
+function loadMaterials(force) {
   var tbody = document.getElementById('materials-tbody');
   var err   = document.getElementById('materials-error');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</td></tr>';
   if (err)   err.style.display = 'none';
+
+  var hasCache = App._materials && App._materials.length;
+  if (hasCache && !force) {
+    filterMaterials();
+  } else if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</td></tr>';
+  }
 
   google.script.run
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) {
-        if (err) { err.textContent = resp ? resp.error : 'Нет ответа'; err.style.display = 'block'; }
+        if (!hasCache && err) { err.textContent = resp ? resp.error : 'Нет ответа'; err.style.display = 'block'; }
         return;
       }
       App._materials = resp.data || [];
       filterMaterials();
     })
     .withFailureHandler(function(e) {
-      if (err) { err.textContent = e.message; err.style.display = 'block'; }
+      if (!hasCache && err) { err.textContent = e.message; err.style.display = 'block'; }
     })
     .getMaterials(null);
 }
