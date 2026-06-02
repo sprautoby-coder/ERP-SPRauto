@@ -107,6 +107,38 @@ function refreshSync() {
   if (el) el.textContent = 'Обновлено: '+p(n.getDate())+'.'+p(n.getMonth()+1)+' '+p(n.getHours())+':'+p(n.getMinutes());
 }
 
+/* ===== КРАСИВОЕ ПОДТВЕРЖДЕНИЕ (вместо нативного confirm) ===== */
+function uiConfirm(message, onConfirm, opts) {
+  opts = opts || {};
+  var title  = opts.title  || 'Подтвердите действие';
+  var okText = opts.okText || 'Удалить';
+  var danger = (opts.danger !== false); // по умолчанию опасное (красная кнопка)
+  var html   = String(message || '').replace(/\n/g, '<br>');
+
+  var bg = document.createElement('div');
+  bg.style.cssText = 'position:fixed;inset:0;z-index:100000;background:rgba(0,0,0,.45);display:flex;align-items:center;justify-content:center;padding:20px';
+  bg.innerHTML =
+    '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:14px;max-width:400px;width:100%;box-shadow:var(--shadow);overflow:hidden;animation:li-fade .15s ease">' +
+      '<div style="padding:18px 20px 6px;font-weight:700;font-size:16px;color:var(--text)">' + title + '</div>' +
+      '<div style="padding:0 20px 18px;font-size:14px;color:var(--text2);line-height:1.5">' + html + '</div>' +
+      '<div style="display:flex;gap:8px;justify-content:flex-end;padding:14px 20px;border-top:1px solid var(--border);background:var(--bg-card2)">' +
+        '<button class="btn btn-ghost" data-act="cancel" style="padding:8px 16px">Отмена</button>' +
+        '<button class="btn" data-act="ok" style="padding:8px 16px;font-weight:600;color:#fff;background:' + (danger ? 'var(--danger)' : 'var(--accent)') + '">' + okText + '</button>' +
+      '</div>' +
+    '</div>';
+
+  function close() { if (bg.parentNode) bg.parentNode.removeChild(bg); document.removeEventListener('keydown', onKey); }
+  function onKey(e) { if (e.key === 'Escape') close(); }
+  bg.addEventListener('click', function(e) {
+    if (e.target === bg) { close(); return; }
+    var act = e.target.getAttribute('data-act');
+    if (act === 'cancel') close();
+    if (act === 'ok') { close(); if (onConfirm) onConfirm(); }
+  });
+  document.addEventListener('keydown', onKey);
+  document.body.appendChild(bg);
+}
+
 /* ===== ТОСТ ===== */
 function toast(msg, type) {
   var t = document.getElementById('toast');
@@ -1084,11 +1116,13 @@ function toggleEmployeeStatus(idx) {
   var e = App._teamList[idx];
   if (!e) { toast('Сотрудник не найден — обновите страницу', 'error'); return; }
   var ns = e['Статус']==='Работает'?'Не работает':'Работает';
-  if(!confirm((ns==='Не работает'?'Отключить':'Восстановить')+' '+e['ФИО']+'?')) return;
-  google.script.run
-    .withSuccessHandler(function(resp){if(!resp||!resp.ok){toast('Ошибка','error');return;}toast('✅ Статус изменён','success');if(App.currentPage==='team')loadTeam();})
-    .withFailureHandler(function(e){toast('Ошибка: '+e.message,'error');})
-    .updateEmployeeStatus(e['ID'],ns);
+  var off = (ns === 'Не работает');
+  uiConfirm((off ? 'Отключить' : 'Восстановить') + ' сотрудника «' + e['ФИО'] + '»?', function() {
+    google.script.run
+      .withSuccessHandler(function(resp){if(!resp||!resp.ok){toast('Ошибка','error');return;}toast('✅ Статус изменён','success');if(App.currentPage==='team')loadTeam(true);})
+      .withFailureHandler(function(e){toast('Ошибка: '+e.message,'error');})
+      .updateEmployeeStatus(e['ID'],ns);
+  }, { title: off ? 'Отключение сотрудника' : 'Восстановление', okText: off ? 'Отключить' : 'Восстановить', danger: off });
 }
 
 /* ===== НАСТРОЙКИ ===== */
@@ -1620,8 +1654,16 @@ function submitNewOrder() {
     if (badMats) msg += '\n• материалов без выбранного материала: ' + badMats;
     if (badExps) msg += '\n• расходов без названия или суммы: ' + badExps;
     msg += '\n\nПродолжить создание заказа без них?';
-    if (!confirm(msg)) return;
+    uiConfirm(msg, submitNewOrderProceed, { title: 'Незаполненные строки', okText: 'Продолжить', danger: false });
+    return;
   }
+  submitNewOrderProceed();
+}
+
+function submitNewOrderProceed() {
+  var service = (document.getElementById('ord-service') || {}).value;
+  var name    = ((document.getElementById('ord-client-name') || {}).value || '').trim();
+  var price   = Number((document.getElementById('ord-price') || {}).value || 0);
 
   var payType     = App._orderPayType || '';
   var duePay      = (document.getElementById('ord-duepay') || {}).value || '';
@@ -1859,30 +1901,32 @@ function restoreMat(id) {
 }
 
 function deleteMatRow(id, name) {
-  if (!confirm('Удалить материал «' + (name || id) + '» навсегда? Действие необратимо.')) return;
-  // Оптимистично убираем из кэша и перерисовываем
-  App._materials = (App._materials || []).filter(function(m){ return String(m['ID']) !== String(id); });
-  filterMaterials();
-  google.script.run
-    .withSuccessHandler(function(resp) {
-      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); loadMaterials(true); return; }
-      toast('Материал удалён', 'success');
-    })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); loadMaterials(true); })
-    .deleteMaterialRow(id);
+  uiConfirm('Удалить материал «' + (name || id) + '» навсегда? Действие необратимо.', function() {
+    // Оптимистично убираем из кэша и перерисовываем
+    App._materials = (App._materials || []).filter(function(m){ return String(m['ID']) !== String(id); });
+    filterMaterials();
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); loadMaterials(true); return; }
+        toast('Материал удалён', 'success');
+      })
+      .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); loadMaterials(true); })
+      .deleteMaterialRow(id);
+  }, { title: 'Удаление материала', okText: 'Удалить' });
 }
 
 function clearAllMaterials() {
-  if (!confirm('Очистить ВЕСЬ справочник материалов? Удалятся все строки. Действие необратимо.')) return;
-  google.script.run
-    .withSuccessHandler(function(resp) {
-      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
-      toast('Справочник очищен: удалено ' + (resp.data.deleted||0), 'success');
-      App._materials = [];
-      loadMaterials();
-    })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
-    .clearAllMaterials();
+  uiConfirm('Очистить ВЕСЬ справочник материалов? Удалятся все строки. Действие необратимо.', function() {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+        toast('Справочник очищен: удалено ' + (resp.data.deleted||0), 'success');
+        App._materials = [];
+        loadMaterials(true);
+      })
+      .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+      .clearAllMaterials();
+  }, { title: 'Очистка справочника', okText: 'Очистить' });
 }
 
 function importMaterialsFromRaschet() {
@@ -3495,15 +3539,16 @@ function createInstallmentPlanCard(orderId) {
 }
 
 function deleteScheduleCard(orderId) {
-  if (!confirm('Удалить график рассрочки?')) return;
-  google.script.run
-    .withSuccessHandler(function(resp) {
-      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
-      toast('График удалён', 'success');
-      openOrderCard(orderId);
-    })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
-    .deletePaymentSchedule(orderId);
+  uiConfirm('Удалить график рассрочки по этому заказу?', function() {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+        toast('График удалён', 'success');
+        openOrderCard(orderId);
+      })
+      .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+      .deletePaymentSchedule(orderId);
+  }, { title: 'Удаление графика', okText: 'Удалить' });
 }
 
 function finBox_(label, value, color) {
