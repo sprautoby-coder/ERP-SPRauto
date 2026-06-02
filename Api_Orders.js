@@ -196,6 +196,12 @@ function createOrder(payload) {
     if (!payload.price)   throw new Error('Укажите стоимость заказа');
     if (!payload.service) throw new Error('Укажите услугу');
 
+    // Авто-привязка клиента: если ID не передан — ищем по телефону/имени, иначе создаём карточку.
+    // Защищено: при любой ошибке заказ всё равно создаётся (clientId остаётся пустым).
+    if (!payload.clientId) {
+      payload.clientId = ensureClientForOrder_(payload);
+    }
+
     const sheet    = getTab('DATABASE', 'ORDERS');
     const lastRow  = sheet.getLastRow();
     const id       = 'ЗАК-' + String(lastRow).padStart(5, '0');
@@ -543,6 +549,41 @@ function parseDate_(val) {
   var m = s.match(/^(\d{2})\.(\d{2})\.(\d{4})/);
   if (m) return new Date(m[3], m[2] - 1, m[1]);
   return new Date(s);
+}
+
+/**
+ * Найти или создать клиента для заказа. Возвращает ID клиента или '' при неудаче.
+ * Поиск: по телефону (цифры), затем по точному имени. Если нет — создаёт карточку (физ).
+ * Полностью защищено try/catch — никогда не ломает создание заказа.
+ */
+function ensureClientForOrder_(payload) {
+  try {
+    var name = String(payload.clientName || '').trim();
+    if (!name) return '';
+    var phone = String(payload.clientPhone || '').trim();
+    var clients = readSheetAsObjects('DATABASE', 'CLIENTS');
+
+    // 1) по телефону
+    var clean = phone.replace(/\D/g, '');
+    if (clean) {
+      for (var i = 0; i < clients.length; i++) {
+        var cp = String(clients[i]['Телефон'] || '').replace(/\D/g, '');
+        if (cp && cp === clean) return clients[i]['ID'];
+      }
+    }
+    // 2) по точному имени
+    for (var j = 0; j < clients.length; j++) {
+      if (String(clients[j]['Имя'] || '').trim().toLowerCase() === name.toLowerCase()) {
+        return clients[j]['ID'];
+      }
+    }
+    // 3) создаём новую карточку (физлицо по умолчанию)
+    var res = createClient({ type: 'физ', name: name, phone: phone });
+    return (res && res.ok && res.data && res.data['ID']) ? res.data['ID'] : '';
+  } catch (e) {
+    Logger.log('ensureClientForOrder_ ошибка: ' + e.message);
+    return '';
+  }
 }
 
 /**

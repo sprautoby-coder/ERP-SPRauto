@@ -1592,6 +1592,17 @@ function submitNewOrder() {
   if (!name)    { toast('Укажите имя клиента', 'error'); return; }
   if (!price)   { toast('Укажите стоимость заказа', 'error'); return; }
 
+  // Предупреждаем о незаполненных строках (иначе они молча отбрасываются)
+  var badMats = (App._orderMaterials || []).filter(function(m){ return m && !m.materialId && (Number(m.qty) > 0); }).length;
+  var badExps = (App._orderExpenses  || []).filter(function(e){ return e && ((e.name && !(Number(e.amount) > 0)) || (!e.name && Number(e.amount) > 0)); }).length;
+  if (badMats || badExps) {
+    var msg = 'Не сохранятся незаполненные строки:';
+    if (badMats) msg += '\n• материалов без выбранного материала: ' + badMats;
+    if (badExps) msg += '\n• расходов без названия или суммы: ' + badExps;
+    msg += '\n\nПродолжить создание заказа без них?';
+    if (!confirm(msg)) return;
+  }
+
   var payType     = App._orderPayType || '';
   var duePay      = (document.getElementById('ord-duepay') || {}).value || '';
   var prepay      = Number((document.getElementById('ord-prepay') || {}).value || 0);
@@ -1689,12 +1700,24 @@ function loadMaterials() {
         return;
       }
       App._materials = resp.data || [];
-      renderMaterialsTable(App._materials);
+      filterMaterials();
     })
     .withFailureHandler(function(e) {
       if (err) { err.textContent = e.message; err.style.display = 'block'; }
     })
     .getMaterials(null);
+}
+
+// Поиск/фильтр в справочнике материалов (клиентская фильтрация App._materials)
+function filterMaterials() {
+  var q   = ((document.getElementById('mat-search')     || {}).value || '').toLowerCase().trim();
+  var cat = (document.getElementById('mat-cat-filter')  || {}).value || '';
+  var list = (App._materials || []).filter(function(m) {
+    if (cat && String(m['Категория'] || '') !== cat) return false;
+    if (q && String(m['Название'] || '').toLowerCase().indexOf(q) < 0) return false;
+    return true;
+  });
+  renderMaterialsTable(list);
 }
 
 function renderMaterialsTable(list) {
@@ -1947,6 +1970,35 @@ function renderDashboard() {
     })
     .withFailureHandler(function(){})
     .getDashboardData(getDashRange());
+
+  loadDashDebtAlert();
+}
+
+// Алерт по дебиторке вверху дашборда (просроченные — красным)
+function loadDashDebtAlert() {
+  var el = document.getElementById('dash-debt-alert');
+  if (!el) return;
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok || !resp.data || !resp.data.length) { el.innerHTML = ''; return; }
+      var rows = resp.data;
+      var fmt  = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' Br'; };
+      var overdue   = rows.filter(function(r){ return r.isOverdue; });
+      var totalRem  = rows.reduce(function(s, r){ return s + (Number(r.remaining)||0); }, 0);
+      var overdueSum = overdue.reduce(function(s, r){ return s + (Number(r.remaining)||0); }, 0);
+      var alarm = overdue.length > 0;
+      el.innerHTML =
+        '<div onclick="goPage(\'debt\')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-radius:12px;border:1px solid ' +
+          (alarm ? 'rgba(231,76,60,.35)' : 'var(--border)') + ';background:' + (alarm ? 'var(--red-soft)' : 'var(--bg-card)') + '">' +
+          '<div style="font-weight:600;color:' + (alarm ? 'var(--danger)' : 'var(--text)') + '">' +
+            (alarm ? ('⚠ Просрочено: ' + overdue.length + ' на ' + fmt(overdueSum)) : ('🧾 Дебиторка: ' + rows.length + ' заказов')) +
+            ' <span style="color:var(--text3);font-weight:500;font-size:12px">· всего к получению ' + fmt(totalRem) + '</span>' +
+          '</div>' +
+          '<span style="font-size:12px;color:var(--accent);font-weight:600;white-space:nowrap">Открыть дебиторку →</span>' +
+        '</div>';
+    })
+    .withFailureHandler(function(){ el.innerHTML = ''; })
+    .getDebtOrders();
 }
 
 function kpiCard(label, value, color, icon) {
