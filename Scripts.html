@@ -1665,7 +1665,9 @@ function submitNewOrder() {
     var dueRow = document.getElementById('ord-duepay-row'); if (dueRow) dueRow.style.display = 'none';
     document.querySelectorAll('#modal-new-order .ctype-btn').forEach(function(b){ b.classList.remove('active'); });
     App._foundClient = null;
-    App.clients = [];     // мог появиться новый клиент — обновим список при заходе
+    App.clients = [];        // мог появиться новый клиент — обновим список при заходе
+    App._dashCache = null;   // дашборд пересчитается
+    App._debtCache = null;
     if (App.currentPage === 'orders') loadOrders(true);  // принудительно — показать новый заказ сразу
   };
 
@@ -1983,55 +1985,77 @@ function onDashPeriodChange() {
 // Ручная правка даты в календаре → пересчитываем
 function onDashDateEdit() { renderDashboard(); }
 
-function renderDashboard() {
+function renderDashData_(d) {
   var kpi = document.getElementById('dash-kpi');
-  if (kpi) kpi.innerHTML = '<div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div>';
+  var k = d.kpi || {};
+  var fmt = function(n){ return (Math.round(Number(n)*100)/100).toLocaleString('ru') + ' Br'; };
+  if (kpi) kpi.innerHTML =
+    kpiCard('Выручка',        fmt(k.revenue),     'var(--accent)',   '💰') +
+    kpiCard('Валовая прибыль',fmt(k.grossProfit),  'var(--success)', '📈') +
+    kpiCard('Расходы',        fmt(k.expenses),     'var(--danger)',  '💸') +
+    kpiCard('Дебиторка',      fmt(k.debtSum),      '#f59e0b',       '🧾');
+  renderRecentOrders(d.recentOrders || [], k.ordersCount || 0);
+}
 
+function renderDashboard() {
+  var range = getDashRange();
+  var key   = (range.from || '') + '_' + (range.to || '');
+  var kpi   = document.getElementById('dash-kpi');
+
+  // Мгновенно из кэша, если период тот же
+  var cached = (App._dashCache && App._dashCache.key === key) ? App._dashCache.data : null;
+  if (cached) {
+    renderDashData_(cached);
+  } else if (kpi) {
+    kpi.innerHTML = '<div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div>';
+  }
+
+  // Фоновое обновление
   google.script.run
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) return;
-      var d = resp.data;
-      var k = d.kpi || {};
-      var fmt = function(n){ return (Math.round(Number(n)*100)/100).toLocaleString('ru') + ' Br'; };
-      if (kpi) kpi.innerHTML =
-        kpiCard('Выручка',        fmt(k.revenue),     'var(--accent)',   '💰') +
-        kpiCard('Валовая прибыль',fmt(k.grossProfit),  'var(--success)', '📈') +
-        kpiCard('Расходы',        fmt(k.expenses),     'var(--danger)',  '💸') +
-        kpiCard('Дебиторка',      fmt(k.debtSum),      '#f59e0b',       '🧾');
-
-      // Заказы за период (внизу) — счётчик берём из KPI (всего за период)
-      renderRecentOrders(d.recentOrders || [], k.ordersCount || 0);
+      App._dashCache = { key: key, data: resp.data };
+      renderDashData_(resp.data);
     })
     .withFailureHandler(function(){})
-    .getDashboardData(getDashRange());
+    .getDashboardData(range);
 
   loadDashDebtAlert();
 }
 
-// Алерт по дебиторке вверху дашборда (просроченные — красным)
+// Отрисовать баннер дебиторки из массива строк
+function renderDebtAlert_(rows) {
+  var el = document.getElementById('dash-debt-alert');
+  if (!el) return;
+  if (!rows || !rows.length) { el.innerHTML = ''; return; }
+  var fmt  = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' Br'; };
+  var overdue    = rows.filter(function(r){ return r.isOverdue; });
+  var totalRem   = rows.reduce(function(s, r){ return s + (Number(r.remaining)||0); }, 0);
+  var overdueSum = overdue.reduce(function(s, r){ return s + (Number(r.remaining)||0); }, 0);
+  var alarm = overdue.length > 0;
+  el.innerHTML =
+    '<div onclick="goPage(\'debt\')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-radius:12px;border:1px solid ' +
+      (alarm ? 'rgba(231,76,60,.35)' : 'var(--border)') + ';background:' + (alarm ? 'var(--red-soft)' : 'var(--bg-card)') + '">' +
+      '<div style="font-weight:600;color:' + (alarm ? 'var(--danger)' : 'var(--text)') + '">' +
+        (alarm ? ('⚠ Просрочено: ' + overdue.length + ' на ' + fmt(overdueSum)) : ('🧾 Дебиторка: ' + rows.length + ' заказов')) +
+        ' <span style="color:var(--text3);font-weight:500;font-size:12px">· всего к получению ' + fmt(totalRem) + '</span>' +
+      '</div>' +
+      '<span style="font-size:12px;color:var(--accent);font-weight:600;white-space:nowrap">Открыть дебиторку →</span>' +
+    '</div>';
+}
+
+// Алерт по дебиторке вверху дашборда (кэш → мгновенно, обновление в фоне)
 function loadDashDebtAlert() {
   var el = document.getElementById('dash-debt-alert');
   if (!el) return;
+  if (App._debtCache) renderDebtAlert_(App._debtCache);   // мгновенно из кэша
   google.script.run
     .withSuccessHandler(function(resp) {
-      if (!resp || !resp.ok || !resp.data || !resp.data.length) { el.innerHTML = ''; return; }
-      var rows = resp.data;
-      var fmt  = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' Br'; };
-      var overdue   = rows.filter(function(r){ return r.isOverdue; });
-      var totalRem  = rows.reduce(function(s, r){ return s + (Number(r.remaining)||0); }, 0);
-      var overdueSum = overdue.reduce(function(s, r){ return s + (Number(r.remaining)||0); }, 0);
-      var alarm = overdue.length > 0;
-      el.innerHTML =
-        '<div onclick="goPage(\'debt\')" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;border-radius:12px;border:1px solid ' +
-          (alarm ? 'rgba(231,76,60,.35)' : 'var(--border)') + ';background:' + (alarm ? 'var(--red-soft)' : 'var(--bg-card)') + '">' +
-          '<div style="font-weight:600;color:' + (alarm ? 'var(--danger)' : 'var(--text)') + '">' +
-            (alarm ? ('⚠ Просрочено: ' + overdue.length + ' на ' + fmt(overdueSum)) : ('🧾 Дебиторка: ' + rows.length + ' заказов')) +
-            ' <span style="color:var(--text3);font-weight:500;font-size:12px">· всего к получению ' + fmt(totalRem) + '</span>' +
-          '</div>' +
-          '<span style="font-size:12px;color:var(--accent);font-weight:600;white-space:nowrap">Открыть дебиторку →</span>' +
-        '</div>';
+      if (!resp || !resp.ok) return;
+      App._debtCache = resp.data || [];
+      renderDebtAlert_(App._debtCache);
     })
-    .withFailureHandler(function(){ el.innerHTML = ''; })
+    .withFailureHandler(function(){ if (!App._debtCache) el.innerHTML = ''; })
     .getDebtOrders();
 }
 
@@ -2788,7 +2812,8 @@ function confirmPayOrder() {
 
       toast(payType==='Безнал' ? 'Безнал → р/счёт зафиксирован' : 'Нал → касса зафиксирован', 'success');
       closeModal('modal-pay-order');
-      if (App.currentPage==='orders')     loadOrders();
+      App._dashCache = null; App._debtCache = null;   // оплата меняет дашборд/дебиторку
+      if (App.currentPage==='orders')     loadOrders(true);
       if (App.currentPage==='dds')        loadDDS();
       if (App.currentPage==='debt')       loadDebt();
       if (App.currentPage==='order-card') openOrderCard(id);
