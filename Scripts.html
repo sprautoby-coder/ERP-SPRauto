@@ -1839,27 +1839,34 @@ function submitEditMaterial() {
     .updateMaterial(id, payload);
 }
 
+// Локально изменить статус материала в кэше и перерисовать
+function setMatActiveLocal_(id, active) {
+  (App._materials || []).forEach(function(m){ if (String(m['ID']) === String(id)) m['Активен'] = active; });
+  filterMaterials();
+}
+
 function restoreMat(id) {
+  setMatActiveLocal_(id, 'Да');   // оптимистично
   google.script.run
     .withSuccessHandler(function(resp) {
-      if (!resp || !resp.ok) { toast('Ошибка', 'error'); return; }
+      if (!resp || !resp.ok) { toast('Ошибка', 'error'); loadMaterials(true); return; }
       toast('Материал восстановлен', 'success');
-      loadMaterials();
     })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); loadMaterials(true); })
     .updateMaterial(id, { active: 'Да' });
 }
 
 function deleteMatRow(id, name) {
   if (!confirm('Удалить материал «' + (name || id) + '» навсегда? Действие необратимо.')) return;
+  // Оптимистично убираем из кэша и перерисовываем
+  App._materials = (App._materials || []).filter(function(m){ return String(m['ID']) !== String(id); });
+  filterMaterials();
   google.script.run
     .withSuccessHandler(function(resp) {
-      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); loadMaterials(true); return; }
       toast('Материал удалён', 'success');
-      App._materials = [];
-      loadMaterials();
     })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); loadMaterials(true); })
     .deleteMaterialRow(id);
 }
 
@@ -1938,13 +1945,13 @@ function submitNewMaterial() {
 }
 
 function deactivateMat(id) {
+  setMatActiveLocal_(id, 'Нет');   // оптимистично
   google.script.run
     .withSuccessHandler(function(resp) {
-      if (!resp || !resp.ok) { toast('Ошибка', 'error'); return; }
+      if (!resp || !resp.ok) { toast('Ошибка', 'error'); loadMaterials(true); return; }
       toast('Материал перенесён в архив', 'success');
-      loadMaterials();
     })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); loadMaterials(true); })
     .deactivateMaterial(id);
 }
 
@@ -3011,18 +3018,8 @@ function renderOrderCard(order) {
     '</div>';
 
   content.innerHTML =
-    // Баннер проверки директором (компактно)
-    '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:' +
-        (verified ? 'var(--green-soft)' : 'var(--yellow-soft)') + '">' +
-      '<span style="font-weight:600;font-size:13px;color:' + (verified ? 'var(--success)' : 'var(--warning)') + '">' +
-        (verified ? '✓ Данные проверены директором' : '⚠ Данные не проверены — сверьте расход плёнки, расходы и кто клеил') +
-      '</span>' +
-      '<button class="btn" onclick="verifyOrderCard(\'' + oid + '\')" style="padding:5px 12px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid ' +
-        (verified ? 'var(--border)' : 'rgba(46,204,113,.4)') + ';background:' + (verified ? 'transparent' : 'var(--green-soft)') +
-        ';color:' + (verified ? 'var(--text2)' : 'var(--success)') + '">' +
-        (verified ? 'Снять проверку' : 'Отметить проверенным') +
-      '</button>' +
-    '</div>' +
+    // Баннер проверки директором (компактно, обновляется оптимистично)
+    '<div id="card-verify-banner">' + verifyBannerHtml_(oid, verified) + '</div>' +
 
     // Шапка заказа (компактно)
     '<div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;margin-bottom:12px;padding:14px 16px;background:var(--bg-card);border-radius:12px;border:1px solid var(--border)">' +
@@ -3384,15 +3381,52 @@ function saveCardExpenses() {
     .saveOrderExpenses(o['ID'], lines);
 }
 
-/* --- Карточка заказа: проверка директором --- */
+/* --- Карточка заказа: проверка директором (оптимистично) --- */
+function verifyBannerHtml_(oid, verified) {
+  return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;padding:8px 14px;border-radius:10px;border:1px solid var(--border);background:' +
+      (verified ? 'var(--green-soft)' : 'var(--yellow-soft)') + '">' +
+    '<span style="font-weight:600;font-size:13px;color:' + (verified ? 'var(--success)' : 'var(--warning)') + '">' +
+      (verified ? '✓ Данные проверены директором' : '⚠ Данные не проверены — сверьте расход плёнки, расходы и кто клеил') +
+    '</span>' +
+    '<button class="btn" onclick="verifyOrderCard(\'' + oid + '\')" style="padding:5px 12px;font-size:12px;font-weight:600;border-radius:8px;border:1px solid ' +
+      (verified ? 'var(--border)' : 'rgba(46,204,113,.4)') + ';background:' + (verified ? 'transparent' : 'var(--green-soft)') +
+      ';color:' + (verified ? 'var(--text2)' : 'var(--success)') + '">' +
+      (verified ? 'Снять проверку' : 'Отметить проверенным') +
+    '</button>';
+}
+
 function verifyOrderCard(orderId) {
+  var o = App._currentOrder;
+  var wrap = document.getElementById('card-verify-banner');
+  var prev = (o && String(o['Проверено']) === 'Да');
+  var next = !prev;
+
+  // 1) Мгновенно меняем баннер и кэш (оптимистично)
+  if (o) o['Проверено'] = next ? 'Да' : 'Нет';
+  if (wrap) wrap.innerHTML = verifyBannerHtml_(orderId, next);
+
+  // 2) Синхронизируем с сервером в фоне, при ошибке откатываем
   google.script.run
     .withSuccessHandler(function(resp) {
-      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
-      toast(resp.data.verified ? 'Заказ отмечен проверенным' : 'Проверка снята', 'success');
-      openOrderCard(orderId);
+      if (!resp || !resp.ok) {
+        if (o) o['Проверено'] = prev ? 'Да' : 'Нет';
+        if (wrap) wrap.innerHTML = verifyBannerHtml_(orderId, prev);
+        toast('Ошибка: ' + (resp ? resp.error : ''), 'error');
+        return;
+      }
+      var v = !!resp.data.verified;
+      if (o) o['Проверено'] = v ? 'Да' : 'Нет';
+      // обновляем кэш списка заказов
+      for (var i = 0; i < (App.orders || []).length; i++) {
+        if (String(App.orders[i]['ID']) === String(orderId)) { App.orders[i]['Проверено'] = v ? 'Да' : 'Нет'; break; }
+      }
+      toast(v ? 'Отмечено проверенным' : 'Проверка снята', 'success');
     })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .withFailureHandler(function(e){
+      if (o) o['Проверено'] = prev ? 'Да' : 'Нет';
+      if (wrap) wrap.innerHTML = verifyBannerHtml_(orderId, prev);
+      toast('Ошибка: ' + e.message, 'error');
+    })
     .toggleOrderVerification(orderId);
 }
 
