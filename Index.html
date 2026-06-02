@@ -324,9 +324,16 @@
         <option value="Антихром">Антихром</option>
         <option value="Шумоизоляция">Шумоизоляция</option>
       </select>
+      <div class="view-toggle" id="orders-view-toggle">
+        <button class="active" id="orders-view-table" onclick="setOrdersView('table')" title="Таблица">☰ Таблица</button>
+        <button id="orders-view-kanban" onclick="setOrdersView('kanban')" title="Канбан-доска">▦ Канбан</button>
+      </div>
     </div>
 
     <div id="orders-error" class="alert alert-red" style="display:none"><span>!</span><span id="orders-error-text"></span></div>
+
+    <!-- Канбан-доска заказов -->
+    <div id="orders-kanban" class="kanban-board" style="display:none"></div>
 
     <!-- Таблица заказов -->
     <div class="clients-table-wrap" id="orders-table-wrap">

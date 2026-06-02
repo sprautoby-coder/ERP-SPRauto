@@ -1225,6 +1225,7 @@ function handleLogoUpload(input) {
 
 App.orders       = [];
 App._orderFilter = 'all';
+App._ordersView  = 'table';   // 'table' | 'kanban'
 
 function loadOrders(force) {
   var tbody = document.getElementById('orders-tbody');
@@ -1301,11 +1302,28 @@ function filterOrders() {
     }
     return true;
   });
-  renderOrdersTable(filtered);
+  App._ordersFiltered = filtered;
+  if (App._ordersView === 'kanban') renderOrdersKanban(filtered);
+  else renderOrdersTable(filtered);
 }
 
 function renderOrders(orders) {
   renderOrdersTable(orders);
+}
+
+// Переключение Таблица / Канбан
+function setOrdersView(view) {
+  App._ordersView = view;
+  var tableWrap = document.getElementById('orders-table-wrap');
+  var kanban    = document.getElementById('orders-kanban');
+  var btnT = document.getElementById('orders-view-table');
+  var btnK = document.getElementById('orders-view-kanban');
+  var isK  = view === 'kanban';
+  if (tableWrap) tableWrap.style.display = isK ? 'none' : '';
+  if (kanban)    kanban.style.display    = isK ? 'flex' : 'none';
+  if (btnT) btnT.classList.toggle('active', !isK);
+  if (btnK) btnK.classList.toggle('active', isK);
+  filterOrders();   // перерисовать в выбранном представлении
 }
 
 var ORDER_STATUS_COLORS = {
@@ -1411,6 +1429,147 @@ function renderOrdersTable(orders) {
 
   tbody.innerHTML = html;
   if (footer) footer.textContent = 'Показано: ' + orders.length + ' из ' + App.orders.length;
+}
+
+/* ===== КАНБАН-ДОСКА ===== */
+var KANBAN_COLUMNS = ['Новый', 'В работе', 'Готов', 'Выдан', 'Отменён'];
+
+// Компактный бейдж оплаты для карточки канбана
+function kanbanPayBadge_(o) {
+  var price     = Number(o['Стоимость заказа']) || 0;
+  var paid      = Number(o._paid) || 0;
+  var payStatus = String(o['Статус оплаты'] || '').trim() || 'Не оплачен';
+  var payType   = String(o['Тип оплаты'] || '').trim();
+  if (payStatus === 'Оплачен')
+    return '<span class="kanban-badge" style="background:var(--green-soft);color:var(--success)">✓ оплачен</span>';
+  if (payStatus === 'Частично')
+    return '<span class="kanban-badge" style="background:var(--blue-soft);color:var(--blue)">рассрочка ' + Math.round(price ? paid/price*100 : 0) + '%</span>';
+  if (payType === 'Отсрочка')
+    return '<span class="kanban-badge" style="background:var(--yellow-soft);color:var(--warning)">отсрочка</span>';
+  if (payType === 'Рассрочка')
+    return '<span class="kanban-badge" style="background:var(--blue-soft);color:var(--blue)">рассрочка</span>';
+  return '<span class="kanban-badge" style="background:var(--red-soft);color:var(--danger)">долг</span>';
+}
+
+function renderOrdersKanban(orders) {
+  var board = document.getElementById('orders-kanban');
+  if (!board) return;
+  orders = orders || [];
+
+  // Группируем по статусу
+  var byStatus = {};
+  KANBAN_COLUMNS.forEach(function(s){ byStatus[s] = []; });
+  orders.forEach(function(o){
+    var s = o['Статус'] || 'Новый';
+    if (!byStatus[s]) byStatus[s] = [];   // на случай нестандартного статуса
+    byStatus[s].push(o);
+  });
+
+  var esc = function(s){ return String(s||'').replace(/'/g,"\\'"); };
+  var html = '';
+
+  Object.keys(byStatus).forEach(function(status){
+    if (KANBAN_COLUMNS.indexOf(status) < 0 && byStatus[status].length === 0) return;
+    var list  = byStatus[status];
+    var color = ORDER_STATUS_COLORS[status] || 'var(--text2)';
+    var sum   = list.reduce(function(a, o){ return a + (Number(o['Стоимость заказа']) || 0); }, 0);
+
+    var cards = list.map(function(o){
+      var oid    = o['ID'] || '';
+      var price  = Number(o['Стоимость заказа']) || 0;
+      var isLegal = o._clientType === 'юр';
+      return '<div class="kanban-card" draggable="true" style="border-left-color:' + color + '"' +
+        ' ondragstart="kanbanDragStart(event,\'' + oid + '\')" ondragend="kanbanDragEnd(event)"' +
+        ' onclick="openOrderCard(\'' + oid + '\')">' +
+        '<div class="kanban-card-top">' +
+          '<span class="kanban-card-num">' + (o['Номер договора'] || oid) + '</span>' +
+          '<span class="kanban-card-sum">' + price.toLocaleString('ru') + ' Br</span>' +
+        '</div>' +
+        '<div class="kanban-card-client">' + (o['Клиент'] || '—') +
+          (isLegal ? ' <span class="kanban-badge" style="background:var(--purple-soft);color:var(--purple)">ЮЛ</span>' : '') +
+        '</div>' +
+        '<div class="kanban-card-car">' + (o['Авто'] || '—') + (o['Госномер'] ? ' · ' + o['Госномер'] : '') + '</div>' +
+        '<div class="kanban-card-foot">' +
+          kanbanPayBadge_(o) +
+          '<span class="kanban-card-svc">' + (o['Услуга'] || '') + '</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    html +=
+      '<div class="kanban-col" data-status="' + status + '"' +
+        ' ondragover="kanbanDragOver(event, this)" ondragleave="kanbanDragLeave(event, this)"' +
+        ' ondrop="kanbanDrop(event, this)">' +
+        '<div class="kanban-col-head"><span class="kanban-dot" style="background:' + color + '"></span>' + status +
+          '<span class="kanban-count">' + list.length + '</span></div>' +
+        '<div class="kanban-col-sum">' + Math.round(sum).toLocaleString('ru') + ' Br</div>' +
+        '<div class="kanban-col-body">' + (cards || '<div class="kanban-empty">Перетащите сюда</div>') + '</div>' +
+      '</div>';
+  });
+
+  board.innerHTML = html;
+}
+
+// --- Drag & drop ---
+var _kanbanDragId = null;
+
+function kanbanDragStart(ev, oid) {
+  _kanbanDragId = oid;
+  try { ev.dataTransfer.setData('text/plain', oid); ev.dataTransfer.effectAllowed = 'move'; } catch(e){}
+  if (ev.currentTarget) ev.currentTarget.classList.add('dragging');
+}
+function kanbanDragEnd(ev) {
+  if (ev.currentTarget) ev.currentTarget.classList.remove('dragging');
+  _kanbanDragId = null;
+  document.querySelectorAll('.kanban-col.drop-hover').forEach(function(c){ c.classList.remove('drop-hover'); });
+}
+function kanbanDragOver(ev, col) {
+  ev.preventDefault();                       // разрешаем drop
+  try { ev.dataTransfer.dropEffect = 'move'; } catch(e){}
+  if (col) col.classList.add('drop-hover');
+}
+function kanbanDragLeave(ev, col) {
+  // снимаем подсветку только когда курсор реально покинул колонку
+  if (col && !col.contains(ev.relatedTarget)) col.classList.remove('drop-hover');
+}
+function kanbanDrop(ev, col) {
+  ev.preventDefault();
+  if (col) col.classList.remove('drop-hover');
+  var status = col ? col.getAttribute('data-status') : '';
+  var oid = _kanbanDragId;
+  try { if (!oid) oid = ev.dataTransfer.getData('text/plain'); } catch(e){}
+  _kanbanDragId = null;
+  if (oid && status) moveOrderToStatus(oid, status);
+}
+
+// Перемещение карточки в новый статус — оптимистично, с откатом при ошибке
+function moveOrderToStatus(orderId, newStatus) {
+  var order = null;
+  for (var i = 0; i < App.orders.length; i++) {
+    if (App.orders[i]['ID'] === orderId) { order = App.orders[i]; break; }
+  }
+  if (!order) return;
+  var prevStatus = order['Статус'];
+  if (prevStatus === newStatus) return;       // ничего не изменилось
+
+  order['Статус'] = newStatus;                // оптимистично
+  filterOrders();                             // мгновенная перерисовка доски
+
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) {
+        order['Статус'] = prevStatus; filterOrders();
+        toast('Ошибка: ' + (resp ? resp.error : ''), 'error');
+        return;
+      }
+      App._dashCache = null;                  // статус влияет на «в работе» на дашборде
+      toast('→ ' + newStatus, 'success');
+    })
+    .withFailureHandler(function(e){
+      order['Статус'] = prevStatus; filterOrders();
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .updateOrderStatus(orderId, newStatus);
 }
 
 function changeOrderStatus(orderId, selectEl) {
