@@ -262,6 +262,15 @@
         <div class="form-row"><label class="form-label">День 1-го цикла ЗП</label><input class="form-input" id="set-cycle-1" type="number" placeholder="5"></div>
         <div class="form-row"><label class="form-label">День 2-го цикла ЗП</label><input class="form-input" id="set-cycle-2" type="number" placeholder="20"></div>
       </div>
+      <div class="settings-card">
+        <div class="settings-card-title">⚙️ Первичная настройка</div>
+        <div class="settings-card-desc">Создаёт все нужные листы и колонки в базе данных. Запустите при первом запуске или после обновления. Безопасно — существующие данные не трогаются.</div>
+        <div id="setup-status" style="font-size:12.5px;color:var(--text2);margin:8px 0 12px;line-height:1.6">Нажмите «Проверить базу», чтобы увидеть состояние.</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-ghost" id="setup-check-btn" onclick="checkSetup()">Проверить базу</button>
+          <button class="btn btn-primary" id="setup-run-btn" onclick="runSetupWizardUI()">Запустить настройку</button>
+        </div>
+      </div>
     </div>
     <div style="margin-top:20px"><button class="btn btn-primary" onclick="saveAllSettings()">Сохранить настройки</button></div>
   </div>

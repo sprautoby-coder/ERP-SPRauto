@@ -1,9 +1,66 @@
 /**
  * Setup.gs — настройка таблиц
- * 
+ *
  * ВАЖНО: runFirstSetup() уже был запущен!
  * Для добавления новых листов используй addNewSheets()
  */
+
+// ─── МАСТЕР ПЕРВОГО ЗАПУСКА (из UI) ─────────────────────────────────────────
+
+/**
+ * Диагностика структуры базы для UI: какие листы есть, каких колонок не хватает.
+ * (Внутренняя версия без safeCall — используется и в мастере.)
+ */
+function getSetupStatus_() {
+  var book = openBook('DATABASE');
+  var allSchemas = Object.assign({}, getDatabaseSchema(), getNewSheetsSchema());
+  var sheets = [];
+  var okCount = 0, issuesCount = 0;
+
+  for (var key in allSchemas) {
+    var tabName = CONFIG.TABS[key];
+    if (!tabName) continue;
+    var sheet = book.getSheetByName(tabName);
+    var entry = { key: key, name: tabName, exists: !!sheet, rows: 0, missing: [] };
+    if (sheet) {
+      var lastCol = sheet.getLastColumn() || 1;
+      var actual  = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+      entry.rows    = Math.max(0, sheet.getLastRow() - 1);
+      entry.missing = allSchemas[key].filter(function(c){ return actual.indexOf(c) < 0; });
+      if (entry.missing.length === 0) okCount++; else issuesCount++;
+    } else {
+      issuesCount++;
+    }
+    sheets.push(entry);
+  }
+  return { sheets: sheets, okCount: okCount, issuesCount: issuesCount, ready: issuesCount === 0 };
+}
+
+/**
+ * Диагностика для UI.
+ */
+function getSetupStatus() {
+  return safeCall(function() { return getSetupStatus_(); });
+}
+
+/**
+ * МАСТЕР ПЕРВОГО ЗАПУСКА. Запускается кнопкой из интерфейса.
+ * Создаёт все недостающие листы и колонки. Полностью идемпотентно —
+ * существующие данные не трогаются. Возвращает отчёт по шагам + статус.
+ */
+function runSetupWizard() {
+  return safeCall(function() {
+    var steps = [];
+    var step = function(label, fn) {
+      try { steps.push({ label: label, result: String(fn()), ok: true }); }
+      catch (e) { steps.push({ label: label, result: e.message, ok: false }); }
+    };
+    step('Базовые листы (сотрудники, услуги, расходы…)', runFirstSetup);
+    step('Листы модуля (заказы, клиенты, материалы, платежи, график…)', addNewSheets);
+    step('Модель оплаты и колонки заказов', migratePaymentModel);
+    return { steps: steps, status: getSetupStatus_() };
+  });
+}
 
 /**
  * ДОБАВИТЬ ТОЛЬКО НОВЫЕ ЛИСТЫ (безопасно — существующие не трогает)

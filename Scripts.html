@@ -1133,6 +1133,62 @@ function loadSettings() {
     .getSettings();
 }
 
+/* ===== МАСТЕР ПЕРВОГО ЗАПУСКА ===== */
+function setupStatusHtml_(st) {
+  if (!st) return '';
+  var rows = (st.sheets || []).map(function(s) {
+    var ok = s.exists && (!s.missing || s.missing.length === 0);
+    var icon = ok ? '<span style="color:var(--success)">✓</span>' : (s.exists ? '<span style="color:var(--warning)">⚠</span>' : '<span style="color:var(--danger)">✗</span>');
+    var note = !s.exists ? ' <span style="color:var(--danger)">— нет листа</span>'
+             : (s.missing && s.missing.length ? ' <span style="color:var(--warning)">— нет колонок: ' + s.missing.join(', ') + '</span>'
+             : ' <span style="color:var(--text3)">· строк: ' + (s.rows||0) + '</span>');
+    return '<div style="padding:1px 0">' + icon + ' ' + s.name + note + '</div>';
+  }).join('');
+  var head = st.ready
+    ? '<div style="color:var(--success);font-weight:600;margin-bottom:6px">✓ База готова к работе</div>'
+    : '<div style="color:var(--warning);font-weight:600;margin-bottom:6px">⚠ Требуется настройка: проблемных листов ' + st.issuesCount + '</div>';
+  return head + rows;
+}
+
+function checkSetup() {
+  var el = document.getElementById('setup-status');
+  if (el) el.textContent = 'Проверяем…';
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { if (el) el.textContent = 'Ошибка: ' + (resp?resp.error:''); return; }
+      if (el) el.innerHTML = setupStatusHtml_(resp.data);
+    })
+    .withFailureHandler(function(e){ if (el) el.textContent = 'Ошибка: ' + e.message; })
+    .getSetupStatus();
+}
+
+function runSetupWizardUI() {
+  var btn = document.getElementById('setup-run-btn');
+  var el  = document.getElementById('setup-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Настраиваем…'; }
+  if (el) el.textContent = 'Создаём листы и колонки…';
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Запустить настройку'; }
+      if (!resp || !resp.ok) { toast('Ошибка настройки: ' + (resp?resp.error:''), 'error'); if (el) el.textContent = 'Ошибка: ' + (resp?resp.error:''); return; }
+      var d = resp.data;
+      var stepsHtml = (d.steps || []).map(function(s){
+        return '<div style="padding:1px 0">' + (s.ok ? '<span style="color:var(--success)">✓</span>' : '<span style="color:var(--danger)">✗</span>') + ' ' + s.label + ' <span style="color:var(--text3)">— ' + s.result + '</span></div>';
+      }).join('');
+      if (el) el.innerHTML = '<div style="font-weight:600;margin-bottom:6px">Выполнено:</div>' + stepsHtml +
+        '<div style="height:10px"></div>' + setupStatusHtml_(d.status);
+      toast('Настройка выполнена', 'success');
+      // сбрасываем кэши — структура могла измениться
+      App._materials = []; App.orders = []; App.clients = []; App._teamList = []; App._dashCache = null; App._debtCache = null;
+    })
+    .withFailureHandler(function(e){
+      if (btn) { btn.disabled = false; btn.textContent = 'Запустить настройку'; }
+      toast('Ошибка: ' + e.message, 'error');
+      if (el) el.textContent = 'Ошибка: ' + e.message;
+    })
+    .runSetupWizard();
+}
+
 function fillSettingsForm(s) {
   var set=function(id,key){var el=document.getElementById(id);if(el&&s[key]!==undefined)el.value=s[key];};
   set('set-company-name','company_name'); set('set-company-slogan','company_slogan');
