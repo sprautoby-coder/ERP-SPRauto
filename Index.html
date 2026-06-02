@@ -151,7 +151,7 @@
         <button class="filter-tab" onclick="setClientFilter('физ', this)">Физ. лица</button>
         <button class="filter-tab" onclick="setClientFilter('юр', this)">Юр. лица</button>
       </div>
-      <select class="form-select" id="clients-source-filter" onchange="filterClients()" style="min-width:130px;height:36px;font-size:13px;">
+      <select class="form-select" id="clients-source-filter" onchange="filterClients()" style="width:180px;flex:0 0 180px;height:38px;font-size:13px;">
         <option value="">Все источники</option>
       </select>
       <!-- Переключатель вида -->
@@ -306,7 +306,7 @@
         <button class="filter-tab" onclick="setOrderStatusFilter('Готов', this)">Готов</button>
         <button class="filter-tab" onclick="setOrderStatusFilter('Выдан', this)">Выданы</button>
       </div>
-      <select class="form-select" id="orders-service-filter" onchange="filterOrders()" style="min-width:130px;height:36px;font-size:13px;">
+      <select class="form-select" id="orders-service-filter" onchange="filterOrders()" style="width:180px;flex:0 0 180px;height:38px;font-size:13px;">
         <option value="">Все услуги</option>
         <option value="Оклейка PPF">Оклейка PPF</option>
         <option value="Тонировка">Тонировка</option>
@@ -663,7 +663,7 @@
         <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
         <input class="search-input" id="mat-search" type="text" placeholder="Поиск по названию плёнки..." oninput="filterMaterials()">
       </div>
-      <select class="form-select" id="mat-cat-filter" onchange="filterMaterials()" style="min-width:180px;height:36px;font-size:13px">
+      <select class="form-select" id="mat-cat-filter" onchange="filterMaterials()" style="width:220px;flex:0 0 220px;height:38px;font-size:13px">
         <option value="">Все категории</option>
         <option>PPF плёнка</option>
         <option>Тонировочная плёнка</option>
