@@ -26,6 +26,7 @@
     <div class="nav-label">Главное</div>
     <a class="nav-item active" data-page="dashboard" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span>Дашборд</span></a>
     <a class="nav-item" data-page="orders" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3h-4.18C14.4 1.84 13.3 1 12 1c-1.3 0-2.4.84-2.82 2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 0c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm2 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg><span>Заказы</span></a>
+    <a class="nav-item" data-page="appointments" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM5 8V6h14v2H5zm2 4h5v5H7v-5z"/></svg><span>Записи</span></a>
     <a class="nav-item" data-page="clients" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg><span>Клиенты</span></a>
     <a class="nav-item" data-page="materials" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-2.18c.07-.44.18-.86.18-1a3 3 0 0 0-6 0c0 .14.11.56.18 1H10C8.9 6 8 6.9 8 8v12c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-7-1a1 1 0 1 1 2 0c0 .14-.05.27-.09.4L14.9 5h-1.81l-.09-.41A1 1 0 0 1 13 5zm7 15H10V8h2v2h6V8h2v12z"/></svg><span>Материалы</span></a>
     <div class="nav-label">Финансы</div>
@@ -782,7 +783,89 @@
     </div>
   </div>
 
+  <!-- КАЛЕНДАРЬ ЗАПИСЕЙ -->
+  <div class="content page" id="page-appointments">
+    <div class="section-header">
+      <div class="apt-datebar">
+        <button class="btn btn-ghost apt-nav" onclick="aptShiftDay(-1)" title="Предыдущий день">‹</button>
+        <input class="form-input apt-date-input" id="apt-date" type="date" onchange="aptOnDatePick()">
+        <button class="btn btn-ghost apt-nav" onclick="aptShiftDay(1)" title="Следующий день">›</button>
+        <button class="btn btn-ghost" onclick="aptGoToday()">Сегодня</button>
+        <div class="apt-daytitle" id="apt-daytitle"></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="loadAppointments(true)">⟲ Обновить</button>
+        <button class="btn btn-primary" onclick="openNewAppointment()">+ Новая запись</button>
+      </div>
+    </div>
+
+    <div class="clients-kpi-row">
+      <div class="clients-kpi-card"><div class="clients-kpi-label">Записей на день</div><div class="clients-kpi-val" id="apt-kpi-count">—</div></div>
+      <div class="clients-kpi-card"><div class="clients-kpi-label">Запланировано</div><div class="clients-kpi-val" id="apt-kpi-planned" style="color:var(--accent)">—</div></div>
+      <div class="clients-kpi-card"><div class="clients-kpi-label">Пришли</div><div class="clients-kpi-val" id="apt-kpi-came" style="color:var(--success)">—</div></div>
+      <div class="clients-kpi-card"><div class="clients-kpi-label">Занятость мастеров</div><div class="clients-kpi-val" id="apt-kpi-masters" style="font-size:14px">—</div></div>
+    </div>
+
+    <div id="apt-masters-load"></div>
+
+    <div class="clients-table-wrap">
+      <table class="clients-table" id="apt-table">
+        <thead><tr>
+          <th style="min-width:90px">Время</th>
+          <th style="min-width:160px">Клиент</th>
+          <th style="min-width:140px">Авто</th>
+          <th style="min-width:150px">Услуга</th>
+          <th style="min-width:130px">Мастер</th>
+          <th style="min-width:120px;text-align:center">Статус</th>
+          <th style="min-width:170px;text-align:center">Действия</th>
+        </tr></thead>
+        <tbody id="apt-tbody"></tbody>
+      </table>
+      <div class="ct-footer" id="apt-footer"></div>
+    </div>
+  </div>
+
 </main>
+
+<!-- МОДАЛКА: ЗАПИСЬ (создание/редактирование) -->
+<div class="modal-dialog-bg" id="modal-appointment" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <div class="modal-title" id="apt-modal-title">Новая запись</div>
+      <button class="modal-close" onclick="closeModal('modal-appointment')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="apt-id">
+      <div style="display:flex;gap:10px">
+        <div class="form-row" style="flex:1"><label class="form-label">Дата *</label><input class="form-input" id="apt-f-date" type="date"></div>
+        <div class="form-row" style="width:120px"><label class="form-label">Время *</label><input class="form-input" id="apt-f-time" type="time"></div>
+        <div class="form-row" style="width:120px"><label class="form-label">Длит., мин</label><input class="form-input" id="apt-f-duration" type="number" min="0" step="15" value="60"></div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Клиент *</label>
+        <input class="form-input" id="apt-f-client" list="apt-clients-list" placeholder="ФИО клиента" oninput="aptClientHint()">
+        <datalist id="apt-clients-list"></datalist>
+      </div>
+      <div style="display:flex;gap:10px">
+        <div class="form-row" style="flex:1"><label class="form-label">Телефон</label><input class="form-input" id="apt-f-phone" type="tel" placeholder="+375 ..."></div>
+        <div class="form-row" style="flex:1"><label class="form-label">Авто</label><input class="form-input" id="apt-f-car" placeholder="Марка, модель"></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <div class="form-row" style="flex:1">
+          <label class="form-label">Услуга</label>
+          <input class="form-input" id="apt-f-service" list="apt-services-list" placeholder="Оклейка / Тонировка ...">
+          <datalist id="apt-services-list"></datalist>
+        </div>
+        <div class="form-row" style="flex:1">
+          <label class="form-label">Мастер</label>
+          <select class="form-select" id="apt-f-master"><option value="">— выбрать —</option></select>
+        </div>
+      </div>
+      <div class="form-row"><label class="form-label">Комментарий</label><input class="form-input" id="apt-f-comment" placeholder="необязательно"></div>
+      <button class="btn btn-primary" style="width:100%;margin-top:6px" id="apt-f-submit" onclick="submitAppointment()">Создать запись</button>
+    </div>
+  </div>
+</div>
 
 <!-- МОДАЛКА: НОВЫЙ КЛИЕНТ -->
 <div class="modal-dialog-bg" id="modal-new-client" onclick="closeModalOnOverlay(event)">

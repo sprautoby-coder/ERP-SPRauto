@@ -41,6 +41,7 @@ var PAGE_TITLES = {
   finance:'Финансы', dds:'ДДС — Движение денег', expenses:'Расходы',
   debt:'Дебиторка', salary:'Расчёт заработной платы',
   team:'Сотрудники', services:'Услуги', inventory:'Склад',
+  appointments:'Записи — календарь',
   materials:'Справочник материалов', settings:'Настройки'
 };
 
@@ -84,6 +85,10 @@ function goPage(name) {
       actionBtn.style.display = 'inline-flex';
       actionBtn.textContent = 'Рассчитать ЗП';
       actionBtn.onclick = function(){ calcSalary(); };
+    } else if (name === 'appointments') {
+      actionBtn.style.display = 'inline-flex';
+      actionBtn.textContent = '+ Новая запись';
+      actionBtn.onclick = function(){ openNewAppointment(); };
     } else {
       actionBtn.style.display = 'none';
     }
@@ -431,6 +436,288 @@ function submitStockOp() {
   else r.stockAdjust(matId, qty, comment);
 }
 
+/* ===== КАЛЕНДАРЬ ЗАПИСЕЙ ===== */
+App._apts = [];
+App._aptDate = null;   // Date — выбранный день
+
+var APT_WEEKDAYS = ['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
+var APT_STATUS_META = {
+  'Запланирована': { cls: 'apt-st-plan', color: 'var(--accent)' },
+  'Пришёл':        { cls: 'apt-st-came', color: 'var(--success)' },
+  'Отменена':      { cls: 'apt-st-cancel', color: 'var(--text3)' },
+};
+
+function aptPad_(n){ return String(n).padStart(2,'0'); }
+function aptFmtDmy(d){ return aptPad_(d.getDate())+'.'+aptPad_(d.getMonth()+1)+'.'+d.getFullYear(); }
+function aptFmtIso(d){ return d.getFullYear()+'-'+aptPad_(d.getMonth()+1)+'-'+aptPad_(d.getDate()); }
+function aptParseIso(s){ var m = String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2]-1, +m[3]) : null; }
+
+function loadAppointments(force) {
+  var tbody = document.getElementById('apt-tbody');
+  if (!tbody) return;
+  if (!App._aptDate) App._aptDate = new Date();
+  // синхронизируем поле даты и заголовок дня
+  var dateInput = document.getElementById('apt-date');
+  if (dateInput) dateInput.value = aptFmtIso(App._aptDate);
+  var dt = document.getElementById('apt-daytitle');
+  if (dt) dt.textContent = APT_WEEKDAYS[App._aptDate.getDay()];
+
+  // обеспечим список сотрудников для выпадашки мастеров
+  if (!App.employees || !App.employees.length) {
+    google.script.run.withSuccessHandler(function(resp){
+      App.employees = (resp && resp.ok && resp.data) ? resp.data : [];
+    }).getEmployees(true);
+  }
+
+  tbody.innerHTML = '<tr><td colspan="7" class="ct-loading"><div class="kpi-skeleton" style="min-height:40px;margin:4px 0"></div></td></tr>';
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--danger)">' + (resp ? resp.error : 'Ошибка') + '</td></tr>';
+        return;
+      }
+      App._apts = resp.data || [];
+      renderAppointments();
+    })
+    .withFailureHandler(function(e){
+      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--danger)">' + e.message + '</td></tr>';
+    })
+    .getAppointments(aptFmtDmy(App._aptDate));
+}
+
+function renderAppointments() {
+  var tbody  = document.getElementById('apt-tbody');
+  var footer = document.getElementById('apt-footer');
+  if (!tbody) return;
+  var list = App._apts || [];
+
+  // KPI
+  var k = function(id, v){ var e = document.getElementById(id); if (e) e.textContent = v; };
+  var planned = list.filter(function(a){ return a.status === 'Запланирована'; }).length;
+  var came    = list.filter(function(a){ return a.status === 'Пришёл'; }).length;
+  k('apt-kpi-count', list.length);
+  k('apt-kpi-planned', planned);
+  k('apt-kpi-came', came);
+  // занятость мастеров — сумма минут по активным (не отменённым) записям
+  var byMaster = {};
+  list.forEach(function(a){
+    if (a.status === 'Отменена') return;
+    var m = a.master || '—';
+    byMaster[m] = (byMaster[m] || 0) + (Number(a.duration) || 0);
+  });
+  var masters = Object.keys(byMaster);
+  k('apt-kpi-masters', masters.length
+    ? masters.map(function(m){ return m + ' · ' + Math.round(byMaster[m]/60*10)/10 + 'ч'; }).join(', ')
+    : '—');
+
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text2)">На этот день записей нет. <a href="#" onclick="openNewAppointment();return false" style="color:var(--accent)">Добавить запись</a></td></tr>';
+    if (footer) footer.textContent = '';
+    return;
+  }
+
+  tbody.innerHTML = list.map(function(a){
+    var meta = APT_STATUS_META[a.status] || APT_STATUS_META['Запланирована'];
+    var cancelled = a.status === 'Отменена';
+    var badge = '<span class="apt-badge ' + meta.cls + '">' + a.status + '</span>';
+    var orderLink = a.orderId ? ' <span style="font-size:10px;color:var(--text3)">→' + a.orderId + '</span>' : '';
+    var acts = '';
+    if (a.status === 'Запланирована') {
+      acts += '<button class="apt-act" style="background:var(--green-soft);color:var(--success)" onclick="aptSetStatus(\'' + a.id + '\',\'Пришёл\')" title="Отметить приход">Пришёл</button>';
+      acts += '<button class="apt-act" style="background:var(--bg-card2);color:var(--text2)" onclick="aptSetStatus(\'' + a.id + '\',\'Отменена\')" title="Отменить">✕</button>';
+    } else {
+      acts += '<button class="apt-act" style="background:var(--bg-card2);color:var(--text2)" onclick="aptSetStatus(\'' + a.id + '\',\'Запланирована\')" title="Вернуть в план">↩</button>';
+    }
+    acts += '<button class="apt-act" style="background:var(--bg-card2);color:var(--text)" onclick="openEditAppointment(\'' + a.id + '\')" title="Редактировать">✎</button>';
+    acts += '<button class="apt-act" style="background:var(--red-soft);color:var(--danger)" onclick="aptDelete(\'' + a.id + '\')" title="Удалить">🗑</button>';
+    var rowStyle = cancelled ? 'opacity:.55;text-decoration:line-through' : '';
+    return '<tr style="' + rowStyle + '">' +
+      '<td style="font-weight:700">' + (a.time || '—') + '<div style="font-size:10px;color:var(--text3);font-weight:400">' + (a.duration || 60) + ' мин</div></td>' +
+      '<td><div style="font-weight:500">' + (a.client || '—') + orderLink + '</div>' + (a.phone ? '<div style="font-size:11px;color:var(--text3)">' + a.phone + '</div>' : '') + '</td>' +
+      '<td style="font-size:12px;color:var(--text2)">' + (a.car || '—') + '</td>' +
+      '<td style="font-size:13px">' + (a.service || '—') + '</td>' +
+      '<td style="font-size:13px">' + (a.master || '<span style="color:var(--text3)">не назначен</span>') + '</td>' +
+      '<td style="text-align:center">' + badge + '</td>' +
+      '<td style="text-align:center;white-space:nowrap">' + acts + '</td>' +
+    '</tr>';
+  }).join('');
+  if (footer) footer.textContent = 'Всего записей: ' + list.length;
+}
+
+function aptShiftDay(delta) {
+  if (!App._aptDate) App._aptDate = new Date();
+  App._aptDate = new Date(App._aptDate.getFullYear(), App._aptDate.getMonth(), App._aptDate.getDate() + delta);
+  loadAppointments(true);
+}
+function aptGoToday() { App._aptDate = new Date(); loadAppointments(true); }
+function aptOnDatePick() {
+  var v = (document.getElementById('apt-date') || {}).value;
+  var d = aptParseIso(v);
+  if (d) { App._aptDate = d; loadAppointments(true); }
+}
+
+function aptFillFormLists() {
+  // мастера — из сотрудников (приоритет оклейщик/тонировщик, иначе все)
+  var sel = document.getElementById('apt-f-master');
+  if (sel) {
+    var emps = App.employees || [];
+    var prev = sel.value;
+    sel.innerHTML = '<option value="">— выбрать —</option>';
+    var add = function(list){ list.forEach(function(e){
+      var name = e['ФИО'] || e['Имя'] || '';
+      if (!name) return;
+      var o = document.createElement('option'); o.value = name; o.textContent = name; sel.appendChild(o);
+    }); };
+    var masters = emps.filter(function(e){
+      var roles = (e['Основная должность'] || '') + ',' + (e['Доп. роли'] || '');
+      return /оклейщик|тонировщик|мастер/i.test(roles);
+    });
+    add(masters.length ? masters : emps);
+    sel.value = prev;
+  }
+  // клиенты — datalist
+  var dl = document.getElementById('apt-clients-list');
+  if (dl) {
+    dl.innerHTML = '';
+    (App.clients || []).forEach(function(c){
+      var name = c['ФИО'] || c['Название организации'] || c['Имя'] || '';
+      if (!name) return;
+      var o = document.createElement('option'); o.value = name; dl.appendChild(o);
+    });
+  }
+  // услуги — datalist
+  var sdl = document.getElementById('apt-services-list');
+  if (sdl) {
+    sdl.innerHTML = '';
+    ['Оклейка PPF','Тонировка','Антихром','Защита фар','Бронирование','Полировка'].forEach(function(s){
+      var o = document.createElement('option'); o.value = s; sdl.appendChild(o);
+    });
+  }
+}
+
+// подставить телефон/авто, если ввели имя существующего клиента
+function aptClientHint() {
+  var name = (document.getElementById('apt-f-client') || {}).value || '';
+  if (!name) return;
+  var c = (App.clients || []).find(function(x){
+    return (x['ФИО'] || x['Название организации'] || x['Имя'] || '') === name;
+  });
+  if (!c) return;
+  var ph = document.getElementById('apt-f-phone');
+  var car = document.getElementById('apt-f-car');
+  if (ph && !ph.value) ph.value = c['Телефон'] || '';
+  if (car && !car.value) car.value = c['Авто'] || c['Автомобиль'] || '';
+}
+
+function openNewAppointment() {
+  document.getElementById('apt-modal-title').textContent = 'Новая запись';
+  document.getElementById('apt-f-submit').textContent = 'Создать запись';
+  document.getElementById('apt-id').value = '';
+  document.getElementById('apt-f-date').value = aptFmtIso(App._aptDate || new Date());
+  document.getElementById('apt-f-time').value = '';
+  document.getElementById('apt-f-duration').value = 60;
+  document.getElementById('apt-f-client').value = '';
+  document.getElementById('apt-f-phone').value = '';
+  document.getElementById('apt-f-car').value = '';
+  document.getElementById('apt-f-service').value = '';
+  document.getElementById('apt-f-comment').value = '';
+  // подгрузим клиентов, если их ещё нет (для подсказок)
+  if (!App.clients || !App.clients.length) {
+    google.script.run.withSuccessHandler(function(resp){
+      App.clients = (resp && resp.ok && resp.data) ? resp.data : [];
+      aptFillFormLists();
+    }).getClients({});
+  }
+  aptFillFormLists();
+  document.getElementById('apt-f-master').value = '';
+  openModal('modal-appointment');
+}
+
+function openEditAppointment(id) {
+  var a = (App._apts || []).find(function(x){ return String(x.id) === String(id); });
+  if (!a) return;
+  document.getElementById('apt-modal-title').textContent = 'Редактирование записи';
+  document.getElementById('apt-f-submit').textContent = 'Сохранить';
+  document.getElementById('apt-id').value = a.id;
+  var d = a.date ? a.date.split('.') : null;
+  document.getElementById('apt-f-date').value = (d && d.length === 3) ? (d[2]+'-'+d[1]+'-'+d[0]) : aptFmtIso(App._aptDate || new Date());
+  document.getElementById('apt-f-time').value = a.time || '';
+  document.getElementById('apt-f-duration').value = a.duration || 60;
+  document.getElementById('apt-f-client').value = a.client || '';
+  document.getElementById('apt-f-phone').value = a.phone || '';
+  document.getElementById('apt-f-car').value = a.car || '';
+  document.getElementById('apt-f-service').value = a.service || '';
+  document.getElementById('apt-f-comment').value = a.comment || '';
+  aptFillFormLists();
+  document.getElementById('apt-f-master').value = a.master || '';
+  openModal('modal-appointment');
+}
+
+function submitAppointment() {
+  var id = document.getElementById('apt-id').value;
+  var isoDate = document.getElementById('apt-f-date').value;
+  var d = aptParseIso(isoDate);
+  var payload = {
+    date:     d ? aptFmtDmy(d) : '',
+    time:     document.getElementById('apt-f-time').value.trim(),
+    duration: Number(document.getElementById('apt-f-duration').value) || 60,
+    client:   document.getElementById('apt-f-client').value.trim(),
+    phone:    document.getElementById('apt-f-phone').value.trim(),
+    car:      document.getElementById('apt-f-car').value.trim(),
+    service:  document.getElementById('apt-f-service').value.trim(),
+    master:   document.getElementById('apt-f-master').value,
+    comment:  document.getElementById('apt-f-comment').value.trim(),
+  };
+  if (!payload.date) { toast('Укажите дату', 'error'); return; }
+  if (!payload.time) { toast('Укажите время', 'error'); return; }
+  if (!payload.client) { toast('Укажите клиента', 'error'); return; }
+
+  var btn = document.getElementById('apt-f-submit');
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+  var done = function(resp){
+    if (btn) btn.disabled = false;
+    if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); if (btn) btn.textContent = id ? 'Сохранить' : 'Создать запись'; return; }
+    toast(id ? 'Запись обновлена' : 'Запись создана', 'success');
+    closeModal('modal-appointment');
+    // если сохранили на просматриваемый день — перезагрузим; иначе перейдём на день записи
+    var savedDate = aptParseIso(isoDate);
+    if (savedDate) App._aptDate = savedDate;
+    loadAppointments(true);
+  };
+  var fail = function(e){ if (btn) { btn.disabled = false; btn.textContent = id ? 'Сохранить' : 'Создать запись'; } toast('Ошибка: ' + e.message, 'error'); };
+
+  var r = google.script.run.withSuccessHandler(done).withFailureHandler(fail);
+  if (id) r.updateAppointment(id, payload);
+  else r.createAppointment(payload);
+}
+
+function aptSetStatus(id, status) {
+  // оптимистично
+  var a = (App._apts || []).find(function(x){ return String(x.id) === String(id); });
+  var prev = a ? a.status : null;
+  if (a) { a.status = status; renderAppointments(); }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { if (a) { a.status = prev; renderAppointments(); } toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); }
+    })
+    .withFailureHandler(function(e){ if (a) { a.status = prev; renderAppointments(); } toast('Ошибка: ' + e.message, 'error'); })
+    .setAppointmentStatus(id, status);
+}
+
+function aptDelete(id) {
+  var a = (App._apts || []).find(function(x){ return String(x.id) === String(id); });
+  uiConfirm('Удалить запись' + (a ? ' «' + a.client + ' ' + a.time + '»' : '') + '?', function(){
+    google.script.run
+      .withSuccessHandler(function(resp){
+        if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+        toast('Запись удалена', 'success');
+        loadAppointments(true);
+      })
+      .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+      .deleteAppointment(id);
+  });
+}
+
 /* ===== ВАЛЮТА (white-label) ===== */
 var CUR = 'Br';   // символ валюты — обновляется из настроек в applyBrand()
 var CURRENCY_SYMBOLS = { BYN: 'Br', RUB: '₽', USD: '$', EUR: '€' };
@@ -501,6 +788,7 @@ function loadCurrentPage() {
   if (App.currentPage === 'orders')    loadOrders(force);
   if (App.currentPage === 'materials') loadMaterials(force);
   if (App.currentPage === 'inventory') loadInventory(force);
+  if (App.currentPage === 'appointments') loadAppointments(force);
   if (App.currentPage === 'settings')  loadSettings();
   if (App.currentPage === 'expenses')  loadExpenses();
   if (App.currentPage === 'finance')   loadFinance();
