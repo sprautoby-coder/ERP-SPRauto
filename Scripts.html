@@ -314,10 +314,18 @@ function closeModalOnOverlay(e) {
   if (e.target === e.currentTarget) closeModal(e.currentTarget.id);
 }
 
+/* ===== ВАЛЮТА (white-label) ===== */
+var CUR = 'Br';   // символ валюты — обновляется из настроек в applyBrand()
+var CURRENCY_SYMBOLS = { BYN: 'Br', RUB: '₽', USD: '$', EUR: '€' };
+function money(n) { return Math.round(Number(n) || 0).toLocaleString('ru') + ' ' + CUR; }
+
 /* ===== БРЕНД ===== */
 function applyBrand(brand) {
   if (!brand) return;
   App.brand = brand;
+  if (brand.currency && CURRENCY_SYMBOLS[brand.currency]) CUR = CURRENCY_SYMBOLS[brand.currency];
+  // Статичные подписи валюты в формах (<span class="cur">) — под выбранную валюту
+  document.querySelectorAll('.cur').forEach(function(el){ el.textContent = CUR; });
   var nm = document.getElementById('brand-name');
   if (nm) nm.textContent = brand.companyName || 'SPRauto';
   var sl = document.getElementById('brand-slogan');
@@ -495,7 +503,7 @@ function renderClientsKpi(clients) {
   set('ckpi-total', total);
   set('ckpi-fiz',   fiz);
   set('ckpi-yur',   yur);
-  set('ckpi-sum',   sum ? sum.toLocaleString('ru') + ' Br' : '—');
+  set('ckpi-sum',   sum ? sum.toLocaleString('ru') + ' ' + CUR : '—');
 }
 
 /* ===== КЛИЕНТЫ: ФИЛЬТР ИСТОЧНИКОВ ===== */
@@ -573,7 +581,7 @@ function renderClientsTable(clients) {
     var sum       = Number(c['Сумма заказов']) || 0;
     var autoLabel = c['_autoLabel'] || '—';
     var isYur     = type === 'юр';
-    var sumStr    = sum ? sum.toLocaleString('ru') + ' Br' : '—';
+    var sumStr    = sum ? sum.toLocaleString('ru') + ' ' + CUR : '—';
 
     var ini = name.split(' ').slice(0,2).map(function(s){
       return (s && s[0] ? s[0].toUpperCase() : '');
@@ -723,7 +731,7 @@ function renderClientCard(c, vehicles) {
       '<div class="info-card">' +
         '<div class="info-card-title">Статистика</div>' +
         infoRow('Заказов', c['Всего заказов'] || '0') +
-        infoRow('Сумма', c['Сумма заказов'] ? Number(c['Сумма заказов']).toLocaleString('ru') + ' Br' : '0 Br') +
+        infoRow('Сумма', c['Сумма заказов'] ? Number(c['Сумма заказов']).toLocaleString('ru') + ' ' + CUR : '0 ' + CUR) +
         infoRow('Последний заказ', c['Последний заказ'] || '—') +
       '</div>' +
     '</div>' +
@@ -1005,7 +1013,7 @@ function renderTeam(employees) {
       (phone?'<div class="team-role" style="margin-top:2px;">'+phone+'</div>':'') +
       '</div></div>' +
       '<div class="team-stats">' +
-        '<div class="team-stat"><div class="team-stat-label">Ставка</div><div class="team-stat-value">'+Number(salary).toLocaleString('ru')+' Br</div></div>' +
+        '<div class="team-stat"><div class="team-stat-label">Ставка</div><div class="team-stat-value">'+Number(salary).toLocaleString('ru')+' ' + CUR + '</div></div>' +
         '<div class="team-stat"><div class="team-stat-label">% бонуса</div><div class="team-stat-value">'+bonus+'%</div></div>' +
       '</div>' +
       '<div style="display:flex;gap:6px;margin-top:10px;">' +
@@ -1208,7 +1216,7 @@ function saveAllSettings() {
   if(App.pendingLogoDataUrl) s['logo_dataurl']=App.pendingLogoDataUrl;
   toast('Сохраняем...','info');
   google.script.run
-    .withSuccessHandler(function(resp){if(!resp||!resp.ok){toast('Ошибка','error');return;}toast('✅ Сохранено','success');App.pendingLogoDataUrl=null;if(App.brand){App.brand.companyName=s['company_name']||App.brand.companyName;App.brand.companySlogan=s['company_slogan']||App.brand.companySlogan;if(s['logo_dataurl'])App.brand.logoDataUrl=s['logo_dataurl'];}applyBrand(App.brand);})
+    .withSuccessHandler(function(resp){if(!resp||!resp.ok){toast('Ошибка','error');return;}toast('✅ Сохранено','success');App.pendingLogoDataUrl=null;if(App.brand){App.brand.companyName=s['company_name']||App.brand.companyName;App.brand.companySlogan=s['company_slogan']||App.brand.companySlogan;if(s['logo_dataurl'])App.brand.logoDataUrl=s['logo_dataurl'];if(s['currency'])App.brand.currency=s['currency'];}applyBrand(App.brand);if(App.currentPage==='orders')loadOrders(true);})
     .withFailureHandler(function(e){toast('Ошибка: '+e.message,'error');})
     .saveSettings(s);
 }
@@ -1271,7 +1279,7 @@ function loadOrdersKpi() {
     if (o['Статус'] === 'В работе' || o['Статус'] === 'Новый') inWork++;
   });
   var avg = totalCount > 0 ? totalRevenue / totalCount : 0;
-  var fmt = function(n){ return Math.round(n).toLocaleString('ru') + ' Br'; };
+  var fmt = function(n){ return Math.round(n).toLocaleString('ru') + ' ' + CUR; };
   var el = function(id, v){ var e = document.getElementById(id); if(e) e.textContent = v; };
   el('okpi-total',   totalCount);
   el('okpi-revenue', fmt(totalRevenue));
@@ -1371,7 +1379,7 @@ function renderOrdersTable(orders) {
     if (isPaid) {
       payBadge = '<span style="font-size:11px;background:var(--green-soft);color:var(--success);padding:2px 7px;border-radius:10px;">✓ оплачен</span>';
     } else if (payStatus === 'Частично') {
-      payBadge = '<span style="font-size:11px;background:var(--blue-soft);color:var(--blue);padding:2px 7px;border-radius:10px;" title="Оплачено ' + paid.toLocaleString('ru') + ' из ' + price.toLocaleString('ru') + ' Br">рассрочка ' + Math.round(price ? paid/price*100 : 0) + '%</span>';
+      payBadge = '<span style="font-size:11px;background:var(--blue-soft);color:var(--blue);padding:2px 7px;border-radius:10px;" title="Оплачено ' + paid.toLocaleString('ru') + ' из ' + price.toLocaleString('ru') + ' ' + CUR + '">рассрочка ' + Math.round(price ? paid/price*100 : 0) + '%</span>';
     } else if (payType === 'Отсрочка') {
       payBadge = '<span style="font-size:11px;background:var(--yellow-soft);color:var(--warning);padding:2px 7px;border-radius:10px;">отсрочка</span>';
     } else if (payType === 'Рассрочка') {
@@ -1413,7 +1421,7 @@ function renderOrdersTable(orders) {
         '<div style="font-size:11px;color:var(--text-secondary)">' + (o['Госномер'] || '') + '</div>' +
       '</td>' +
       '<td style="font-size:13px">' + (o['Услуга'] || '') + '</td>' +
-      '<td style="text-align:right;font-weight:600">' + price.toLocaleString('ru') + ' Br</td>' +
+      '<td style="text-align:right;font-weight:600">' + price.toLocaleString('ru') + ' ' + CUR + '</td>' +
       '<td style="text-align:center">' + payBadge + payDates + '</td>' +
       '<td style="text-align:center"><span style="font-size:12px;font-weight:600;color:' + color + '">' + status + '</span></td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + (o['Менеджер'] || '—') + '</td>' +
@@ -1483,7 +1491,7 @@ function renderOrdersKanban(orders) {
         ' onclick="openOrderCard(\'' + oid + '\')">' +
         '<div class="kanban-card-top">' +
           '<span class="kanban-card-num">' + (o['Номер договора'] || oid) + '</span>' +
-          '<span class="kanban-card-sum">' + price.toLocaleString('ru') + ' Br</span>' +
+          '<span class="kanban-card-sum">' + price.toLocaleString('ru') + ' ' + CUR + '</span>' +
         '</div>' +
         '<div class="kanban-card-client">' + (o['Клиент'] || '—') +
           (isLegal ? ' <span class="kanban-badge" style="background:var(--purple-soft);color:var(--purple)">ЮЛ</span>' : '') +
@@ -1502,7 +1510,7 @@ function renderOrdersKanban(orders) {
         ' ondrop="kanbanDrop(event, this)">' +
         '<div class="kanban-col-head"><span class="kanban-dot" style="background:' + color + '"></span>' + status +
           '<span class="kanban-count">' + list.length + '</span></div>' +
-        '<div class="kanban-col-sum">' + Math.round(sum).toLocaleString('ru') + ' Br</div>' +
+        '<div class="kanban-col-sum">' + Math.round(sum).toLocaleString('ru') + ' ' + CUR + '</div>' +
         '<div class="kanban-col-body">' + (cards || '<div class="kanban-empty">Перетащите сюда</div>') + '</div>' +
       '</div>';
   });
@@ -1664,7 +1672,7 @@ function addMaterialLine() {
       '<option value="расход">расход</option>' +
       '<option value="остаток">остаток</option>' +
     '</select>' +
-    '<span class="line-item-cost" id="mat-cost-' + idx + '" style="min-width:60px;text-align:right;font-size:12px">0 Br</span>' +
+    '<span class="line-item-cost" id="mat-cost-' + idx + '" style="min-width:60px;text-align:right;font-size:12px">0 ' + CUR + '</span>' +
     '<button class="line-item-remove" onclick="removeMaterialLine(' + idx + ')">✕</button>';
 
   list.appendChild(row);
@@ -1706,7 +1714,7 @@ function onMaterialChange(idx) {
 
   var costEl = document.getElementById('mat-cost-' + idx);
   if (costEl) {
-    costEl.textContent = m.cost + ' Br';
+    costEl.textContent = m.cost + ' ' + CUR;
     costEl.style.color = m.type === 'остаток' ? 'var(--text3)' : 'var(--success)';
   }
   recalcOrderPreview();
@@ -1743,7 +1751,7 @@ function addExpenseLine() {
     '<datalist id="exp-hints-' + idx + '">' + dOpts + '</datalist>' +
     '<input class="line-item-amount" type="number" placeholder="сумма" min="0" step="0.01" ' +
       'style="max-width:100px" oninput="onExpenseChange(' + idx + ')">' +
-    '<span style="font-size:12px;color:var(--text3)">Br</span>' +
+    '<span style="font-size:12px;color:var(--text3)">' + CUR + '</span>' +
     '<button class="line-item-remove" onclick="removeExpenseLine(' + idx + ')">✕</button>';
 
   list.appendChild(row);
@@ -1836,8 +1844,8 @@ function recalcOrderPreview() {
   // Показываем итоги строк
   var matTotEl = document.getElementById('prev-mat-total');
   var expTotEl = document.getElementById('prev-exp-total');
-  if (matTotEl) matTotEl.textContent = Math.round(totalMat * 100) / 100 + ' Br';
-  if (expTotEl) expTotEl.textContent = Math.round(totalExp * 100) / 100 + ' Br';
+  if (matTotEl) matTotEl.textContent = Math.round(totalMat * 100) / 100 + ' ' + CUR;
+  if (expTotEl) expTotEl.textContent = Math.round(totalExp * 100) / 100 + ' ' + CUR;
 
   if (!price) { var p = document.getElementById('ord-finance-preview'); if(p) p.style.display = 'none'; return; }
 
@@ -1850,10 +1858,10 @@ function recalcOrderPreview() {
   var mstrBonus  = mstrCount > 0 ? gross * 0.35 / mstrCount : 0;
   var margin     = gross - (mgrCount > 0 ? gross * 0.10 : 0) - (mstrCount > 0 ? gross * 0.35 : 0);
 
-  document.getElementById('prev-gross').textContent  = fmt(gross)     + ' Br';
-  document.getElementById('prev-mgr').textContent    = fmt(mgrBonus)  + ' Br';
-  document.getElementById('prev-master').textContent = fmt(mstrBonus) + ' Br';
-  document.getElementById('prev-margin').textContent = fmt(margin)    + ' Br';
+  document.getElementById('prev-gross').textContent  = fmt(gross)     + ' ' + CUR;
+  document.getElementById('prev-mgr').textContent    = fmt(mgrBonus)  + ' ' + CUR;
+  document.getElementById('prev-master').textContent = fmt(mstrBonus) + ' ' + CUR;
+  document.getElementById('prev-margin').textContent = fmt(margin)    + ' ' + CUR;
   var p = document.getElementById('ord-finance-preview'); if(p) p.style.display = 'block';
 }
 
@@ -2021,7 +2029,7 @@ function renderMaterialsTable(list) {
   tbody.innerHTML = list.map(function(m) {
     var unit      = m['Единица']      || '—';
     var rollWidth = m['Ширина рулона'] ? m['Ширина рулона'] + ' м' : '—';
-    var price     = m['Цена'] ? Number(m['Цена']).toLocaleString('ru') + ' Br' : '—';
+    var price     = m['Цена'] ? Number(m['Цена']).toLocaleString('ru') + ' ' + CUR : '—';
     var active    = m['Активен'] !== 'Нет';
     var id        = m['ID'] || '';
     var ellip = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
@@ -2252,7 +2260,7 @@ function onDashDateEdit() { renderDashboard(); }
 function renderDashData_(d) {
   var kpi = document.getElementById('dash-kpi');
   var k = d.kpi || {};
-  var fmt = function(n){ return (Math.round(Number(n)*100)/100).toLocaleString('ru') + ' Br'; };
+  var fmt = function(n){ return (Math.round(Number(n)*100)/100).toLocaleString('ru') + ' ' + CUR; };
   if (kpi) kpi.innerHTML =
     kpiCard('Выручка',        fmt(k.revenue),     'var(--accent)',   '💰') +
     kpiCard('Валовая прибыль',fmt(k.grossProfit),  'var(--success)', '📈') +
@@ -2292,7 +2300,7 @@ function renderDebtAlert_(rows) {
   var el = document.getElementById('dash-debt-alert');
   if (!el) return;
   if (!rows || !rows.length) { el.innerHTML = ''; return; }
-  var fmt  = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' Br'; };
+  var fmt  = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
   var overdue    = rows.filter(function(r){ return r.isOverdue; });
   var totalRem   = rows.reduce(function(s, r){ return s + (Number(r.remaining)||0); }, 0);
   var overdueSum = overdue.reduce(function(s, r){ return s + (Number(r.remaining)||0); }, 0);
@@ -2369,7 +2377,7 @@ function renderRecentOrders(orders, totalCount) {
         '<div style="font-size:11px;color:var(--text3)">' + (o.phone || '') + '</div></td>' +
       '<td><div style="font-size:13px">' + carLine + '</div></td>' +
       '<td style="font-size:12px">' + (o.service || '') + '</td>' +
-      '<td style="font-weight:600;text-align:right;white-space:nowrap">' + Number(o.price||0).toLocaleString('ru') + ' Br</td>' +
+      '<td style="font-weight:600;text-align:right;white-space:nowrap">' + Number(o.price||0).toLocaleString('ru') + ' ' + CUR + '</td>' +
       '<td style="text-align:center">' + payBadge(o) + '</td>' +
       '<td style="text-align:center"><span style="font-size:11px;font-weight:600;color:' + statusColor + '">' + (o.status || '') + '</span></td>' +
     '</tr>';
@@ -2387,7 +2395,7 @@ function renderRecentOrders(orders, totalCount) {
 function loadFinance() {
   var range = getPeriodRangeFromUI('fin');
 
-  var fmtBr = function(n){ return (Math.round(Number(n||0)*100)/100).toLocaleString('ru') + ' Br'; };
+  var fmtBr = function(n){ return (Math.round(Number(n||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
 
   google.script.run
     .withSuccessHandler(function(resp) {
@@ -2606,7 +2614,7 @@ function renderExpensesTable(list) {
       '<td style="color:var(--text3);font-size:12px;white-space:nowrap">' + (e['Дата'] || '—') + '</td>' +
       '<td><span style="font-size:11px;padding:2px 8px;border-radius:12px;background:var(--bg-hover)">' + (e['Категория'] || '—') + '</span></td>' +
       '<td style="font-size:13px">' + (e['Описание'] || '—') + '</td>' +
-      '<td style="text-align:right;font-weight:600;white-space:nowrap">' + sum.toLocaleString('ru') + ' Br</td>' +
+      '<td style="text-align:right;font-weight:600;white-space:nowrap">' + sum.toLocaleString('ru') + ' ' + CUR + '</td>' +
       '<td style="font-size:12px;color:var(--text3)">' + (e['Способ оплаты'] || '') + '</td>' +
       '<td style="text-align:right">' +
         '<button class="btn btn-ghost" style="padding:2px 8px;font-size:11px;color:var(--danger)" onclick="deleteExp(\'' + e['ID'] + '\')">Удалить</button>' +
@@ -2614,7 +2622,7 @@ function renderExpensesTable(list) {
     '</tr>';
   }).join('');
 
-  if (footer) footer.textContent = 'Записей: ' + list.length + ' · Итого: ' + total.toLocaleString('ru') + ' Br';
+  if (footer) footer.textContent = 'Записей: ' + list.length + ' · Итого: ' + total.toLocaleString('ru') + ' ' + CUR;
 }
 
 function updateExpensesKpi(list, compare) {
@@ -2631,7 +2639,7 @@ function updateExpensesKpi(list, compare) {
   var mkt   = sum(list, ['Маркетинг']);
   var trans = sum(list, ['Транспорт']);
 
-  var fmt = function(n){ return Math.round(n).toLocaleString('ru') + ' Br'; };
+  var fmt = function(n){ return Math.round(n).toLocaleString('ru') + ' ' + CUR; };
   var set = function(id,v){ var el=document.getElementById(id); if(el) el.textContent=v; };
   set('exp-total',    fmt(total));
   set('exp-fixed',    fmt(fixed));
@@ -2751,7 +2759,7 @@ function renderDebtTable(rows) {
     if (r.beznal === 'Частично') partialCount++;
   });
 
-  var fmt = function(n){ return (Math.round(n*100)/100).toLocaleString('ru') + ' Br'; };
+  var fmt = function(n){ return (Math.round(n*100)/100).toLocaleString('ru') + ' ' + CUR; };
   var set = function(id, v){ var el = document.getElementById(id); if (el) el.textContent = v; };
   set('debt-total',   fmt(totalRemaining));
   set('debt-count',   rows.length);
@@ -2908,7 +2916,7 @@ function submitNewService() {
 
 function loadDDS() {
   var range = getPeriodRangeFromUI('dds');
-  var fmt    = function(n){ return (Number(n)||0).toLocaleString('ru') + ' Br'; };
+  var fmt    = function(n){ return (Number(n)||0).toLocaleString('ru') + ' ' + CUR; };
   var set    = function(id, v, color) {
     var el = document.getElementById(id);
     if (!el) return;
@@ -2943,7 +2951,7 @@ function loadDDS() {
         ? d.nalRows.map(function(r) {
             return '<tr><td style="font-size:11px;color:var(--text3)">' + (r.date||'') + '</td>' +
               '<td style="font-size:12px">' + (r.desc||'') + '</td>' +
-              '<td style="text-align:right;font-weight:600;color:var(--success)">' + (Number(r.amount)||0).toLocaleString('ru') + ' Br</td></tr>';
+              '<td style="text-align:right;font-weight:600;color:var(--success)">' + (Number(r.amount)||0).toLocaleString('ru') + ' ' + CUR + '</td></tr>';
           }).join('')
         : '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:12px">Нет нал оплат</td></tr>';
 
@@ -2953,8 +2961,8 @@ function loadDDS() {
         ? d.beznalRows.map(function(r) {
             return '<tr><td style="font-size:11px;color:var(--text3)">' + (r.date||'') + '</td>' +
               '<td style="font-size:12px">' + (r.desc||'') +
-                '<div style="font-size:10px;color:var(--text3)">−15% = ' + (Number(r.fee)||0).toFixed(2) + ' Br</div></td>' +
-              '<td style="text-align:right;font-weight:600;color:var(--accent)">' + (Number(r.net)||0).toLocaleString('ru') + ' Br</td></tr>';
+                '<div style="font-size:10px;color:var(--text3)">−15% = ' + (Number(r.fee)||0).toFixed(2) + ' ' + CUR + '</div></td>' +
+              '<td style="text-align:right;font-weight:600;color:var(--accent)">' + (Number(r.net)||0).toLocaleString('ru') + ' ' + CUR + '</td></tr>';
           }).join('')
         : '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:12px">Нет безнал оплат</td></tr>';
 
@@ -2965,7 +2973,7 @@ function loadDDS() {
         ? allExp.map(function(r) {
             return '<tr><td style="font-size:11px;color:var(--text3)">' + (r.date||'') + '</td>' +
               '<td style="font-size:11px"><span style="padding:1px 5px;border-radius:6px;background:var(--bg-hover)">' + (r.category||'') + '</span></td>' +
-              '<td style="text-align:right;font-weight:600;color:var(--danger)">' + (Number(r.amount)||0).toLocaleString('ru') + ' Br</td></tr>';
+              '<td style="text-align:right;font-weight:600;color:var(--danger)">' + (Number(r.amount)||0).toLocaleString('ru') + ' ' + CUR + '</td></tr>';
           }).join('')
         : '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:12px">Нет расходов</td></tr>';
 
@@ -3020,13 +3028,13 @@ function openPayOrderModal(orderId, clientName, price, currentDueDate) {
       if (desc) desc.innerHTML =
         '<div style="font-weight:600;margin-bottom:4px">' + (clientName||'') + '</div>' +
         '<div style="display:flex;gap:16px;font-size:12px">' +
-          '<span>Сумма заказа: <b>' + App._payOrderPrice.toLocaleString('ru') + ' Br</b></span>' +
-          '<span style="color:var(--success)">Оплачено: <b>' + d.totalPaid.toLocaleString('ru') + ' Br</b></span>' +
-          '<span style="color:' + (remaining>0?'var(--danger)':'var(--success)') + '">Остаток: <b>' + remaining.toLocaleString('ru') + ' Br</b></span>' +
+          '<span>Сумма заказа: <b>' + App._payOrderPrice.toLocaleString('ru') + ' ' + CUR + '</b></span>' +
+          '<span style="color:var(--success)">Оплачено: <b>' + d.totalPaid.toLocaleString('ru') + ' ' + CUR + '</b></span>' +
+          '<span style="color:' + (remaining>0?'var(--danger)':'var(--success)') + '">Остаток: <b>' + remaining.toLocaleString('ru') + ' ' + CUR + '</b></span>' +
         '</div>';
 
       var hint = document.getElementById('pay-remaining-hint');
-      if (hint) hint.textContent = 'Остаток к оплате: ' + remaining.toLocaleString('ru') + ' Br';
+      if (hint) hint.textContent = 'Остаток к оплате: ' + remaining.toLocaleString('ru') + ' ' + CUR;
       if (amtEl) amtEl.value = remaining > 0 ? remaining : '';
 
       // История
@@ -3037,7 +3045,7 @@ function openPayOrderModal(orderId, clientName, price, currentDueDate) {
         histList.innerHTML = d.payments.map(function(p) {
           return '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)">' +
             '<span style="color:var(--text3)">' + (p['Дата']||'') + ' — ' + (p['Способ оплаты']||'') + '</span>' +
-            '<span style="font-weight:600;color:var(--success)">' + (Number(p['Сумма'])||0).toLocaleString('ru') + ' Br</span>' +
+            '<span style="font-weight:600;color:var(--success)">' + (Number(p['Сумма'])||0).toLocaleString('ru') + ' ' + CUR + '</span>' +
           '</div>';
         }).join('');
       } else if (hist) {
@@ -3090,7 +3098,7 @@ function printDDS() {
   var d = App._ddsData;
   if (!d) { toast('Сначала загрузите данные','error'); return; }
   var s = d.summary;
-  var fmt = function(n){ return (Number(n)||0).toFixed(2) + ' Br'; };
+  var fmt = function(n){ return (Number(n)||0).toFixed(2) + ' ' + CUR; };
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>ДДС</title>' +
     '<style>body{font-family:Arial,sans-serif;font-size:11px;margin:15mm}' +
     'h2{text-align:center;font-size:13px}h3{font-size:11px;border-bottom:1px solid #ccc;padding-bottom:3px}' +
@@ -3135,14 +3143,14 @@ function calcSalary() {
 function renderSalary(data) {
   var res = document.getElementById('salary-result');
   if (!res) return;
-  var fmt = function(n){ return (Number(n)||0).toLocaleString('ru') + ' Br'; };
+  var fmt = function(n){ return (Number(n)||0).toLocaleString('ru') + ' ' + CUR; };
 
   var cards = data.employees.map(function(e) {
     var ini = e.name.split(' ').slice(0,2).map(function(s){ return s[0]||''; }).join('');
     var orderRows = e.orders.slice(0,5).map(function(o){
       return '<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid var(--border)">' +
         '<span style="color:var(--text3)">' + (o.date||'') + ' ' + (o.contract||'') + ' — ' + (o.client||'') + '</span>' +
-        '<span>' + (Number(o.gross)||0).toFixed(0) + ' Br</span>' +
+        '<span>' + (Number(o.gross)||0).toFixed(0) + ' ' + CUR + '</span>' +
       '</div>';
     }).join('');
 
@@ -3189,7 +3197,7 @@ function printSalary() {
     '<table><thead><tr><th>Сотрудник</th><th>Должность</th><th>Заказов</th><th>Ставка</th><th>Бонус (мен.)</th><th>Бонус (мастер)</th><th>ИТОГО</th></tr></thead>' +
     '<tbody>' + rows + '</tbody>' +
     '<tfoot><tr><td colspan="6" style="text-align:right;font-weight:bold">Итого к выплате:</td>' +
-    '<td style="font-weight:bold;text-align:right">' + fmt(d.grandTotal) + ' Br</td></tr></tfoot>' +
+    '<td style="font-weight:bold;text-align:right">' + fmt(d.grandTotal) + ' ' + CUR + '</td></tr></tfoot>' +
     '</table></body></html>';
   var w = window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); }
 }
@@ -3231,7 +3239,7 @@ function openOrderCard(orderId) {
 function renderOrderCard(order) {
   var content = document.getElementById('order-card-content');
   if (!content) return;
-  var fmt = function(n){ return (Number(n)||0).toLocaleString('ru') + ' Br'; };
+  var fmt = function(n){ return (Number(n)||0).toLocaleString('ru') + ' ' + CUR; };
 
   var materials = order.materials || [];
   var expenses  = order.expenses  || [];
@@ -3460,13 +3468,13 @@ function renderCardMatRows() {
       '</td>' +
       '<td style="text-align:center">' + sqm.toFixed(2) + ' м²</td>' +
       '<td style="text-align:center;white-space:nowrap">' +
-        '<input class="cardmat-price" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(m['Цена за м²'])||0) + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:72px;text-align:left"> Br/м²' +
+        '<input class="cardmat-price" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(m['Цена за м²'])||0) + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:72px;text-align:left"> ' + CUR + '/м²' +
       '</td>' +
       '<td><select class="cardmat-type" data-i="' + i + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + '">' +
           '<option value="расход"' + (!isOst?' selected':'') + '>расход</option>' +
           '<option value="остаток"' + (isOst?' selected':'') + '>остаток</option>' +
         '</select></td>' +
-      '<td style="text-align:right;white-space:nowrap"><span style="font-weight:600">' + (isOst ? '—' : (cost.toLocaleString('ru') + ' Br')) + '</span> ' +
+      '<td style="text-align:right;white-space:nowrap"><span style="font-weight:600">' + (isOst ? '—' : (cost.toLocaleString('ru') + ' ' + CUR)) + '</span> ' +
         '<button onclick="removeCardMatLine(' + i + ')" title="Удалить" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px">✕</button></td>' +
     '</tr>';
   }).join('');
@@ -3620,7 +3628,7 @@ function renderCardExpRows() {
   return exps.map(function(e, i) {
     return '<tr>' +
       '<td><input class="cardexp-name" data-i="' + i + '" value="' + String(e['Название']||'').replace(/"/g,'&quot;') + '" placeholder="Такси / Арматура…" onchange="onCardExpEdit(' + i + ')" style="' + inp + ';width:100%"></td>' +
-      '<td style="text-align:right;white-space:nowrap"><input class="cardexp-amount" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(e['Сумма'])||0) + '" onchange="onCardExpEdit(' + i + ')" style="' + inp + ';width:88px;text-align:left"> Br</td>' +
+      '<td style="text-align:right;white-space:nowrap"><input class="cardexp-amount" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(e['Сумма'])||0) + '" onchange="onCardExpEdit(' + i + ')" style="' + inp + ';width:88px;text-align:left"> ' + CUR + '</td>' +
       '<td style="text-align:right"><button onclick="removeCardExpLine(' + i + ')" title="Удалить" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px">✕</button></td>' +
     '</tr>';
   }).join('');
@@ -3751,7 +3759,7 @@ function createInstallmentPlanCard(orderId) {
   google.script.run
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
-      toast('График: ' + resp.data.months + ' взносов по ~' + resp.data.perPayment + ' Br', 'success');
+      toast('График: ' + resp.data.months + ' взносов по ~' + resp.data.perPayment + ' ' + CUR, 'success');
       openOrderCard(orderId);
     })
     .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })

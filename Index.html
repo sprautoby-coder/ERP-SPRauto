@@ -256,7 +256,7 @@
         <div class="settings-card-title">Финансы</div>
         <div class="settings-card-desc">Валюта и бонусы</div>
         <div class="form-row"><label class="form-label">Валюта</label>
-          <select class="form-select" id="set-currency"><option value="BYN">BYN</option><option value="RUB">RUB</option><option value="USD">USD</option></select>
+          <select class="form-select" id="set-currency"><option value="BYN">BYN (Br)</option><option value="RUB">RUB (₽)</option><option value="USD">USD ($)</option><option value="EUR">EUR (€)</option></select>
         </div>
         <div class="form-row"><label class="form-label">% фонда бонусов</label><input class="form-input" id="set-bonus-pool" type="number" placeholder="35"></div>
         <div class="form-row"><label class="form-label">День 1-го цикла ЗП</label><input class="form-input" id="set-cycle-1" type="number" placeholder="5"></div>
@@ -858,7 +858,7 @@
         </div>
       </div>
       <div class="form-row" style="margin-top:12px">
-        <label class="form-label">Цена за единицу, Br *</label>
+        <label class="form-label">Цена за единицу, <span class="cur">Br</span> *</label>
         <input class="form-input" id="edit-mat-price" type="number" step="0.01" placeholder="65.00">
       </div>
     </div>
@@ -955,7 +955,7 @@
       <!-- Цена и оплата -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
         <div class="form-row" style="margin:0">
-          <label class="form-label">Стоимость заказа, Br *</label>
+          <label class="form-label">Стоимость заказа, <span class="cur">Br</span> *</label>
           <input class="form-input" id="ord-price" type="number" placeholder="0" oninput="recalcOrderPreview()">
         </div>
         <div class="form-row" style="margin:0">
@@ -986,7 +986,7 @@
         <!-- Предоплата сразу -->
         <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end;margin-top:10px">
           <div class="form-row" style="margin:0">
-            <label class="form-label">Предоплата сейчас, Br (необязательно)</label>
+            <label class="form-label">Предоплата сейчас, <span class="cur">Br</span> (необязательно)</label>
             <input class="form-input" id="ord-prepay" type="number" min="0" step="0.01" placeholder="0">
           </div>
           <div class="form-row" style="margin:0">
@@ -1018,8 +1018,8 @@
       <div id="ord-finance-preview" style="display:none;margin-top:14px;padding:10px 14px;background:var(--bg-card);border-radius:8px;font-size:13px;">
         <div style="font-weight:600;margin-bottom:6px;color:var(--text-secondary)">Предварительный расчёт</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 16px">
-          <span style="color:var(--text3)">Итого материалы:</span>   <span id="prev-mat-total" style="color:var(--text3)">0 Br</span>
-          <span style="color:var(--text3)">Итого расходы:</span>     <span id="prev-exp-total" style="color:var(--text3)">0 Br</span>
+          <span style="color:var(--text3)">Итого материалы:</span>   <span id="prev-mat-total" style="color:var(--text3)">0 <span class="cur">Br</span></span>
+          <span style="color:var(--text3)">Итого расходы:</span>     <span id="prev-exp-total" style="color:var(--text3)">0 <span class="cur">Br</span></span>
           <span style="border-top:1px solid var(--border);padding-top:4px">Валовая прибыль:</span>
           <span id="prev-gross" style="font-weight:600;border-top:1px solid var(--border);padding-top:4px">—</span>
           <span>Бонус менеджера:</span>     <span id="prev-mgr"    style="color:var(--accent)">—</span>
@@ -1064,7 +1064,7 @@
       <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="emp-phone" type="tel" placeholder="+375 29 000-00-00"></div>
       <div class="form-row"><label class="form-label">Email</label><input class="form-input" id="emp-email" type="email"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="form-row"><label class="form-label">Базовая ставка, Br</label><input class="form-input" id="emp-salary" type="number" placeholder="0"></div>
+        <div class="form-row"><label class="form-label">Базовая ставка, <span class="cur">Br</span></label><input class="form-input" id="emp-salary" type="number" placeholder="0"></div>
         <div class="form-row"><label class="form-label">% бонуса</label><input class="form-input" id="emp-bonus" type="number" placeholder="0"></div>
       </div>
       <div class="form-row"><label class="form-label">Заметки</label><textarea class="form-input" id="emp-notes" rows="2"></textarea></div>
@@ -1098,7 +1098,7 @@
       <div class="form-row"><label class="form-label">Телефон</label><input class="form-input" id="edit-emp-phone" type="tel"></div>
       <div class="form-row"><label class="form-label">Email</label><input class="form-input" id="edit-emp-email" type="email"></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-        <div class="form-row"><label class="form-label">Базовая ставка, Br</label><input class="form-input" id="edit-emp-salary" type="number"></div>
+        <div class="form-row"><label class="form-label">Базовая ставка, <span class="cur">Br</span></label><input class="form-input" id="edit-emp-salary" type="number"></div>
         <div class="form-row"><label class="form-label">% бонуса</label><input class="form-input" id="edit-emp-bonus" type="number"></div>
       </div>
       <div class="form-row"><label class="form-label">Заметки</label><textarea class="form-input" id="edit-emp-notes" rows="2"></textarea></div>
@@ -1163,7 +1163,7 @@
           <input class="form-input" id="mat-roll-width" type="number" value="1.52" step="0.01" placeholder="1.52">
         </div>
         <div class="form-row" style="margin:0">
-          <label class="form-label">Цена, Br *</label>
+          <label class="form-label">Цена, <span class="cur">Br</span> *</label>
           <input class="form-input" id="mat-price" type="number" placeholder="0.00" step="0.01">
         </div>
       </div>
@@ -1188,7 +1188,7 @@
 
       <!-- Сумма платежа -->
       <div class="form-row">
-        <label class="form-label">Сумма платежа, Br</label>
+        <label class="form-label">Сумма платежа, <span class="cur">Br</span></label>
         <input class="form-input" id="pay-amount" type="number" step="0.01" placeholder="Вся сумма или часть">
         <div style="font-size:11px;color:var(--text3);margin-top:3px" id="pay-remaining-hint"></div>
       </div>
@@ -1271,7 +1271,7 @@
           <input class="form-input" id="exp-date" type="date">
         </div>
         <div class="form-row" style="margin:0">
-          <label class="form-label">Сумма, Br *</label>
+          <label class="form-label">Сумма, <span class="cur">Br</span> *</label>
           <input class="form-input" id="exp-amount" type="number" step="0.01" placeholder="0.00">
         </div>
       </div>
