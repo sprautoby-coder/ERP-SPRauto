@@ -3423,7 +3423,139 @@ function renderOrderCard(order) {
 
       '</div>' +  // /правая колонка
 
+    '</div>' +
+
+    // Фото до/после — на всю ширину под колонками
+    photosSection_(oid);
+
+  loadOrderPhotos(oid);
+}
+
+/* ===== ФОТО ДО/ПОСЛЕ ===== */
+function photosSection_(oid) {
+  var block = function(kind, galId) {
+    return '<div style="flex:1;min-width:240px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+          '<span style="font-weight:600">' + (kind === 'До' ? '📷 До' : '✨ После') + '</span>' +
+          '<label class="btn" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:7px;cursor:pointer">+ Добавить' +
+            '<input type="file" accept="image/*" multiple style="display:none" onchange="handlePhotoFiles(this,\'' + kind + '\')">' +
+          '</label>' +
+        '</div>' +
+        '<div class="photo-gallery" id="' + galId + '"><div style="color:var(--text3);font-size:12px">Загрузка…</div></div>' +
+      '</div>';
+  };
+  return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px;margin-top:12px">' +
+      '<div style="font-weight:600;margin-bottom:12px">Фото до / после</div>' +
+      '<div style="display:flex;gap:18px;flex-wrap:wrap">' + block('До', 'gallery-before') + block('После', 'gallery-after') + '</div>' +
     '</div>';
+}
+
+function loadOrderPhotos(oid) {
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { renderPhotoGallery_('gallery-before', []); renderPhotoGallery_('gallery-after', []); return; }
+      renderPhotoGallery_('gallery-before', resp.data.before || []);
+      renderPhotoGallery_('gallery-after',  resp.data.after  || []);
+    })
+    .withFailureHandler(function(){ renderPhotoGallery_('gallery-before', []); renderPhotoGallery_('gallery-after', []); })
+    .getOrderPhotos(oid);
+}
+
+function renderPhotoGallery_(elId, list) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  if (!list || !list.length) {
+    el.innerHTML = '<div style="color:var(--text3);font-size:12px">Нет фото</div>';
+    return;
+  }
+  el.innerHTML = list.map(function(p) {
+    return '<div class="photo-thumb">' +
+        '<img src="' + p.img + '" loading="lazy" onclick="openPhotoLightbox(\'' + p.img + '\')" alt="фото">' +
+        '<button class="photo-del" title="Удалить" onclick="deletePhotoCard(\'' + p.id + '\')">✕</button>' +
+      '</div>';
+  }).join('');
+}
+
+// Загрузка файлов: сжимаем на клиенте (быстрее и легче для Drive), затем шлём
+function handlePhotoFiles(input, kind) {
+  var files = Array.prototype.slice.call(input.files || []);
+  input.value = '';
+  if (!files.length) return;
+  var oid = App._currentOrderId;
+  if (!oid) { toast('Сначала откройте заказ', 'error'); return; }
+
+  var galId = kind === 'После' ? 'gallery-after' : 'gallery-before';
+  var gal = document.getElementById(galId);
+  var queued = files.length, done = 0;
+  toast('Загрузка фото: ' + queued + ' шт…', 'info');
+
+  files.forEach(function(file) {
+    if (!/^image\//.test(file.type)) { queued--; return; }
+    resizeImage_(file, 1600, 0.82, function(dataUrl) {
+      google.script.run
+        .withSuccessHandler(function(resp) {
+          done++;
+          if (resp && resp.ok) {
+            if (done >= queued) { loadOrderPhotos(oid); toast('Фото загружены', 'success'); }
+          } else {
+            toast('Ошибка загрузки: ' + (resp ? resp.error : ''), 'error');
+            if (done >= queued) loadOrderPhotos(oid);
+          }
+        })
+        .withFailureHandler(function(e) {
+          done++;
+          toast('Ошибка: ' + e.message, 'error');
+          if (done >= queued) loadOrderPhotos(oid);
+        })
+        .uploadOrderPhoto({ orderId: oid, kind: kind, dataUrl: dataUrl, filename: file.name });
+    });
+  });
+}
+
+// Сжатие картинки через canvas: ограничиваем макс. сторону, отдаём JPEG dataURL
+function resizeImage_(file, maxDim, quality, cb) {
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var img = new Image();
+    img.onload = function() {
+      var w = img.width, h = img.height;
+      var scale = Math.min(1, maxDim / Math.max(w, h));
+      var cw = Math.round(w * scale), ch = Math.round(h * scale);
+      var canvas = document.createElement('canvas');
+      canvas.width = cw; canvas.height = ch;
+      canvas.getContext('2d').drawImage(img, 0, 0, cw, ch);
+      try { cb(canvas.toDataURL('image/jpeg', quality)); }
+      catch (err) { cb(e.target.result); }   // на всякий случай — оригинал
+    };
+    img.onerror = function(){ cb(e.target.result); };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function deletePhotoCard(photoId) {
+  uiConfirm('Удалить это фото?', function() {
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp || !resp.ok) { toast('Ошибка удаления', 'error'); return; }
+        toast('Фото удалено', 'success');
+        if (App._currentOrderId) loadOrderPhotos(App._currentOrderId);
+      })
+      .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+      .deleteOrderPhoto(photoId);
+  }, { title: 'Удаление фото', okText: 'Удалить', danger: true });
+}
+
+function openPhotoLightbox(url) {
+  var ov = document.getElementById('photo-lightbox');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'photo-lightbox';
+    ov.onclick = function(){ ov.style.display = 'none'; };
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = '<img src="' + url + '" alt="фото">';
+  ov.style.display = 'flex';
 }
 
 /* --- Карточка заказа: редактор расхода плёнки --- */
