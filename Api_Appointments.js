@@ -108,6 +108,13 @@ function deleteAppointment(id) {
   });
 }
 
+/** Привязать запись к созданному заказу и отметить, что клиент пришёл. */
+function linkAppointmentOrder(id, orderId) {
+  return safeCall(function() {
+    return updateAppointmentRow_(id, { 'Заказ ID': String(orderId || ''), 'Статус': 'Пришёл' });
+  });
+}
+
 // ─── ВСПОМОГАТЕЛЬНЫЕ ─────────────────────────────────────────────────────────
 
 function appointmentToClient_(a) {

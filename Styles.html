@@ -536,6 +536,9 @@ body {
 }
 .view-toggle button.active { background: var(--accent); color: #fff; }
 .view-toggle button:not(.active):hover { color: var(--text); background: var(--bg-hover); }
+/* увеличенный, более заметный переключатель вида (заказы) */
+.view-toggle-lg { padding: 3px; height: 38px; box-shadow: 0 0 0 1px var(--accent) inset; }
+.view-toggle-lg button { padding: 7px 16px; font-size: 13.5px; }
 
 .kanban-board { display: flex; gap: 12px; overflow-x: auto; padding: 4px 2px 14px; align-items: flex-start; }
 .kanban-col {
@@ -600,4 +603,24 @@ body {
 .apt-st-cancel { background: var(--bg-hover); color: var(--text3); }
 .apt-act { padding: 3px 9px; font-size: 11px; font-weight: 600; border: 1px solid var(--border); border-radius: 6px; margin: 0 2px; cursor: pointer; }
 .apt-act:hover { filter: brightness(1.08); }
+/* недельная сетка */
+.apt-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.apt-week-day { background: var(--bg-card2); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; min-height: 140px; }
+.apt-week-today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.apt-week-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; font-size: 12px; font-weight: 700; color: var(--text); border-bottom: 1px solid var(--border); cursor: pointer; }
+.apt-week-head:hover { background: var(--bg-hover); }
+.apt-week-cnt { font-size: 10.5px; font-weight: 600; color: var(--text2); background: var(--bg-hover); padding: 1px 7px; border-radius: 9px; }
+.apt-week-body { flex: 1; padding: 6px; display: flex; flex-direction: column; gap: 5px; overflow-y: auto; }
+.apt-week-empty { color: var(--text3); text-align: center; font-size: 12px; padding: 8px 0; }
+.apt-week-add { border: none; background: transparent; color: var(--text3); font-size: 11px; padding: 6px; cursor: pointer; border-top: 1px solid var(--border); }
+.apt-week-add:hover { color: var(--accent); background: var(--bg-hover); }
+.apt-chip { border-left: 3px solid var(--accent); border-radius: 6px; padding: 4px 7px; font-size: 11.5px; line-height: 1.25; cursor: pointer; background: var(--bg-card); }
+.apt-chip:hover { filter: brightness(1.06); }
+.apt-chip.apt-st-came   { border-left-color: var(--green); }
+.apt-chip.apt-st-cancel { border-left-color: var(--text3); }
+.apt-chip-cancel { opacity: .55; text-decoration: line-through; }
+.apt-chip-sub { font-size: 10px; color: var(--text3); }
+@media (max-width: 880px) {
+  .apt-week { grid-template-columns: repeat(7, 150px); overflow-x: auto; }
+}
 </style>
