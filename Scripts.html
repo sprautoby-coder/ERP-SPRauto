@@ -1881,6 +1881,22 @@ function loadOrdersKpi() {
   el('okpi-revenue', fmt(totalRevenue));
   el('okpi-avg',     fmt(avg));
   el('okpi-inwork',  inWork);
+  updateOrderTabCounts();
+}
+
+// Счётчики на вкладках фильтра по статусам (всего по каждому статусу, без учёта поиска).
+function updateOrderTabCounts() {
+  var list = (App.orders || []).filter(function(o){ return o['ID']; });
+  var counts = { all: list.length };
+  list.forEach(function(o){ var s = o['Статус'] || ''; counts[s] = (counts[s] || 0) + 1; });
+  document.querySelectorAll('#orders-status-tabs .tab-cnt').forEach(function(span){
+    var key = span.getAttribute('data-cnt');
+    var n = counts[key] || 0;
+    span.textContent = n;
+    span.style.display = (key === 'all' || n > 0) ? '' : 'none'; // прячем нулевые, кроме «Все»
+    var tab = span.closest('.filter-tab');
+    if (tab && key !== 'all') tab.style.opacity = n > 0 ? '' : '.5'; // пустые вкладки приглушены
+  });
 }
 
 function setOrderStatusFilter(status, btn) {

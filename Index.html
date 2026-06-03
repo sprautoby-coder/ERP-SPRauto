@@ -331,11 +331,11 @@
         <input class="search-input" id="orders-search" type="text" placeholder="Клиент, авто, госномер..." oninput="filterOrders()">
       </div>
       <div class="filter-tabs" id="orders-status-tabs">
-        <button class="filter-tab active" onclick="setOrderStatusFilter('all', this)">Все</button>
-        <button class="filter-tab" onclick="setOrderStatusFilter('Новый', this)">Новые</button>
-        <button class="filter-tab" onclick="setOrderStatusFilter('В работе', this)">В работе</button>
-        <button class="filter-tab" onclick="setOrderStatusFilter('Готов', this)">Готов</button>
-        <button class="filter-tab" onclick="setOrderStatusFilter('Выдан', this)">Выданы</button>
+        <button class="filter-tab active" data-status="all"     onclick="setOrderStatusFilter('all', this)">Все <span class="tab-cnt" data-cnt="all">0</span></button>
+        <button class="filter-tab"        data-status="Новый"   onclick="setOrderStatusFilter('Новый', this)">Новые <span class="tab-cnt" data-cnt="Новый">0</span></button>
+        <button class="filter-tab"        data-status="В работе" onclick="setOrderStatusFilter('В работе', this)">В работе <span class="tab-cnt" data-cnt="В работе">0</span></button>
+        <button class="filter-tab"        data-status="Готов"   onclick="setOrderStatusFilter('Готов', this)">Готов <span class="tab-cnt" data-cnt="Готов">0</span></button>
+        <button class="filter-tab"        data-status="Выдан"   onclick="setOrderStatusFilter('Выдан', this)">Выданы <span class="tab-cnt" data-cnt="Выдан">0</span></button>
       </div>
       <select class="form-select" id="orders-service-filter" onchange="filterOrders()" style="width:180px;flex:0 0 180px;height:38px;font-size:13px;">
         <option value="">Все услуги</option>
