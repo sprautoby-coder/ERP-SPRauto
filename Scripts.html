@@ -1315,6 +1315,59 @@ function runSetupWizardUI() {
     .runSetupWizard();
 }
 
+/* ===== НАПОМИНАНИЯ О ПЛАТЕЖАХ ===== */
+App._reminderEnabled = false;
+
+function loadReminderStatus() {
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) return;
+      var d = resp.data;
+      App._reminderEnabled = d.enabled;
+      var el = document.getElementById('reminder-status');
+      if (el) {
+        el.innerHTML = d.enabled
+          ? '<span style="color:var(--success)">● Включено</span> — ежедневно в ' + d.hour + ':00' + (d.telegram ? ' · Telegram подключён' : '')
+          : '<span style="color:var(--text3)">○ Выключено</span>';
+      }
+      var btn = document.getElementById('reminder-toggle-btn');
+      if (btn) btn.textContent = d.enabled ? 'Выключить' : 'Включить ежедневно';
+    })
+    .withFailureHandler(function(){})
+    .getReminderStatus();
+}
+
+function sendRemindersNow() {
+  toast('Готовим дайджест…', 'info');
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+      var d = resp.data;
+      var ch = [];
+      if (d.emailSent) ch.push('e-mail');
+      if (d.telegramSent) ch.push('Telegram');
+      var where = ch.length ? (' → ' + ch.join(', ')) : ' (каналы не настроены)';
+      toast('Просрочено: ' + d.overdueCount + ', скоро: ' + d.soonCount + where, d.errors && d.errors.length ? 'error' : 'success');
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .sendPaymentRemindersNow();
+}
+
+function toggleReminders() {
+  var btn = document.getElementById('reminder-toggle-btn');
+  if (btn) btn.disabled = true;
+  var done = function(resp) {
+    if (btn) btn.disabled = false;
+    if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+    toast(resp.data.enabled ? 'Ежедневные напоминания включены' : 'Напоминания выключены', 'success');
+    loadReminderStatus();
+  };
+  var fail = function(e){ if (btn) btn.disabled = false; toast('Ошибка: ' + e.message, 'error'); };
+  var r = google.script.run.withSuccessHandler(done).withFailureHandler(fail);
+  if (App._reminderEnabled) r.disablePaymentReminders();
+  else r.enablePaymentReminders(Number((document.getElementById('set-reminder-hour') || {}).value) || 9);
+}
+
 function fillSettingsForm(s) {
   var set=function(id,key){var el=document.getElementById(id);if(el&&s[key]!==undefined)el.value=s[key];};
   set('set-company-name','company_name'); set('set-company-slogan','company_slogan');
@@ -1322,6 +1375,10 @@ function fillSettingsForm(s) {
   set('set-phone','phone'); set('set-email','email');
   set('set-currency','currency'); set('set-bonus-pool','bonus_pool_pct');
   set('set-cycle-1','cycle_day_1'); set('set-cycle-2','cycle_day_2');
+  set('set-notify-email','notify_email'); set('set-reminder-days','reminder_days_before');
+  set('set-reminder-hour','reminder_hour'); set('set-tg-token','telegram_bot_token');
+  set('set-tg-chat','telegram_chat_id');
+  loadReminderStatus();
 }
 
 function saveAllSettings() {
@@ -1331,6 +1388,9 @@ function saveAllSettings() {
   g('set-phone','phone'); g('set-email','email');
   g('set-currency','currency'); g('set-bonus-pool','bonus_pool_pct');
   g('set-cycle-1','cycle_day_1'); g('set-cycle-2','cycle_day_2');
+  g('set-notify-email','notify_email'); g('set-reminder-days','reminder_days_before');
+  g('set-reminder-hour','reminder_hour'); g('set-tg-token','telegram_bot_token');
+  g('set-tg-chat','telegram_chat_id');
   if(App.pendingLogoDataUrl) s['logo_dataurl']=App.pendingLogoDataUrl;
   toast('Сохраняем...','info');
   google.script.run
