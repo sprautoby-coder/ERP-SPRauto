@@ -314,6 +314,123 @@ function closeModalOnOverlay(e) {
   if (e.target === e.currentTarget) closeModal(e.currentTarget.id);
 }
 
+/* ===== СКЛАД (остатки материалов) ===== */
+App._stock = [];
+
+function loadInventory(force) {
+  var tbody = document.getElementById('stock-tbody');
+  if (!tbody) return;
+  var hasCache = App._stock && App._stock.length;
+  if (hasCache && !force) { renderStock(); }
+  else if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="ct-loading"><div class="kpi-skeleton" style="min-height:40px;margin:4px 0"></div></td></tr>';
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) {
+        if (!hasCache) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--danger)">' + (resp ? resp.error : 'Ошибка') + '</td></tr>';
+        return;
+      }
+      App._stock = resp.data.items || [];
+      var k = function(id, v){ var e = document.getElementById(id); if (e) e.textContent = v; };
+      k('stock-kpi-count', resp.data.count);
+      k('stock-kpi-low',   resp.data.lowCount);
+      k('stock-kpi-value', money(resp.data.totalValue));
+      renderStock();
+    })
+    .withFailureHandler(function(e) {
+      if (!hasCache) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--danger)">' + e.message + '</td></tr>';
+    })
+    .getStockList();
+}
+
+function renderStock() {
+  var tbody  = document.getElementById('stock-tbody');
+  var footer = document.getElementById('stock-footer');
+  if (!tbody) return;
+  var q       = (document.getElementById('stock-search') || {}).value || '';
+  var lowOnly = (document.getElementById('stock-low-only') || {}).checked;
+  q = q.toLowerCase();
+
+  var list = (App._stock || []).filter(function(m) {
+    if (lowOnly && !m.low) return false;
+    if (q && !((m.name || '').toLowerCase().includes(q) || (m.category || '').toLowerCase().includes(q))) return false;
+    return true;
+  });
+
+  if (!list.length) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--text2)">Ничего не найдено</td></tr>';
+    if (footer) footer.textContent = '';
+    return;
+  }
+
+  tbody.innerHTML = list.map(function(m) {
+    var stockColor = m.low ? 'var(--danger)' : 'var(--text)';
+    var lowBadge = m.low ? ' <span style="font-size:10px;background:var(--red-soft);color:var(--danger);padding:1px 6px;border-radius:8px">мало</span>' : '';
+    var btn = function(label, type, color) {
+      return '<button class="btn" onclick="openStockOp(\'' + m.id + '\',\'' + type + '\')" style="padding:3px 9px;font-size:11px;font-weight:600;background:' + color + ';border:1px solid var(--border);border-radius:6px;margin:0 2px">' + label + '</button>';
+    };
+    return '<tr>' +
+      '<td style="font-weight:500">' + m.name + lowBadge + '</td>' +
+      '<td style="font-size:12px;color:var(--text2)">' + m.category + '</td>' +
+      '<td style="text-align:center;font-size:12px;color:var(--text2)">' + m.unit + '</td>' +
+      '<td style="text-align:right;font-weight:700;color:' + stockColor + '">' + m.stock + '</td>' +
+      '<td style="text-align:right;color:var(--text3)">' + (m.min || '—') + '</td>' +
+      '<td style="text-align:right">' + money(m.value) + '</td>' +
+      '<td style="text-align:center;white-space:nowrap">' +
+        btn('+ Приход',   'receipt',  'var(--green-soft);color:var(--success)') +
+        btn('− Списать',  'writeoff', 'var(--red-soft);color:var(--danger)') +
+        btn('Коррекция',  'adjust',   'var(--bg-card2);color:var(--text)') +
+      '</td>' +
+    '</tr>';
+  }).join('');
+  if (footer) footer.textContent = 'Показано: ' + list.length + ' из ' + App._stock.length;
+}
+
+var STOCK_OP_META = {
+  receipt:  { title: 'Приход на склад',     qtyLabel: 'Сколько добавить',          submit: 'Оприходовать' },
+  writeoff: { title: 'Списание со склада',  qtyLabel: 'Сколько списать',           submit: 'Списать' },
+  adjust:   { title: 'Коррекция остатка',   qtyLabel: 'Новый точный остаток',      submit: 'Установить' },
+};
+
+function openStockOp(matId, type) {
+  var m = (App._stock || []).find(function(x){ return x.id === matId; });
+  if (!m) return;
+  var meta = STOCK_OP_META[type] || STOCK_OP_META.receipt;
+  document.getElementById('stock-op-matid').value = matId;
+  document.getElementById('stock-op-type').value  = type;
+  document.getElementById('stock-op-title').textContent = meta.title;
+  document.getElementById('stock-op-matname').textContent = m.name + ' · текущий остаток: ' + m.stock + ' ' + m.unit;
+  document.getElementById('stock-op-qty-label').textContent = meta.qtyLabel + ' (' + m.unit + ')';
+  document.getElementById('stock-op-qty').value = (type === 'adjust') ? m.stock : '';
+  document.getElementById('stock-op-comment').value = '';
+  document.getElementById('stock-op-submit').textContent = meta.submit;
+  openModal('modal-stock-op');
+}
+
+function submitStockOp() {
+  var matId   = document.getElementById('stock-op-matid').value;
+  var type    = document.getElementById('stock-op-type').value;
+  var qty     = Number(document.getElementById('stock-op-qty').value);
+  var comment = document.getElementById('stock-op-comment').value.trim();
+  var btn     = document.getElementById('stock-op-submit');
+  if (isNaN(qty) || (type !== 'adjust' && qty <= 0)) { toast('Введите количество', 'error'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = '...'; }
+
+  var done = function(resp) {
+    if (btn) btn.disabled = false;
+    if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+    toast('Готово: остаток ' + resp.data.stock, 'success');
+    closeModal('modal-stock-op');
+    loadInventory(true);
+  };
+  var fail = function(e){ if (btn) btn.disabled = false; toast('Ошибка: ' + e.message, 'error'); };
+
+  var r = google.script.run.withSuccessHandler(done).withFailureHandler(fail);
+  if (type === 'receipt')  r.stockReceipt(matId, qty, comment);
+  else if (type === 'writeoff') r.stockWriteoff(matId, qty, comment, '');
+  else r.stockAdjust(matId, qty, comment);
+}
+
 /* ===== ВАЛЮТА (white-label) ===== */
 var CUR = 'Br';   // символ валюты — обновляется из настроек в applyBrand()
 var CURRENCY_SYMBOLS = { BYN: 'Br', RUB: '₽', USD: '$', EUR: '€' };
@@ -383,6 +500,7 @@ function loadCurrentPage() {
   if (App.currentPage === 'clients')   loadClients(force);
   if (App.currentPage === 'orders')    loadOrders(force);
   if (App.currentPage === 'materials') loadMaterials(force);
+  if (App.currentPage === 'inventory') loadInventory(force);
   if (App.currentPage === 'settings')  loadSettings();
   if (App.currentPage === 'expenses')  loadExpenses();
   if (App.currentPage === 'finance')   loadFinance();

@@ -58,6 +58,7 @@ function runSetupWizard() {
     step('Базовые листы (сотрудники, услуги, расходы…)', runFirstSetup);
     step('Листы модуля (заказы, клиенты, материалы, платежи, график…)', addNewSheets);
     step('Модель оплаты и колонки заказов', migratePaymentModel);
+    step('Склад: остатки материалов', migrateStockColumns);
     return { steps: steps, status: getSetupStatus_() };
   });
 }
@@ -165,6 +166,8 @@ function getNewSheetsSchema() {
       'Единица',               // пм / м² / шт / л / кг
       'Цена',                  // цена за единицу (для пм — цена за м²)
       'Ширина рулона',         // метры, только для единицы "пм" (обычно 1.52)
+      'Остаток',               // текущий остаток на складе (в ед. измерения)
+      'Мин. остаток',          // порог «мало» для подсветки
       'Активен',               // Да / Нет
       'Создан',
       'Обновлён',
@@ -225,6 +228,19 @@ function getNewSheetsSchema() {
       'Drive ID',              // id файла в Google Drive
       'URL',                   // ссылка на просмотр
       'Имя файла',
+      'Создан',
+    ],
+
+    // Движение остатков материалов (v2.0): приход / списание / коррекция
+    MAT_MOVES: [
+      'ID',
+      'Материал ID',
+      'Название',              // денормализовано
+      'Тип',                   // Приход / Списание / Коррекция
+      'Кол-во',                // + или − к остатку
+      'Остаток после',         // снимок остатка после операции
+      'Комментарий',
+      'Заказ ID',              // если списание привязано к заказу
       'Создан',
     ],
 
@@ -372,6 +388,27 @@ function addPaymentColumns() {
  *
  * Безопасна для повторного запуска (колонки не дублируются, бэкфилл идемпотентен).
  */
+/**
+ * Миграция склада (v2.0): добавляет в справочник материалов колонки
+ * «Остаток» и «Мин. остаток», если их нет. Идемпотентно.
+ */
+function migrateStockColumns() {
+  try { addNewSheets(); } catch (e) {}
+  const sheet = getTab('DATABASE', 'MATERIALS');
+  const styleHeader = function(cell) {
+    cell.setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff');
+  };
+  ['Остаток', 'Мин. остаток'].forEach(function(name) {
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (headers.indexOf(name) >= 0) return;
+    sheet.insertColumnAfter(sheet.getLastColumn());
+    const cell = sheet.getRange(1, sheet.getLastColumn());
+    cell.setValue(name);
+    styleHeader(cell);
+  });
+  return 'Склад: колонки остатков на месте';
+}
+
 function migratePaymentModel() {
   // Сначала гарантируем, что все листы модуля заказов существуют
   // (Платежи, Расход материалов, Расходы заказа, Справочник материалов и т.д.).
