@@ -422,6 +422,31 @@ body {
   .clients-toolbar { flex-direction:column; align-items:stretch; }
   .clients-kpi-row { grid-template-columns:1fr 1fr; }
   .ct-col-auto,.ct-col-source,.ct-col-orders { display:none; }
+
+  /* Контент и шапка — компактнее */
+  .content { padding:14px 12px; }
+  .topbar { padding:0 12px; }
+  .section-title-big { font-size:20px; }
+
+  /* Широкие таблицы — горизонтальный скролл вместо «сплющивания» */
+  .clients-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .clients-table { table-layout:auto; min-width:640px; }
+
+  /* Карточка заказа: две колонки → одна */
+  #order-card-content > div[style*="1.6fr"] { grid-template-columns:1fr !important; }
+
+  /* Тулбары фильтров — селекты/переключатели на всю ширину */
+  .clients-toolbar .form-select,
+  .clients-toolbar .view-toggle { width:100% !important; flex:1 1 auto !important; }
+  .filter-tabs { width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; flex-wrap:nowrap; }
+}
+
+@media (max-width:560px) {
+  .clients-kpi-row { grid-template-columns:1fr; }
+  .kpi-grid { grid-template-columns:1fr; }
+  .quick-actions-grid { grid-template-columns:1fr; }
+  .modal { border-radius:14px 14px 0 0; }
+  .photo-thumb { width:80px; height:80px; }
 }
 
 /* ===== LINE-ITEM СТРОКИ (материалы / расходы в заказе) ===== */
