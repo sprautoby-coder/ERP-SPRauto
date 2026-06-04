@@ -4431,12 +4431,18 @@ function cardMatOptions_(selectedId) {
   return opts;
 }
 
+function blankMatRow_() {
+  return { 'Материал ID':'', 'Название':'', 'Единица':'пм', 'Кол-во':0,
+    'Ширина рулона':1.52, 'Цена за м²':0, 'Тип':'расход', 'Кол-во м²':0, 'Стоимость':0 };
+}
+
 // Построить строки таблицы материалов карточки из App._currentOrder.materials
 function renderCardMatRows() {
-  var mats = (App._currentOrder && App._currentOrder.materials) || [];
-  if (!mats.length) {
-    return '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:14px">Материалы не добавлены — нажмите «+ Добавить»</td></tr>';
+  // если плёнок нет — сразу показываем одну пустую строку для заполнения (пустые не сохранятся)
+  if (App._currentOrder && (!App._currentOrder.materials || !App._currentOrder.materials.length)) {
+    App._currentOrder.materials = [ blankMatRow_() ];
   }
+  var mats = (App._currentOrder && App._currentOrder.materials) || [];
   var inp = 'padding:3px 6px;border:1px solid var(--border);border-radius:5px;background:var(--inp);color:var(--text);font-size:12px';
   return mats.map(function(m, i) {
     var isOst = m['Тип'] === 'остаток';
@@ -4523,10 +4529,7 @@ function onCardMatSelect(i) {
 function addCardMatLine() {
   if (!App._currentOrder) return;
   if (!App._currentOrder.materials) App._currentOrder.materials = [];
-  App._currentOrder.materials.push({
-    'Материал ID':'', 'Название':'', 'Единица':'пм', 'Кол-во':0,
-    'Ширина рулона':1.52, 'Цена за м²':0, 'Тип':'расход', 'Кол-во м²':0, 'Стоимость':0
-  });
+  App._currentOrder.materials.push(blankMatRow_());
   refreshCardMats();
 }
 
@@ -4539,7 +4542,10 @@ function removeCardMatLine(i) {
 function saveCardMaterials() {
   var o = App._currentOrder;
   if (!o) return;
-  var lines = (o.materials || []).map(function(m) {
+  var lines = (o.materials || []).filter(function(m) {
+    // не сохраняем полностью пустые строки
+    return (m['Материал ID'] || String(m['Название'] || '').trim() || Number(m['Кол-во']) > 0);
+  }).map(function(m) {
     return {
       materialId:  m['Материал ID'] || '',
       name:        m['Название']     || '',
