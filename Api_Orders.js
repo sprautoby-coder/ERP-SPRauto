@@ -292,9 +292,11 @@ function recalcOrderFinance(orderId) {
       const rowData = {};
       headers.forEach(function(h, j) { rowData[h] = data[i][j]; });
 
-      // Считаем суммы из дочерних листов
+      // Считаем суммы из дочерних листов.
+      // Берём ВСЕ строки (и расход, и остаток): у остатка Стоимость отрицательная,
+      // поэтому сумма = расход − остаток (нетто израсходованной плёнки).
       const matRows = readSheetAsObjects('DATABASE', 'ORDER_MATERIALS')
-        .filter(function(r) { return String(r['Заказ ID']) === String(orderId) && r['Тип'] === 'расход'; });
+        .filter(function(r) { return String(r['Заказ ID']) === String(orderId); });
       const expRows = readSheetAsObjects('DATABASE', 'ORDER_EXPENSES')
         .filter(function(r) { return String(r['Заказ ID']) === String(orderId); });
 

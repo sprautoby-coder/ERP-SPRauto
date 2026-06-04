@@ -2203,25 +2203,33 @@ function toggleOrderFilms(id, ctrl) {
 }
 
 function renderFilmDetail_(lines) {
-  var films = (lines || []).filter(function(l){ return String(l['Тип'] || 'расход') === 'расход'; });
-  if (!films.length) return '<span style="color:var(--text3)">Расход плёнки по заказу не внесён.</span>';
+  var all = lines || [];
+  if (!all.length) return '<span style="color:var(--text3)">Расход плёнки по заказу не внесён.</span>';
   var fmt = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru'); };
-  var total = 0;
-  var rows = films.map(function(l){
-    var cost = Number(l['Стоимость']) || 0; total += cost;
-    return '<tr>' +
-      '<td>' + (l['Название'] || '—') + '</td>' +
-      '<td style="text-align:right">' + fmt(l['Кол-во']) + ' ' + (l['Единица'] || '') + '</td>' +
+  // расход сверху, остатки снизу
+  all = all.slice().sort(function(a,b){
+    var ao = String(a['Тип']||'расход')==='остаток' ? 1 : 0;
+    var bo = String(b['Тип']||'расход')==='остаток' ? 1 : 0;
+    return ao - bo;
+  });
+  var net = 0;
+  var rows = all.map(function(l){
+    var isOst = String(l['Тип'] || 'расход') === 'остаток';
+    var cost  = Number(l['Стоимость']) || 0; net += cost;
+    var costShown = (isOst ? '− ' + fmt(Math.abs(cost)) : fmt(cost)) + ' ' + CUR;
+    return '<tr' + (isOst ? ' style="color:var(--danger)"' : '') + '>' +
+      '<td>' + (l['Название'] || '—') + (isOst ? ' <span style="font-size:10px;opacity:.85">остаток</span>' : '') + '</td>' +
+      '<td style="text-align:right">' + (isOst ? '− ' : '') + fmt(l['Кол-во']) + ' ' + (l['Единица'] || '') + '</td>' +
       '<td style="text-align:right">' + fmt(l['Кол-во м²']) + ' м²</td>' +
       '<td style="text-align:right">' + fmt(l['Цена за м²']) + ' ' + CUR + '</td>' +
-      '<td style="text-align:right;font-weight:600">' + fmt(cost) + ' ' + CUR + '</td>' +
+      '<td style="text-align:right;font-weight:600">' + costShown + '</td>' +
     '</tr>';
   }).join('');
-  return '<div class="film-detail-title">🎞 Расход плёнки — сверьте с данными мастеров</div>' +
+  return '<div class="film-detail-title">🎞 Расход плёнки — сверьте с данными мастеров (остаток вычитается)</div>' +
     '<table class="film-table"><thead><tr>' +
-      '<th>Плёнка</th><th style="text-align:right">Расход</th><th style="text-align:right">Площадь</th><th style="text-align:right">Цена/м²</th><th style="text-align:right">Сумма</th>' +
+      '<th>Плёнка</th><th style="text-align:right">Кол-во</th><th style="text-align:right">Площадь</th><th style="text-align:right">Цена/м²</th><th style="text-align:right">Сумма</th>' +
     '</tr></thead><tbody>' + rows +
-      '<tr class="film-total"><td colspan="4" style="text-align:right">Итого плёнка:</td><td style="text-align:right">' + fmt(total) + ' ' + CUR + '</td></tr>' +
+      '<tr class="film-total"><td colspan="4" style="text-align:right">Итого расход (нетто):</td><td style="text-align:right">' + fmt(net) + ' ' + CUR + '</td></tr>' +
     '</tbody></table>';
 }
 
@@ -2496,12 +2504,13 @@ function onMaterialChange(idx) {
   m.type = typeSel ? typeSel.value : 'расход';
 
   var qtySqm = (m.unit === 'пм') ? Math.round(m.qty * m.rollWidth * 100) / 100 : m.qty;
-  m.cost = (m.type === 'остаток') ? 0 : Math.round(qtySqm * m.pricePerSqm * 100) / 100;
+  // остаток вычитается из расхода → отрицательная стоимость
+  m.cost = Math.round(qtySqm * m.pricePerSqm * 100) / 100 * (m.type === 'остаток' ? -1 : 1);
 
   var costEl = document.getElementById('mat-cost-' + idx);
   if (costEl) {
-    costEl.textContent = m.cost + ' ' + CUR;
-    costEl.style.color = m.type === 'остаток' ? 'var(--text3)' : 'var(--success)';
+    costEl.textContent = (m.type === 'остаток' ? '− ' : '') + Math.abs(m.cost) + ' ' + CUR;
+    costEl.style.color = m.type === 'остаток' ? 'var(--danger)' : 'var(--success)';
   }
   recalcOrderPreview();
 }
@@ -4454,7 +4463,7 @@ function renderCardMatRows() {
           '<option value="расход"' + (!isOst?' selected':'') + '>расход</option>' +
           '<option value="остаток"' + (isOst?' selected':'') + '>остаток</option>' +
         '</select></td>' +
-      '<td style="text-align:right;white-space:nowrap"><span style="font-weight:600">' + (isOst ? '—' : (cost.toLocaleString('ru') + ' ' + CUR)) + '</span> ' +
+      '<td style="text-align:right;white-space:nowrap"><span style="font-weight:600;color:' + (isOst ? 'var(--danger)' : 'inherit') + '">' + (isOst ? ('− ' + Math.abs(cost).toLocaleString('ru') + ' ' + CUR) : (cost.toLocaleString('ru') + ' ' + CUR)) + '</span> ' +
         '<button onclick="removeCardMatLine(' + i + ')" title="Удалить" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px">✕</button></td>' +
     '</tr>';
   }).join('');
@@ -4469,7 +4478,8 @@ function refreshCardMats() {
     var qty   = Number(m['Кол-во']) || 0;
     var sqm   = (unit === 'пм') ? Math.round(qty * roll * 100) / 100 : qty;
     m['Кол-во м²']  = sqm;
-    m['Стоимость']  = (m['Тип'] === 'остаток') ? 0 : Math.round(sqm * price * 100) / 100;
+    // остаток вычитается из расхода → отрицательная стоимость
+    m['Стоимость']  = Math.round(sqm * price * 100) / 100 * (m['Тип'] === 'остаток' ? -1 : 1);
   });
   var tb = document.getElementById('card-mat-tbody');
   if (tb) tb.innerHTML = renderCardMatRows();

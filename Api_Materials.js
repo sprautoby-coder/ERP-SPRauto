@@ -194,8 +194,9 @@ function saveOrderMaterials(orderId, lines) {
 
       // Перевод в м²
       const qtySqm = (unit === 'пм') ? round2_(qty * rollWidth) : round2_(qty);
-      // Стоимость: только если расход (не остаток)
-      const cost   = (type === 'расход') ? round2_(qtySqm * price) : 0;
+      // Стоимость: расход — со знаком «+», остаток — со знаком «−» (вычитается из расхода).
+      // Кусок, оставшийся пригодным после оклейки, не считается израсходованным.
+      const cost   = round2_(qtySqm * price) * (type === 'остаток' ? -1 : 1);
 
       totalMaterialCost += cost;
 
