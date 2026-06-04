@@ -2177,7 +2177,22 @@ function makeColumnsResizable(table) {
   });
 }
 
-// ── Раскрытие расхода плёнки прямо в таблице (ленивая подгрузка) ──
+// ── Раскрытие РЕДАКТИРУЕМОЙ детализации (плёнка + расходы) прямо в таблице ──
+App._inline = {};   // состояние редакторов по orderId
+
+var _inlEsc = function(s){ return String(s == null ? '' : s).replace(/"/g, '&quot;'); };
+var _inlFmt = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+function _matSqm(m){ return (m.unit === 'пм') ? Math.round((Number(m.qty)||0)*(Number(m.roll)||1.52)*100)/100 : (Number(m.qty)||0); }
+function _matCost(m){ return Math.round(_matSqm(m)*(Number(m.price)||0)*100)/100 * (m.type === 'остаток' ? -1 : 1); }
+
+function _inlineEnsureMaterials(cb) {
+  if (App._materials && App._materials.length) { cb(); return; }
+  google.script.run
+    .withSuccessHandler(function(resp){ App._materials = (resp && resp.ok) ? (resp.data || []) : []; cb(); })
+    .withFailureHandler(function(){ cb(); })
+    .getMaterials(null);
+}
+
 function toggleOrderFilms(id, ctrl) {
   var tr = ctrl.closest('tr');
   if (!tr) return;
@@ -2187,50 +2202,163 @@ function toggleOrderFilms(id, ctrl) {
   var colspan = tr.children.length;
   var detail = document.createElement('tr');
   detail.className = 'film-detail-row';
-  detail.innerHTML = '<td colspan="' + colspan + '" style="padding:0"><div class="film-detail">Загрузка расхода плёнки…</div></td>';
+  detail.innerHTML = '<td colspan="' + colspan + '" style="padding:0"><div class="film-detail" id="inline-wrap-' + id + '">Загрузка…</div></td>';
   tr.parentNode.insertBefore(detail, tr.nextSibling);
-  google.script.run
-    .withSuccessHandler(function(resp){
-      var lines = (resp && resp.ok) ? (resp.data || []) : [];
-      var box = detail.querySelector('.film-detail');
-      if (box) box.innerHTML = renderFilmDetail_(lines);
-    })
-    .withFailureHandler(function(e){
-      var box = detail.querySelector('.film-detail');
-      if (box) box.innerHTML = '<span style="color:var(--danger)">Ошибка: ' + e.message + '</span>';
-    })
-    .getOrderMaterials(id);
+  _inlineEnsureMaterials(function(){
+    google.script.run
+      .withSuccessHandler(function(resp){
+        if (!resp || !resp.ok) { _setInline(id, '<span style="color:var(--danger)">' + (resp ? resp.error : 'Ошибка') + '</span>'); return; }
+        var o = resp.data;
+        App._inline[id] = {
+          mats: (o.materials || []).map(function(m){ return {
+            matId: m['Материал ID'] || '', name: m['Название'] || '', unit: m['Единица'] || 'пм',
+            qty: Number(m['Кол-во'])||0, roll: Number(m['Ширина рулона'])||1.52,
+            price: Number(m['Цена за м²'])||0, type: m['Тип'] === 'остаток' ? 'остаток' : 'расход' }; }),
+          exps: (o.expenses || []).map(function(e){ return { name: e['Название'] || '', amount: Number(e['Сумма'])||0 }; }),
+          verified: String(o['Проверено'] || '') === 'Да',
+        };
+        inlineRender(id);
+      })
+      .withFailureHandler(function(e){ _setInline(id, '<span style="color:var(--danger)">' + e.message + '</span>'); })
+      .getOrderFull(id);
+  });
 }
 
-function renderFilmDetail_(lines) {
-  var all = lines || [];
-  if (!all.length) return '<span style="color:var(--text3)">Расход плёнки по заказу не внесён.</span>';
-  var fmt = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru'); };
-  // расход сверху, остатки снизу
-  all = all.slice().sort(function(a,b){
-    var ao = String(a['Тип']||'расход')==='остаток' ? 1 : 0;
-    var bo = String(b['Тип']||'расход')==='остаток' ? 1 : 0;
-    return ao - bo;
-  });
-  var net = 0;
-  var rows = all.map(function(l){
-    var isOst = String(l['Тип'] || 'расход') === 'остаток';
-    var cost  = Number(l['Стоимость']) || 0; net += cost;
-    var costShown = (isOst ? '− ' + fmt(Math.abs(cost)) : fmt(cost)) + ' ' + CUR;
-    return '<tr' + (isOst ? ' style="color:var(--danger)"' : '') + '>' +
-      '<td>' + (l['Название'] || '—') + (isOst ? ' <span style="font-size:10px;opacity:.85">остаток</span>' : '') + '</td>' +
-      '<td style="text-align:right">' + (isOst ? '− ' : '') + fmt(l['Кол-во']) + ' ' + (l['Единица'] || '') + '</td>' +
-      '<td style="text-align:right">' + fmt(l['Кол-во м²']) + ' м²</td>' +
-      '<td style="text-align:right">' + fmt(l['Цена за м²']) + ' ' + CUR + '</td>' +
-      '<td style="text-align:right;font-weight:600">' + costShown + '</td>' +
+function _setInline(id, html){ var w = document.getElementById('inline-wrap-' + id); if (w) w.innerHTML = html; }
+function inlineRender(id){ _setInline(id, buildInlineEditor(id)); }
+
+function buildInlineEditor(id) {
+  var st = App._inline[id]; if (!st) return '';
+  var hasRef = (App._materials || []).length > 0;
+  var inp = 'padding:3px 6px;border:1px solid var(--border);border-radius:5px;background:var(--inp);color:var(--text);font-size:12px';
+  var matTot = 0, expTot = 0;
+
+  var matRows = st.mats.map(function(m, i){
+    var sqm = _matSqm(m), cost = _matCost(m), isOst = m.type === 'остаток'; matTot += cost;
+    var matCell = hasRef
+      ? '<select onchange="inlineMatSelect(\'' + id + '\',' + i + ',this)" style="' + inp + ';min-width:150px">' + cardMatOptions_(m.matId) + '</select>'
+      : '<input value="' + _inlEsc(m.name) + '" oninput="inlineField(\'' + id + '\',' + i + ',\'name\',this.value)" placeholder="плёнка" style="' + inp + ';min-width:140px">';
+    return '<tr>' +
+      '<td>' + matCell + '</td>' +
+      '<td style="white-space:nowrap"><input type="number" step="0.01" min="0" value="' + m.qty + '" oninput="inlineNum(\'' + id + '\',' + i + ',\'qty\',this.value)" style="' + inp + ';width:62px"> ' +
+        '<select onchange="inlineField(\'' + id + '\',' + i + ',\'unit\',this.value)" style="' + inp + '"><option value="пм"' + (m.unit==='пм'?' selected':'') + '>пм</option><option value="м²"' + (m.unit==='м²'?' selected':'') + '>м²</option></select></td>' +
+      '<td id="inline-sqm-' + id + '-' + i + '" style="text-align:right">' + sqm.toFixed(2) + ' м²</td>' +
+      '<td style="white-space:nowrap"><input type="number" step="0.01" min="0" value="' + m.price + '" oninput="inlineNum(\'' + id + '\',' + i + ',\'price\',this.value)" style="' + inp + ';width:66px"> ' + CUR + '</td>' +
+      '<td><select onchange="inlineField(\'' + id + '\',' + i + ',\'type\',this.value)" style="' + inp + '"><option value="расход"' + (!isOst?' selected':'') + '>расход</option><option value="остаток"' + (isOst?' selected':'') + '>остаток</option></select></td>' +
+      '<td id="inline-cost-' + id + '-' + i + '" style="text-align:right;font-weight:600;color:' + (isOst?'var(--danger)':'inherit') + '">' + (isOst?'− '+_inlFmt(Math.abs(cost)):_inlFmt(cost)) + '</td>' +
+      '<td><button class="pay-del" onclick="inlineDelMat(\'' + id + '\',' + i + ')" title="Удалить">✕</button></td>' +
     '</tr>';
-  }).join('');
-  return '<div class="film-detail-title">🎞 Расход плёнки — сверьте с данными мастеров (остаток вычитается)</div>' +
-    '<table class="film-table"><thead><tr>' +
-      '<th>Плёнка</th><th style="text-align:right">Кол-во</th><th style="text-align:right">Площадь</th><th style="text-align:right">Цена/м²</th><th style="text-align:right">Сумма</th>' +
-    '</tr></thead><tbody>' + rows +
-      '<tr class="film-total"><td colspan="4" style="text-align:right">Итого расход (нетто):</td><td style="text-align:right">' + fmt(net) + ' ' + CUR + '</td></tr>' +
-    '</tbody></table>';
+  }).join('') || '<tr><td colspan="7" style="color:var(--text3);padding:6px">Плёнка не внесена.</td></tr>';
+
+  var expRows = st.exps.map(function(e, i){
+    expTot += Number(e.amount)||0;
+    return '<tr>' +
+      '<td><input value="' + _inlEsc(e.name) + '" oninput="inlineExp(\'' + id + '\',' + i + ',\'name\',this.value)" placeholder="напр. Такси, Арматура" style="' + inp + ';min-width:200px"></td>' +
+      '<td style="white-space:nowrap"><input type="number" step="0.01" min="0" value="' + e.amount + '" oninput="inlineExp(\'' + id + '\',' + i + ',\'amount\',this.value)" style="' + inp + ';width:90px"> ' + CUR + '</td>' +
+      '<td><button class="pay-del" onclick="inlineDelExp(\'' + id + '\',' + i + ')" title="Удалить">✕</button></td>' +
+    '</tr>';
+  }).join('') || '<tr><td colspan="3" style="color:var(--text3);padding:6px">Расходов нет.</td></tr>';
+
+  var verBtn = st.verified
+    ? '<button class="ver-btn ver-on" style="width:auto;padding:5px 12px" onclick="inlineToggleVer(\'' + id + '\')">✓ проверено</button>'
+    : '<button class="ver-btn ver-off" onclick="inlineToggleVer(\'' + id + '\')">проверено</button>';
+
+  return '<div class="film-detail-title">🎞 Расход плёнки и расходы — сверьте с данными мастеров (остаток вычитается)</div>' +
+    '<div class="inline-cols">' +
+      '<div>' +
+        '<table class="film-table"><thead><tr><th>Плёнка</th><th>Кол-во</th><th style="text-align:right">Площадь</th><th style="text-align:right">Цена/м²</th><th>Тип</th><th style="text-align:right">Сумма</th><th></th></tr></thead>' +
+        '<tbody>' + matRows + '</tbody></table>' +
+        '<button class="btn btn-ghost" style="margin-top:4px;padding:3px 10px;font-size:11px" onclick="inlineAddMat(\'' + id + '\')">+ Плёнка</button>' +
+      '</div>' +
+      '<div>' +
+        '<table class="film-table"><thead><tr><th>Расход (такси, арматура…)</th><th style="text-align:right">Сумма</th><th></th></tr></thead>' +
+        '<tbody>' + expRows + '</tbody></table>' +
+        '<button class="btn btn-ghost" style="margin-top:4px;padding:3px 10px;font-size:11px" onclick="inlineAddExp(\'' + id + '\')">+ Расход</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="inline-foot">' +
+      '<button class="btn btn-primary" style="padding:5px 16px;font-size:12px" onclick="inlineSave(\'' + id + '\')">💾 Сохранить</button>' +
+      verBtn +
+      '<span style="font-size:12px;color:var(--text2)">Итого плёнка (нетто): <b id="inline-mattot-' + id + '">' + _inlFmt(matTot) + '</b> · Расходы: <b id="inline-exptot-' + id + '">' + _inlFmt(expTot) + '</b></span>' +
+    '</div>';
+}
+
+// быстрый пересчёт стоимостей/итогов без полной перерисовки (сохраняет фокус ввода)
+function inlineRecalc(id) {
+  var st = App._inline[id]; if (!st) return;
+  var matTot = 0;
+  st.mats.forEach(function(m, i){
+    var sqm = _matSqm(m), cost = _matCost(m), isOst = m.type === 'остаток'; matTot += cost;
+    var se = document.getElementById('inline-sqm-' + id + '-' + i); if (se) se.textContent = sqm.toFixed(2) + ' м²';
+    var ce = document.getElementById('inline-cost-' + id + '-' + i);
+    if (ce) { ce.textContent = isOst ? '− ' + _inlFmt(Math.abs(cost)) : _inlFmt(cost); ce.style.color = isOst ? 'var(--danger)' : 'inherit'; }
+  });
+  var expTot = st.exps.reduce(function(s, e){ return s + (Number(e.amount)||0); }, 0);
+  var mt = document.getElementById('inline-mattot-' + id); if (mt) mt.textContent = _inlFmt(matTot);
+  var et = document.getElementById('inline-exptot-' + id); if (et) et.textContent = _inlFmt(expTot);
+}
+
+function inlineNum(id, i, field, val) { var st = App._inline[id]; if (!st) return; st.mats[i][field] = Number(val) || 0; inlineRecalc(id); }
+function inlineField(id, i, field, val) { var st = App._inline[id]; if (!st) return; st.mats[i][field] = val; inlineRender(id); }
+function inlineMatSelect(id, i, sel) {
+  var st = App._inline[id]; if (!st) return;
+  var opt = sel.selectedOptions && sel.selectedOptions[0];
+  st.mats[i].matId = sel.value;
+  if (opt) {
+    st.mats[i].name  = opt.textContent || '';
+    st.mats[i].price = Number(opt.dataset.price) || 0;
+    st.mats[i].roll  = Number(opt.dataset.roll)  || 1.52;
+    if (opt.dataset.unit) st.mats[i].unit = opt.dataset.unit;
+  }
+  inlineRender(id);
+}
+function inlineExp(id, i, field, val) { var st = App._inline[id]; if (!st) return; st.exps[i][field] = (field === 'amount') ? (Number(val)||0) : val; if (field === 'amount') inlineRecalc(id); }
+function inlineAddMat(id) { var st = App._inline[id]; if (!st) return; st.mats.push({ matId:'', name:'', unit:'пм', qty:0, roll:1.52, price:0, type:'расход' }); inlineRender(id); }
+function inlineDelMat(id, i) { var st = App._inline[id]; if (!st) return; st.mats.splice(i,1); inlineRender(id); }
+function inlineAddExp(id) { var st = App._inline[id]; if (!st) return; st.exps.push({ name:'', amount:0 }); inlineRender(id); }
+function inlineDelExp(id, i) { var st = App._inline[id]; if (!st) return; st.exps.splice(i,1); inlineRender(id); }
+
+function inlineToggleVer(id) {
+  var st = App._inline[id]; if (!st) return;
+  var prev = !!st.verified; st.verified = !prev; inlineRender(id);
+  App.orders = []; App._dashCache = null;
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { st.verified = prev; inlineRender(id); toast('Ошибка: ' + (resp?resp.error:''), 'error'); }
+      else toast(resp.data.verified ? 'Отмечено как проверенное' : 'Проверка снята', 'success');
+    })
+    .withFailureHandler(function(e){ st.verified = prev; inlineRender(id); toast('Ошибка: ' + e.message, 'error'); })
+    .toggleOrderVerification(id);
+}
+
+function inlineSave(id) {
+  var st = App._inline[id]; if (!st) return;
+  var matLines = st.mats.filter(function(m){ return m.matId || String(m.name||'').trim() || Number(m.qty) > 0; })
+    .map(function(m){ return { materialId:m.matId||'', name:m.name||'', unit:m.unit||'пм', qty:Number(m.qty)||0, rollWidth:Number(m.roll)||1.52, pricePerSqm:Number(m.price)||0, type:m.type==='остаток'?'остаток':'расход' }; });
+  var expLines = st.exps.filter(function(e){ return String(e.name||'').trim() || Number(e.amount) > 0; })
+    .map(function(e){ return { name:e.name||'', amount:Number(e.amount)||0 }; });
+  toast('Сохранение…', '');
+  google.script.run
+    .withSuccessHandler(function(r1){
+      if (!r1 || !r1.ok) { toast('Ошибка плёнки: ' + (r1?r1.error:''), 'error'); return; }
+      google.script.run
+        .withSuccessHandler(function(r2){
+          if (!r2 || !r2.ok) { toast('Ошибка расходов: ' + (r2?r2.error:''), 'error'); return; }
+          google.script.run
+            .withSuccessHandler(function(){
+              toast('Сохранено, финансы пересчитаны', 'success');
+              App.orders = []; App._dashCache = null; App._debtCache = null;  // карточка/заказы/дашборд обновятся
+              if (App.currentPage === 'orders') loadOrders(true);
+              else if (App.currentPage === 'dashboard') renderDashboard();
+            })
+            .withFailureHandler(function(e){ toast('Ошибка пересчёта: ' + e.message, 'error'); })
+            .recalcOrderFinance(id);
+        })
+        .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+        .saveOrderExpenses(id, expLines);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .saveOrderMaterials(id, matLines);
 }
 
 /* ===== КАНБАН-ДОСКА ===== */
