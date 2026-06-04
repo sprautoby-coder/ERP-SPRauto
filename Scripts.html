@@ -2902,18 +2902,19 @@ function renderDashboard() {
   } else if (kpi) {
     kpi.innerHTML = '<div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div>';
   }
+  if (App._debtCache) renderDebtAlert_(App._debtCache);   // дебиторку тоже мгновенно из кэша
 
-  // Фоновое обновление
+  // Фоновое обновление — ОДНИМ вызовом (KPI + дебиторка), вместо двух round-trip
   google.script.run
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) return;
-      App._dashCache = { key: key, data: resp.data };
-      renderDashData_(resp.data);
+      var b = resp.data || {};
+      if (b.dash) { App._dashCache = { key: key, data: b.dash }; renderDashData_(b.dash); }
+      App._debtCache = b.debt || [];
+      renderDebtAlert_(App._debtCache);
     })
     .withFailureHandler(function(){})
-    .getDashboardData(range);
-
-  loadDashDebtAlert();
+    .getDashboardBundle(range);
 }
 
 // Отрисовать баннер дебиторки из массива строк

@@ -2,6 +2,23 @@
  * Api_Dashboard.gs — агрегация реальных данных для дашборда (v1.3)
  */
 
+/**
+ * Дашборд одним запросом: KPI/период + дебиторка для баннера.
+ * Раньше клиент делал ДВА round-trip (getDashboardData + getDebtOrders) при
+ * каждом открытии дашборда — теперь один. Сетевой round-trip к Apps Script
+ * (~0.3–2с) — главная задержка, поэтому слияние ощутимо ускоряет старт.
+ */
+function getDashboardBundle(period) {
+  return safeCall(function() {
+    const dash = getDashboardData(period);
+    const debt = getDebtOrders();
+    return {
+      dash: (dash && dash.ok) ? dash.data : null,
+      debt: (debt && debt.ok) ? debt.data : [],
+    };
+  });
+}
+
 function getDashboardData(period) {
   return safeCall(function() {
     period = period || {};
