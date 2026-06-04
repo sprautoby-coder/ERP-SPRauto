@@ -2095,10 +2095,36 @@ function toggleOrderVer(id, btn) {
     .toggleOrderVerification(id);
 }
 
-// Ресайз столбцов перетаскиванием правой границы заголовка (один раз на таблицу)
+// Ресайз столбцов перетаскиванием правой границы заголовка (один раз на таблицу).
+// Ширина запоминается в localStorage по ключу таблицы и восстанавливается при загрузке.
+function colWidthsKey_(table) { return 'colw_' + (table.id || 'table'); }
+
+function loadColWidths_(table) {
+  try {
+    var raw = localStorage.getItem(colWidthsKey_(table));
+    if (!raw) return;
+    var widths = JSON.parse(raw);
+    var ths = table.querySelectorAll('thead th');
+    ths.forEach(function(th, i){
+      var w = widths[i];
+      if (w && w > 40) { th.style.width = w + 'px'; th.style.minWidth = w + 'px'; }
+    });
+  } catch (e) { /* localStorage недоступен — не критично */ }
+}
+
+function saveColWidths_(table) {
+  try {
+    var ths = table.querySelectorAll('thead th');
+    var widths = Array.prototype.map.call(ths, function(th){ return th.offsetWidth; });
+    localStorage.setItem(colWidthsKey_(table), JSON.stringify(widths));
+  } catch (e) { /* localStorage недоступен — не критично */ }
+}
+
 function makeColumnsResizable(table) {
-  if (!table || table._resizable) return;
+  if (!table) return;
+  if (table._resizable) { loadColWidths_(table); return; }  // перерисовка тела — просто восстановить ширины
   table._resizable = true;
+  loadColWidths_(table);  // применить сохранённые ширины при первой инициализации
   var ths = table.querySelectorAll('thead th');
   ths.forEach(function(th, i){
     if (i === ths.length - 1) return; // последнюю колонку не тянем
@@ -2119,6 +2145,7 @@ function makeColumnsResizable(table) {
         document.removeEventListener('mousemove', move);
         document.removeEventListener('mouseup', up);
         document.body.style.cursor = ''; document.body.style.userSelect = '';
+        saveColWidths_(table);  // сохранить после перетаскивания
       }
       document.addEventListener('mousemove', move);
       document.addEventListener('mouseup', up);
