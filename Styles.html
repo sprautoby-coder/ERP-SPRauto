@@ -340,6 +340,16 @@ body {
 .filter-tab.active { background:var(--accent); color:#fff; border-color:var(--accent); }
 .pay-del { border:none; background:var(--red-soft); color:var(--danger); width:20px; height:20px; border-radius:5px; font-size:11px; line-height:1; cursor:pointer; padding:0; flex:0 0 auto; }
 .pay-del:hover { filter:brightness(1.1); }
+/* кнопка «Проверено» в таблице заказов */
+.ver-btn { border:1px solid var(--border); border-radius:6px; cursor:pointer; font-weight:700; line-height:1; padding:3px 8px; font-size:11px; transition:var(--t); }
+.ver-on  { background:var(--green-soft); color:var(--success); border-color:rgba(46,204,113,.35); width:26px; height:24px; padding:0; }
+.ver-off { background:var(--bg-card2); color:var(--text3); font-weight:600; }
+.ver-off:hover { color:var(--success); border-color:rgba(46,204,113,.35); }
+/* ресайз и видимые границы столбцов */
+.resizable-table th, .resizable-table td { border-right:1px solid var(--border); }
+.resizable-table th:last-child, .resizable-table td:last-child { border-right:none; }
+.col-resizer { position:absolute; top:0; right:0; width:7px; height:100%; cursor:col-resize; user-select:none; z-index:2; }
+.col-resizer:hover { background:var(--accent); opacity:.4; }
 .tab-cnt { display:inline-block; min-width:16px; padding:0 5px; margin-left:2px; border-radius:9px; background:var(--bg-hover); color:var(--text2); font-size:10.5px; font-weight:700; line-height:16px; text-align:center; vertical-align:middle; }
 .filter-tab.active .tab-cnt { background:rgba(255,255,255,.25); color:#fff; }
 
@@ -371,6 +381,7 @@ body {
 
 /* ===== КЛИЕНТЫ: ВИД ТАБЛИЦА ===== */
 .clients-table-wrap { border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+#orders-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
 .clients-table { width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; }
 .clients-table thead th { background:var(--bg-card2); color:var(--text3); font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:9px 12px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; overflow:hidden; }
 .clients-table thead th[onclick] { cursor:pointer; }

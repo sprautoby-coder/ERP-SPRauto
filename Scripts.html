@@ -65,10 +65,6 @@ function goPage(name) {
       actionBtn.style.display = 'inline-flex';
       actionBtn.textContent = '+ Новый клиент';
       actionBtn.onclick = function(){ openModal('modal-new-client'); };
-    } else if (name === 'orders') {
-      actionBtn.style.display = 'inline-flex';
-      actionBtn.textContent = '+ Новый заказ';
-      actionBtn.onclick = function(){ openModal('modal-new-order'); };
     } else if (name === 'expenses') {
       actionBtn.style.display = 'inline-flex';
       actionBtn.textContent = '+ Добавить расход';
@@ -1960,7 +1956,7 @@ function renderOrdersTable(orders) {
   if (!tbody) return;
 
   if (!orders || orders.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text2)">Заказов не найдено</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:32px;color:var(--text2)">Заказов не найдено</td></tr>';
     if (footer) footer.textContent = '';
     return;
   }
@@ -2003,6 +1999,20 @@ function renderOrdersTable(orders) {
       payBadge += ' <span style="font-size:10px;background:var(--purple-soft);color:var(--purple);padding:1px 5px;border-radius:8px;" title="Юридическое лицо">ЮЛ</span>';
     }
 
+    // Затраты = материалы + расходы (данные уже в заказе)
+    var matCost = Number(o['Итого материалы']) || 0;
+    var expCost = Number(o['Итого расходы'])   || 0;
+    var costSum = matCost + expCost;
+    var costCell = costSum > 0
+      ? '<span title="Материалы ' + matCost.toLocaleString('ru') + ' ' + CUR + ' + расходы ' + expCost.toLocaleString('ru') + ' ' + CUR + '">' + costSum.toLocaleString('ru') + ' ' + CUR + '</span>'
+      : '<span style="color:var(--text3)">—</span>';
+
+    // Проверено — переключатель прямо в таблице
+    var verified = String(o['Проверено'] || '') === 'Да';
+    var verCell = verified
+      ? '<button class="ver-btn ver-on" onclick="event.stopPropagation();toggleOrderVer(\'' + (o['ID']||'') + '\',this)" title="Проверено — нажмите, чтобы снять">✓</button>'
+      : '<button class="ver-btn ver-off" onclick="event.stopPropagation();toggleOrderVer(\'' + (o['ID']||'') + '\',this)" title="Отметить проверенным">проверить</button>';
+
     var oid    = o['ID'] || '';
     var payBtn = !isPaid
       ? '<button class="btn" onclick="event.stopPropagation();openPayOrderModal(\'' + oid + '\',\'' + esc(o['Клиент']) + '\',' + price + ',\'' + esc(o['Срок оплаты']) + '\')" ' +
@@ -2034,8 +2044,10 @@ function renderOrdersTable(orders) {
       '</td>' +
       '<td style="font-size:13px">' + (o['Услуга'] || '') + '</td>' +
       '<td style="text-align:right;font-weight:600">' + price.toLocaleString('ru') + ' ' + CUR + '</td>' +
+      '<td style="text-align:right;font-size:12px;color:var(--text2)">' + costCell + '</td>' +
       '<td style="text-align:center">' + payBadge + payDates + '</td>' +
       '<td style="text-align:center"><span style="font-size:12px;font-weight:600;color:' + color + '">' + status + '</span></td>' +
+      '<td style="text-align:center">' + verCell + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + (o['Менеджер'] || '—') + '</td>' +
       '<td onclick="event.stopPropagation()">' +
         '<select class="form-select" style="font-size:11px;padding:2px 4px;height:26px;min-width:90px" onchange="changeOrderStatus(\'' + oid + '\', this)">' +
@@ -2049,6 +2061,69 @@ function renderOrdersTable(orders) {
 
   tbody.innerHTML = html;
   if (footer) footer.textContent = 'Показано: ' + orders.length + ' из ' + App.orders.length;
+  makeColumnsResizable(document.getElementById('orders-table'));
+}
+
+// Переключить «Проверено» прямо из таблицы (оптимистично, без захода в карточку)
+function toggleOrderVer(id, btn) {
+  if (!id) return;
+  // оптимистичное обновление кэша и кнопки
+  var o = (App.orders || []).find(function(x){ return String(x['ID']) === String(id); });
+  var prev = o ? String(o['Проверено'] || '') : null;
+  var willOn = prev !== 'Да';
+  if (o) o['Проверено'] = willOn ? 'Да' : 'Нет';
+  if (btn) {
+    btn.className = 'ver-btn ' + (willOn ? 'ver-on' : 'ver-off');
+    btn.textContent = willOn ? '✓' : 'проверить';
+    btn.title = willOn ? 'Проверено — нажмите, чтобы снять' : 'Отметить проверенным';
+  }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { // откат
+        if (o) o['Проверено'] = prev;
+        if (btn) { var on = prev === 'Да'; btn.className = 'ver-btn ' + (on?'ver-on':'ver-off'); btn.textContent = on?'✓':'проверить'; }
+        toast('Ошибка: ' + (resp ? resp.error : ''), 'error');
+      } else {
+        toast(resp.data.verified ? 'Отмечено как проверенное' : 'Проверка снята', 'success');
+      }
+    })
+    .withFailureHandler(function(e){
+      if (o) o['Проверено'] = prev;
+      if (btn) { var on = prev === 'Да'; btn.className = 'ver-btn ' + (on?'ver-on':'ver-off'); btn.textContent = on?'✓':'проверить'; }
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .toggleOrderVerification(id);
+}
+
+// Ресайз столбцов перетаскиванием правой границы заголовка (один раз на таблицу)
+function makeColumnsResizable(table) {
+  if (!table || table._resizable) return;
+  table._resizable = true;
+  var ths = table.querySelectorAll('thead th');
+  ths.forEach(function(th, i){
+    if (i === ths.length - 1) return; // последнюю колонку не тянем
+    th.style.position = 'relative';
+    var handle = document.createElement('span');
+    handle.className = 'col-resizer';
+    th.appendChild(handle);
+    handle.addEventListener('mousedown', function(e){
+      e.preventDefault(); e.stopPropagation();
+      var startX = e.pageX, startW = th.offsetWidth;
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+      function move(ev){
+        var w = Math.max(40, startW + (ev.pageX - startX));
+        th.style.width = w + 'px'; th.style.minWidth = w + 'px';
+      }
+      function up(){
+        document.removeEventListener('mousemove', move);
+        document.removeEventListener('mouseup', up);
+        document.body.style.cursor = ''; document.body.style.userSelect = '';
+      }
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+    });
+  });
 }
 
 /* ===== КАНБАН-ДОСКА ===== */

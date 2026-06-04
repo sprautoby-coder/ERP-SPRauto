@@ -90,7 +90,6 @@
         <input type="date" class="form-input" id="dash-from" onchange="onDashDateEdit()" title="Дата начала периода" style="height:38px;width:150px">
         <span style="color:var(--text3)">—</span>
         <input type="date" class="form-input" id="dash-to" onchange="onDashDateEdit()" title="Дата окончания периода" style="height:38px;width:150px">
-        <button class="btn-cta" onclick="openModal('modal-new-order')"><span class="cta-plus">+</span>Новый заказ</button>
       </div>
     </div>
 
@@ -355,7 +354,7 @@
 
     <!-- Таблица заказов -->
     <div class="clients-table-wrap" id="orders-table-wrap">
-      <table class="clients-table" id="orders-table">
+      <table class="clients-table resizable-table" id="orders-table">
         <thead>
           <tr>
             <th style="width:96px"></th>
@@ -365,14 +364,16 @@
             <th style="min-width:130px">Авто / Госномер</th>
             <th style="min-width:110px">Услуга</th>
             <th style="min-width:90px;text-align:right">Сумма</th>
+            <th style="min-width:95px;text-align:right" title="Материалы + расходы">Затраты</th>
             <th style="min-width:70px;text-align:center">Оплата</th>
             <th style="min-width:100px;text-align:center">Статус</th>
+            <th style="min-width:84px;text-align:center" title="Проверено директором">✓ Пров.</th>
             <th style="min-width:100px">Менеджер</th>
             <th style="width:40px"></th>
           </tr>
         </thead>
         <tbody id="orders-tbody">
-          <tr><td colspan="10" class="ct-loading">
+          <tr><td colspan="13" class="ct-loading">
             <div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>
             <div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>
             <div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>
