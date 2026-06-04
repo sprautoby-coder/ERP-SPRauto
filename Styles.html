@@ -350,6 +350,17 @@ body {
 .resizable-table th:last-child, .resizable-table td:last-child { border-right:none; }
 .col-resizer { position:absolute; top:0; right:0; width:7px; height:100%; cursor:col-resize; user-select:none; z-index:2; }
 .col-resizer:hover { background:var(--accent); opacity:.4; }
+#orders-table-wrap, #dash-orders-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+/* раскрытие расхода плёнки в строке заказа */
+.film-toggle { border:none; background:none; color:var(--text3); cursor:pointer; font-size:12px; padding:0 5px 0 0; transition:transform .15s; display:inline-block; }
+.film-toggle.open { transform:rotate(90deg); color:var(--accent); }
+.film-detail-row td { background:var(--bg-card2); border-bottom:1px solid var(--border); }
+.film-detail { padding:10px 16px; }
+.film-detail-title { font-size:11px; color:var(--text3); text-transform:uppercase; letter-spacing:.05em; margin-bottom:7px; font-weight:600; }
+.film-table { width:auto; min-width:420px; border-collapse:collapse; font-size:12px; }
+.film-table th { text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.04em; color:var(--text3); padding:3px 14px 5px 0; font-weight:600; }
+.film-table td { padding:3px 14px 3px 0; color:var(--text2); }
+.film-table .film-total td { border-top:1px solid var(--border); padding-top:6px; font-weight:700; color:var(--text); }
 .tab-cnt { display:inline-block; min-width:16px; padding:0 5px; margin-left:2px; border-radius:9px; background:var(--bg-hover); color:var(--text2); font-size:10.5px; font-weight:700; line-height:16px; text-align:center; vertical-align:middle; }
 .filter-tab.active .tab-cnt { background:rgba(255,255,255,.25); color:#fff; }
 

@@ -2032,7 +2032,7 @@ function renderOrdersTable(orders) {
     html +=
       '<tr class="' + rowClass + '" style="cursor:pointer" onclick="openOrderCard(\'' + oid + '\')">' +
       '<td onclick="event.stopPropagation()" style="white-space:nowrap">' + payBtn + '</td>' +
-      '<td style="font-weight:600;font-size:12px">' + (o['Номер договора'] || oid || '') + '</td>' +
+      '<td style="font-weight:600;font-size:12px;white-space:nowrap"><button class="film-toggle" onclick="event.stopPropagation();toggleOrderFilms(\'' + oid + '\',this)" title="Показать расход плёнки">▸</button>' + (o['Номер договора'] || oid || '') + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + (o['Дата'] || '') + '</td>' +
       '<td>' +
         '<div style="font-weight:500;font-size:13px">' + (o['Клиент'] || '—') + '</div>' +
@@ -2105,31 +2105,18 @@ function toggleOrderVer(id, btn) {
 // Ширина запоминается в localStorage по ключу таблицы и восстанавливается при загрузке.
 function colWidthsKey_(table) { return 'colw_' + (table.id || 'table'); }
 
-// Сбросить ширины столбцов к исходным и забыть сохранённое
-function resetOrderColWidths() {
-  var table = document.getElementById('orders-table');
-  if (!table) return;
-  try { localStorage.removeItem(colWidthsKey_(table)); } catch (e) {}
+// Применить сохранённые ширины (если есть) + выставить общую ширину таблицы
+function applyColWidths_(table) {
   var ths = table.querySelectorAll('thead th');
-  var orig = table._origW || [];
+  var total = 0;
+  var saved = null;
+  try { var raw = localStorage.getItem(colWidthsKey_(table)); if (raw) saved = JSON.parse(raw); } catch (e) {}
   ths.forEach(function(th, i){
-    var o = orig[i] || { w:'', mw:'' };
-    th.style.width = o.w; th.style.minWidth = o.mw;
+    var w = (saved && saved[i] > 20) ? saved[i] : (table._origW ? table._origW[i] : th.offsetWidth);
+    th.style.width = w + 'px';
+    total += w;
   });
-  toast('Ширина столбцов сброшена', 'success');
-}
-
-function loadColWidths_(table) {
-  try {
-    var raw = localStorage.getItem(colWidthsKey_(table));
-    if (!raw) return;
-    var widths = JSON.parse(raw);
-    var ths = table.querySelectorAll('thead th');
-    ths.forEach(function(th, i){
-      var w = widths[i];
-      if (w && w > 40) { th.style.width = w + 'px'; th.style.minWidth = w + 'px'; }
-    });
-  } catch (e) { /* localStorage недоступен — не критично */ }
+  if (total) table.style.width = total + 'px';
 }
 
 function saveColWidths_(table) {
@@ -2140,16 +2127,28 @@ function saveColWidths_(table) {
   } catch (e) { /* localStorage недоступен — не критично */ }
 }
 
+// Сбросить ширины столбцов к исходным и забыть сохранённое
+function resetTableColWidths_(table) {
+  if (!table) return;
+  try { localStorage.removeItem(colWidthsKey_(table)); } catch (e) {}
+  var ths = table.querySelectorAll('thead th');
+  var orig = table._origW || [];
+  var total = 0;
+  ths.forEach(function(th, i){ var w = orig[i] || th.offsetWidth; th.style.width = w + 'px'; total += w; });
+  if (total) table.style.width = total + 'px';
+}
+function resetOrderColWidths() { resetTableColWidths_(document.getElementById('orders-table')); toast('Ширина столбцов сброшена', 'success'); }
+
 function makeColumnsResizable(table) {
   if (!table) return;
-  if (table._resizable) { loadColWidths_(table); return; }  // перерисовка тела — просто восстановить ширины
+  if (table._resizable) { applyColWidths_(table); return; }  // перерисовка тела — восстановить ширины
   table._resizable = true;
-  // запомним исходные ширины (для кнопки «сброс»)
-  table._origW = Array.prototype.map.call(table.querySelectorAll('thead th'), function(th){
-    return { w: th.style.width || '', mw: th.style.minWidth || '' };
-  });
-  loadColWidths_(table);  // применить сохранённые ширины при первой инициализации
-  var ths = table.querySelectorAll('thead th');
+  var ths = Array.prototype.slice.call(table.querySelectorAll('thead th'));
+  // снимок исходных ширин (defaults) ДО фиксации раскладки и применения сохранённых
+  table._origW = ths.map(function(th){ return th.offsetWidth; });
+  // фиксированная раскладка: тянется только нужный столбец, таблица растёт вправо (скролл)
+  table.style.tableLayout = 'fixed';
+  applyColWidths_(table);  // выставит ширины th и общую ширину таблицы
   ths.forEach(function(th, i){
     if (i === ths.length - 1) return; // последнюю колонку не тянем
     th.style.position = 'relative';
@@ -2158,12 +2157,13 @@ function makeColumnsResizable(table) {
     th.appendChild(handle);
     handle.addEventListener('mousedown', function(e){
       e.preventDefault(); e.stopPropagation();
-      var startX = e.pageX, startW = th.offsetWidth;
+      var startX = e.pageX, startW = th.offsetWidth, startTableW = table.offsetWidth;
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
       function move(ev){
         var w = Math.max(40, startW + (ev.pageX - startX));
-        th.style.width = w + 'px'; th.style.minWidth = w + 'px';
+        th.style.width = w + 'px';
+        table.style.width = (startTableW + (w - startW)) + 'px';  // двигается только правая граница
       }
       function up(){
         document.removeEventListener('mousemove', move);
@@ -2175,6 +2175,54 @@ function makeColumnsResizable(table) {
       document.addEventListener('mouseup', up);
     });
   });
+}
+
+// ── Раскрытие расхода плёнки прямо в таблице (ленивая подгрузка) ──
+function toggleOrderFilms(id, ctrl) {
+  var tr = ctrl.closest('tr');
+  if (!tr) return;
+  var next = tr.nextElementSibling;
+  if (next && next.classList.contains('film-detail-row')) { next.remove(); ctrl.classList.remove('open'); return; }
+  ctrl.classList.add('open');
+  var colspan = tr.children.length;
+  var detail = document.createElement('tr');
+  detail.className = 'film-detail-row';
+  detail.innerHTML = '<td colspan="' + colspan + '" style="padding:0"><div class="film-detail">Загрузка расхода плёнки…</div></td>';
+  tr.parentNode.insertBefore(detail, tr.nextSibling);
+  google.script.run
+    .withSuccessHandler(function(resp){
+      var lines = (resp && resp.ok) ? (resp.data || []) : [];
+      var box = detail.querySelector('.film-detail');
+      if (box) box.innerHTML = renderFilmDetail_(lines);
+    })
+    .withFailureHandler(function(e){
+      var box = detail.querySelector('.film-detail');
+      if (box) box.innerHTML = '<span style="color:var(--danger)">Ошибка: ' + e.message + '</span>';
+    })
+    .getOrderMaterials(id);
+}
+
+function renderFilmDetail_(lines) {
+  var films = (lines || []).filter(function(l){ return String(l['Тип'] || 'расход') === 'расход'; });
+  if (!films.length) return '<span style="color:var(--text3)">Расход плёнки по заказу не внесён.</span>';
+  var fmt = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru'); };
+  var total = 0;
+  var rows = films.map(function(l){
+    var cost = Number(l['Стоимость']) || 0; total += cost;
+    return '<tr>' +
+      '<td>' + (l['Название'] || '—') + '</td>' +
+      '<td style="text-align:right">' + fmt(l['Кол-во']) + ' ' + (l['Единица'] || '') + '</td>' +
+      '<td style="text-align:right">' + fmt(l['Кол-во м²']) + ' м²</td>' +
+      '<td style="text-align:right">' + fmt(l['Цена за м²']) + ' ' + CUR + '</td>' +
+      '<td style="text-align:right;font-weight:600">' + fmt(cost) + ' ' + CUR + '</td>' +
+    '</tr>';
+  }).join('');
+  return '<div class="film-detail-title">🎞 Расход плёнки — сверьте с данными мастеров</div>' +
+    '<table class="film-table"><thead><tr>' +
+      '<th>Плёнка</th><th style="text-align:right">Расход</th><th style="text-align:right">Площадь</th><th style="text-align:right">Цена/м²</th><th style="text-align:right">Сумма</th>' +
+    '</tr></thead><tbody>' + rows +
+      '<tr class="film-total"><td colspan="4" style="text-align:right">Итого плёнка:</td><td style="text-align:right">' + fmt(total) + ' ' + CUR + '</td></tr>' +
+    '</tbody></table>';
 }
 
 /* ===== КАНБАН-ДОСКА ===== */
@@ -3118,24 +3166,56 @@ function renderRecentOrders(orders, totalCount) {
   var rows = orders.map(function(o) {
     var statusColor = ORDER_STATUS_COLORS[o.status] || 'var(--text2)';
     var carLine = (o.car || '—') + (o.plate ? ' · ' + o.plate : '');
+    var verCell = o.verified
+      ? '<button class="ver-btn ver-on" onclick="event.stopPropagation();toggleOrderVerDash(\'' + o.id + '\',this)" title="Проверено — нажмите, чтобы снять">✓</button>'
+      : '<button class="ver-btn ver-off" onclick="event.stopPropagation();toggleOrderVerDash(\'' + o.id + '\',this)" title="Отметить проверенным">проверить</button>';
     return '<tr style="cursor:pointer" onclick="openOrderCard(\'' + o.id + '\')">' +
-      '<td style="font-size:12px;font-weight:600">' + (o.contract || o.id) + '</td>' +
+      '<td style="font-size:12px;font-weight:600;white-space:nowrap"><button class="film-toggle" onclick="event.stopPropagation();toggleOrderFilms(\'' + o.id + '\',this)" title="Показать расход плёнки">▸</button>' + (o.contract || o.id) + '</td>' +
       '<td style="font-size:12px;color:var(--text3);white-space:nowrap">' + (o.date || '') + '</td>' +
-      '<td><div style="font-weight:500;font-size:13px">' + (o.client || '—') + '</div>' +
-        '<div style="font-size:11px;color:var(--text3)">' + (o.phone || '') + '</div></td>' +
       '<td><div style="font-size:13px">' + carLine + '</div></td>' +
       '<td style="font-size:12px">' + (o.service || '') + '</td>' +
       '<td style="font-weight:600;text-align:right;white-space:nowrap">' + Number(o.price||0).toLocaleString('ru') + ' ' + CUR + '</td>' +
       '<td style="text-align:center">' + payBadge(o) + '</td>' +
       '<td style="text-align:center"><span style="font-size:11px;font-weight:600;color:' + statusColor + '">' + (o.status || '') + '</span></td>' +
+      '<td style="text-align:center">' + verCell + '</td>' +
     '</tr>';
   }).join('');
 
   container.innerHTML = head +
-    '<div class="clients-table-wrap"><table class="clients-table"><thead><tr>' +
-      '<th>Договор</th><th>Дата</th><th>Клиент</th><th>Авто / Госномер</th><th>Услуга</th>' +
-      '<th style="text-align:right">Сумма</th><th style="text-align:center">Оплата</th><th style="text-align:center">Статус</th>' +
+    '<div class="clients-table-wrap" id="dash-orders-wrap"><table class="clients-table resizable-table" id="dash-orders-table"><thead><tr>' +
+      '<th style="min-width:120px">Договор</th><th style="min-width:80px">Дата</th><th style="min-width:140px">Авто / Госномер</th><th style="min-width:110px">Услуга</th>' +
+      '<th style="min-width:90px;text-align:right">Сумма</th><th style="min-width:70px;text-align:center">Оплата</th><th style="min-width:90px;text-align:center">Статус</th>' +
+      '<th style="min-width:84px;text-align:center" title="Проверено директором">✓ Пров.</th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>' + footNote + '</div>';
+  makeColumnsResizable(document.getElementById('dash-orders-table'));
+}
+
+// Переключить «Проверено» из таблицы дашборда (оптимистично + сразу обновляет данные)
+function toggleOrderVerDash(id, btn) {
+  if (!id) return;
+  var recent = (App._dashCache && App._dashCache.data && App._dashCache.data.recentOrders) || [];
+  var o = recent.find(function(x){ return String(x.id) === String(id); });
+  var prev = o ? !!o.verified : false;
+  var willOn = !prev;
+  if (o) o.verified = willOn;
+  if (btn) { btn.className = 'ver-btn ' + (willOn ? 'ver-on' : 'ver-off'); btn.textContent = willOn ? '✓' : 'проверить'; }
+  App.orders = [];  // список заказов пересоберётся с новым статусом проверки
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) {
+        if (o) o.verified = prev;
+        if (btn) { btn.className = 'ver-btn ' + (prev ? 'ver-on' : 'ver-off'); btn.textContent = prev ? '✓' : 'проверить'; }
+        toast('Ошибка: ' + (resp ? resp.error : ''), 'error');
+      } else {
+        toast(resp.data.verified ? 'Отмечено как проверенное' : 'Проверка снята', 'success');
+      }
+    })
+    .withFailureHandler(function(e){
+      if (o) o.verified = prev;
+      if (btn) { btn.className = 'ver-btn ' + (prev ? 'ver-on' : 'ver-off'); btn.textContent = prev ? '✓' : 'проверить'; }
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .toggleOrderVerification(id);
 }
 
 /* ===== ФИНАНСЫ ===== */

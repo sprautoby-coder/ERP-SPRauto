@@ -121,6 +121,7 @@ function getDashboardData(period) {
           beznal:   o['Безнал'] || '',
           payStatus: o['Статус оплаты'] || '',
           payType:   o['Тип оплаты'] || '',
+          verified:  String(o['Проверено'] || '') === 'Да',
         };
       });
 
