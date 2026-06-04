@@ -2011,7 +2011,7 @@ function renderOrdersTable(orders) {
     var verified = String(o['Проверено'] || '') === 'Да';
     var verCell = verified
       ? '<button class="ver-btn ver-on" onclick="event.stopPropagation();toggleOrderVer(\'' + (o['ID']||'') + '\',this)" title="Проверено — нажмите, чтобы снять">✓</button>'
-      : '<button class="ver-btn ver-off" onclick="event.stopPropagation();toggleOrderVer(\'' + (o['ID']||'') + '\',this)" title="Отметить проверенным">проверить</button>';
+      : '<button class="ver-btn ver-off" onclick="event.stopPropagation();toggleOrderVer(\'' + (o['ID']||'') + '\',this)" title="Отметить проверенным">проверено</button>';
 
     var oid    = o['ID'] || '';
     var payBtn = !isPaid
@@ -2080,14 +2080,14 @@ function toggleOrderVer(id, btn) {
   if (o) o['Проверено'] = willOn ? 'Да' : 'Нет';
   if (btn) {
     btn.className = 'ver-btn ' + (willOn ? 'ver-on' : 'ver-off');
-    btn.textContent = willOn ? '✓' : 'проверить';
+    btn.textContent = willOn ? '✓' : 'проверено';
     btn.title = willOn ? 'Проверено — нажмите, чтобы снять' : 'Отметить проверенным';
   }
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) { // откат
         if (o) o['Проверено'] = prev;
-        if (btn) { var on = prev === 'Да'; btn.className = 'ver-btn ' + (on?'ver-on':'ver-off'); btn.textContent = on?'✓':'проверить'; }
+        if (btn) { var on = prev === 'Да'; btn.className = 'ver-btn ' + (on?'ver-on':'ver-off'); btn.textContent = on?'✓':'проверено'; }
         toast('Ошибка: ' + (resp ? resp.error : ''), 'error');
       } else {
         toast(resp.data.verified ? 'Отмечено как проверенное' : 'Проверка снята', 'success');
@@ -2095,7 +2095,7 @@ function toggleOrderVer(id, btn) {
     })
     .withFailureHandler(function(e){
       if (o) o['Проверено'] = prev;
-      if (btn) { var on = prev === 'Да'; btn.className = 'ver-btn ' + (on?'ver-on':'ver-off'); btn.textContent = on?'✓':'проверить'; }
+      if (btn) { var on = prev === 'Да'; btn.className = 'ver-btn ' + (on?'ver-on':'ver-off'); btn.textContent = on?'✓':'проверено'; }
       toast('Ошибка: ' + e.message, 'error');
     })
     .toggleOrderVerification(id);
@@ -3168,7 +3168,7 @@ function renderRecentOrders(orders, totalCount) {
     var carLine = (o.car || '—') + (o.plate ? ' · ' + o.plate : '');
     var verCell = o.verified
       ? '<button class="ver-btn ver-on" onclick="event.stopPropagation();toggleOrderVerDash(\'' + o.id + '\',this)" title="Проверено — нажмите, чтобы снять">✓</button>'
-      : '<button class="ver-btn ver-off" onclick="event.stopPropagation();toggleOrderVerDash(\'' + o.id + '\',this)" title="Отметить проверенным">проверить</button>';
+      : '<button class="ver-btn ver-off" onclick="event.stopPropagation();toggleOrderVerDash(\'' + o.id + '\',this)" title="Отметить проверенным">проверено</button>';
     return '<tr style="cursor:pointer" onclick="openOrderCard(\'' + o.id + '\')">' +
       '<td style="font-size:12px;font-weight:600;white-space:nowrap"><button class="film-toggle" onclick="event.stopPropagation();toggleOrderFilms(\'' + o.id + '\',this)" title="Показать расход плёнки">▸</button>' + (o.contract || o.id) + '</td>' +
       '<td style="font-size:12px;color:var(--text3);white-space:nowrap">' + (o.date || '') + '</td>' +
@@ -3198,13 +3198,13 @@ function toggleOrderVerDash(id, btn) {
   var prev = o ? !!o.verified : false;
   var willOn = !prev;
   if (o) o.verified = willOn;
-  if (btn) { btn.className = 'ver-btn ' + (willOn ? 'ver-on' : 'ver-off'); btn.textContent = willOn ? '✓' : 'проверить'; }
+  if (btn) { btn.className = 'ver-btn ' + (willOn ? 'ver-on' : 'ver-off'); btn.textContent = willOn ? '✓' : 'проверено'; }
   App.orders = [];  // список заказов пересоберётся с новым статусом проверки
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) {
         if (o) o.verified = prev;
-        if (btn) { btn.className = 'ver-btn ' + (prev ? 'ver-on' : 'ver-off'); btn.textContent = prev ? '✓' : 'проверить'; }
+        if (btn) { btn.className = 'ver-btn ' + (prev ? 'ver-on' : 'ver-off'); btn.textContent = prev ? '✓' : 'проверено'; }
         toast('Ошибка: ' + (resp ? resp.error : ''), 'error');
       } else {
         toast(resp.data.verified ? 'Отмечено как проверенное' : 'Проверка снята', 'success');
@@ -3212,7 +3212,7 @@ function toggleOrderVerDash(id, btn) {
     })
     .withFailureHandler(function(e){
       if (o) o.verified = prev;
-      if (btn) { btn.className = 'ver-btn ' + (prev ? 'ver-on' : 'ver-off'); btn.textContent = prev ? '✓' : 'проверить'; }
+      if (btn) { btn.className = 'ver-btn ' + (prev ? 'ver-on' : 'ver-off'); btn.textContent = prev ? '✓' : 'проверено'; }
       toast('Ошибка: ' + e.message, 'error');
     })
     .toggleOrderVerification(id);
