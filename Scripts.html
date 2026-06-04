@@ -2060,7 +2060,13 @@ function renderOrdersTable(orders) {
   });
 
   tbody.innerHTML = html;
-  if (footer) footer.textContent = 'Показано: ' + orders.length + ' из ' + App.orders.length;
+  if (footer) footer.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px">' +
+      '<span>Показано: ' + orders.length + ' из ' + App.orders.length + '</span>' +
+      '<button onclick="resetOrderColWidths()" title="Вернуть стандартную ширину столбцов" ' +
+        'style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:4px">' +
+        '↔ Сбросить ширину</button>' +
+    '</div>';
   makeColumnsResizable(document.getElementById('orders-table'));
 }
 
@@ -2099,6 +2105,20 @@ function toggleOrderVer(id, btn) {
 // Ширина запоминается в localStorage по ключу таблицы и восстанавливается при загрузке.
 function colWidthsKey_(table) { return 'colw_' + (table.id || 'table'); }
 
+// Сбросить ширины столбцов к исходным и забыть сохранённое
+function resetOrderColWidths() {
+  var table = document.getElementById('orders-table');
+  if (!table) return;
+  try { localStorage.removeItem(colWidthsKey_(table)); } catch (e) {}
+  var ths = table.querySelectorAll('thead th');
+  var orig = table._origW || [];
+  ths.forEach(function(th, i){
+    var o = orig[i] || { w:'', mw:'' };
+    th.style.width = o.w; th.style.minWidth = o.mw;
+  });
+  toast('Ширина столбцов сброшена', 'success');
+}
+
 function loadColWidths_(table) {
   try {
     var raw = localStorage.getItem(colWidthsKey_(table));
@@ -2124,6 +2144,10 @@ function makeColumnsResizable(table) {
   if (!table) return;
   if (table._resizable) { loadColWidths_(table); return; }  // перерисовка тела — просто восстановить ширины
   table._resizable = true;
+  // запомним исходные ширины (для кнопки «сброс»)
+  table._origW = Array.prototype.map.call(table.querySelectorAll('thead th'), function(th){
+    return { w: th.style.width || '', mw: th.style.minWidth || '' };
+  });
   loadColWidths_(table);  // применить сохранённые ширины при первой инициализации
   var ths = table.querySelectorAll('thead th');
   ths.forEach(function(th, i){
