@@ -171,24 +171,22 @@ body {
 
 /* Яркая CTA-кнопка (например «+ Новый заказ» на дашборде) */
 .btn-cta {
-  display:inline-flex; align-items:center; gap:10px;
-  height:42px; padding:0 24px; border-radius:12px; border:none; cursor:pointer;
-  font-family:'Manrope',sans-serif; font-size:16px; font-weight:800; letter-spacing:.01em;
+  display:inline-flex; align-items:center; gap:7px;
+  height:38px; padding:0 16px; border-radius:8px; border:none; cursor:pointer;
+  font-family:'Manrope',sans-serif; font-size:13px; font-weight:700; letter-spacing:.01em;
   color:#fff; white-space:nowrap;
-  background:linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
-  background-size:160% 160%; background-position:0% 50%;
-  box-shadow:0 6px 18px var(--accent-glow);
-  transition:transform .22s cubic-bezier(.4,0,.2,1), box-shadow .22s, background-position .35s;
+  background:var(--accent);
+  transition:var(--t);
 }
 .btn-cta:hover {
-  transform:translateY(-2px); background-position:100% 50%;
-  box-shadow:0 10px 26px var(--accent-glow), 0 6px 16px rgba(232,87,42,.38);
+  transform:translateY(-1px);
+  box-shadow:0 4px 14px var(--accent-glow);
 }
-.btn-cta:active { transform:translateY(0); }
+.btn-cta:active { transform:translateY(0); box-shadow:none; }
 .btn-cta .cta-plus {
   display:inline-flex; align-items:center; justify-content:center;
-  width:24px; height:24px; border-radius:50%;
-  background:rgba(255,255,255,.22); font-size:19px; font-weight:800; line-height:1;
+  width:18px; height:18px; border-radius:50%;
+  background:rgba(255,255,255,.22); font-size:14px; font-weight:700; line-height:1;
 }
 
 /* ===== ЗАГРУЗЧИК ===== */
