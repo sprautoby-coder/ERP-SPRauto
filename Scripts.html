@@ -3857,6 +3857,22 @@ function openOrderCard(orderId) {
   }
 }
 
+// Удалить платёж из карточки заказа (бэкенд пересчитает статус оплаты и остаток)
+function deletePaymentFromCard(paymentId) {
+  if (!paymentId) return;
+  uiConfirm('Удалить этот платёж? Сумма оплаты и статус заказа пересчитаются автоматически.', function(){
+    google.script.run
+      .withSuccessHandler(function(resp){
+        if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+        toast('Платёж удалён', 'success');
+        App.orders = []; App._dashCache = null; App._debtCache = null; // пересчитать списки/дашборд/дебиторку
+        if (App._currentOrderId) openOrderCard(App._currentOrderId);   // перерисовать карточку
+      })
+      .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+      .deleteOrderPayment(paymentId);
+  }, { okText: 'Удалить платёж' });
+}
+
 function renderOrderCard(order) {
   var content = document.getElementById('order-card-content');
   if (!content) return;
@@ -3888,12 +3904,16 @@ function renderOrderCard(order) {
     return '<tr><td>' + (e['Название']||'—') + '</td><td style="text-align:right;font-weight:600">' + fmt(e['Сумма']) + '</td></tr>';
   }).join('') || '<tr><td colspan="2" style="text-align:center;color:var(--text3);padding:8px">Нет расходов</td></tr>';
 
-  // История платежей
+  // История платежей (с возможностью удалить платёж)
   var payHistory = (order.payments && order.payments.length)
     ? order.payments.map(function(p){
-        return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">' +
+        var pid = p['ID'] || '';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">' +
           '<span style="color:var(--text3)">' + (p['Дата']||'') + ' · ' + (p['Способ оплаты']||'') + '</span>' +
-          '<span style="font-weight:600;color:var(--success)">' + fmt(p['Сумма']) + '</span></div>';
+          '<span style="display:flex;align-items:center;gap:8px">' +
+            '<span style="font-weight:600;color:var(--success)">' + fmt(p['Сумма']) + '</span>' +
+            (pid ? '<button class="pay-del" title="Удалить платёж" onclick="deletePaymentFromCard(\'' + pid + '\')">✕</button>' : '') +
+          '</span></div>';
       }).join('')
     : '<div style="font-size:12px;color:var(--text3);padding:4px 0">Платежей пока нет</div>';
 
