@@ -217,6 +217,50 @@ function naradTemplateHtml_(isTint) {
   `;
 }
 
+/** Карта работ мастеру (чек-лист комплексов и элементов оклейки). */
+function generateWorkCardHtml(orderId) {
+  return safeCall(function() {
+    var d = getDocData_(orderId);
+    var map = buildDocPlaceholders_(d);
+    map['Мастера'] = d.order['Оклейщики'] || d.order['Менеджер'] || '';
+    var body = fillTemplate_(workCardTemplateHtml_(), map);
+    return docWrap_('Карта работ ' + (map['Номер договора'] || ''), body);
+  });
+}
+
+function workCardTemplateHtml_() {
+  var cb = function(label){ return '<div style="display:inline-block;width:48%;margin:2px 0">☐ ' + label + '</div>'; };
+  var complexes = ['Optima','Optima+','Premium','Полная оклейка'].map(cb).join('');
+  var elements = ['Капот','Передний бампер','Крылья целиком','Передняя часть крыльев','Передняя оптика','Зеркала',
+    'Стойки лобового стекла','Полоса на крыше до люка','Внутренние пороги','Зона выгрузки','Кромки дверей','Антиманикюр'].map(cb).join('');
+  var extra = ['Полировка','Тонировка','Шумоизоляция','Керамическое покрытие'].map(cb).join('');
+  return `
+  <h2>КАРТА РАБОТ ПО ОКЛЕЙКЕ АВТОМОБИЛЯ № {{Номер договора}}</h2>
+  <table>
+    <tr><th style="width:25%">Автомобиль</th><td>{{Марка авто}} {{Модель}}</td><th style="width:18%">Стоимость</th><td>{{Сумма}} руб.</td></tr>
+    <tr><th>Мастера</th><td>{{Мастера}}</td><th>Плановая выдача</th><td>{{Дата выдачи авто}}</td></tr>
+  </table>
+
+  <h3>Информация об автомобиле и клиенте</h3>
+  <table>
+    <tr><th style="width:25%">Дата приёма авто</th><td>{{Дата}}</td><th style="width:18%">Гос. номер</th><td>{{Гос.номер}}</td></tr>
+    <tr><th>Имя клиента</th><td>{{ФИО}}</td><th>Телефон</th><td>{{Телефон клиента}}</td></tr>
+  </table>
+
+  <h3>Выбранный комплекс</h3>
+  <div>` + complexes + `</div>
+  <h3>Элементы для оклейки</h3>
+  <div>` + elements + `<div style="margin-top:4px">☐ Другое: <span class="blank" style="min-width:300px"></span></div></div>
+  <h3>Дополнительные работы</h3>
+  <div>` + extra + `<div style="margin-top:4px">☐ Другое: <span class="blank" style="min-width:300px"></span></div></div>
+
+  <h3>Примечания мастеру</h3>
+  <div style="border-bottom:1px solid #000;height:22px;margin:6px 0"></div>
+  <div style="border-bottom:1px solid #000;height:22px;margin:6px 0"></div>
+  <div style="border-bottom:1px solid #000;height:22px;margin:6px 0"></div>
+  `;
+}
+
 // (старый генератор заказ-наряда — оставлен как референс, не вызывается)
 function generateOrderNaradHtmlLegacy_(orderId) {
   return safeCall(function() {
@@ -438,6 +482,7 @@ function buildDocPlaceholders_(d) {
     'Фамилия И.О.':    surnameInitials_(fio),
     'ФИО род.':        c['ФИО род.'] || c['ФИО родительный'] || genitiveFio_(fio),
     'Паспорт':         c['Паспорт'] || '',
+    'Телефон клиента': o['Телефон'] || c['Телефон'] || '',
     'Марка авто':      marka,
     'Модель':          model,
     'Гос.номер':       o['Госномер'] || '',

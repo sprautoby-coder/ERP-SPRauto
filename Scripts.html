@@ -5053,6 +5053,18 @@ function printOrderNarad() {
     .generateOrderNaradHtml(id);
 }
 
+function printWorkCard() {
+  var id = App._currentOrderId;
+  if (!id) return;
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
+      var w = window.open('','_blank'); if(w){ w.document.write(resp.data); w.document.close(); }
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
+    .generateWorkCardHtml(id);
+}
+
 /* ===== ИНИЦИАЛИЗАЦИЯ ===== */
 function init() {
   refreshSync();
