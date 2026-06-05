@@ -2017,6 +2017,8 @@ function renderOrdersTable(orders) {
     else if (payStatus === 'Частично' || payType === 'Рассрочка') rowClass = 'row-rass';
     else if (payType === 'Отсрочка')                  rowClass = 'row-otsr';
     else                                              rowClass = 'row-debt';
+    // Проверенный заказ — затемняем строку на ~2 тона (визуальный признак проверки)
+    if (String(o['Проверено'] || '') === 'Да')        rowClass += ' row-verified';
 
     // Бейдж оплаты
     var payBadge;
@@ -2114,16 +2116,19 @@ function toggleOrderVer(id, btn) {
   var prev = o ? String(o['Проверено'] || '') : null;
   var willOn = prev !== 'Да';
   if (o) o['Проверено'] = willOn ? 'Да' : 'Нет';
+  var tr = btn && btn.closest('tr');
   if (btn) {
     btn.className = 'ver-btn ' + (willOn ? 'ver-on' : 'ver-off');
     btn.textContent = willOn ? '✓' : 'проверено';
     btn.title = willOn ? 'Проверено — нажмите, чтобы снять' : 'Отметить проверенным';
   }
+  if (tr) tr.classList.toggle('row-verified', willOn);   // затемнить/осветлить строку сразу
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) { // откат
         if (o) o['Проверено'] = prev;
         if (btn) { var on = prev === 'Да'; btn.className = 'ver-btn ' + (on?'ver-on':'ver-off'); btn.textContent = on?'✓':'проверено'; }
+        if (tr) tr.classList.toggle('row-verified', prev === 'Да');
         toast('Ошибка: ' + (resp ? resp.error : ''), 'error');
       } else {
         toast(resp.data.verified ? 'Отмечено как проверенное' : 'Проверка снята', 'success');
@@ -2132,6 +2137,7 @@ function toggleOrderVer(id, btn) {
     .withFailureHandler(function(e){
       if (o) o['Проверено'] = prev;
       if (btn) { var on = prev === 'Да'; btn.className = 'ver-btn ' + (on?'ver-on':'ver-off'); btn.textContent = on?'✓':'проверено'; }
+      if (tr) tr.classList.toggle('row-verified', prev === 'Да');
       toast('Ошибка: ' + e.message, 'error');
     })
     .toggleOrderVerification(id);

@@ -66,6 +66,8 @@
 #orders-table tbody tr.row-legal td:first-child  { box-shadow: inset 4px 0 0 var(--purple); }
 #orders-table tbody tr.row-debt  td:first-child  { box-shadow: inset 4px 0 0 var(--danger); }
 #orders-table tbody tr.row-paid  td:first-child  { box-shadow: inset 4px 0 0 var(--success); }
+/* Проверенный заказ — слой затемнения поверх любого тона строки (~2 тона темнее) */
+#orders-table tbody tr.row-verified td { background-image: linear-gradient(rgba(0,0,0,.13), rgba(0,0,0,.13)); }
 
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
 html { scroll-behavior:smooth; }
