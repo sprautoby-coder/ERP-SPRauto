@@ -59,6 +59,7 @@ function runSetupWizard() {
     step('Листы модуля (заказы, клиенты, материалы, платежи, график…)', addNewSheets);
     step('Модель оплаты и колонки заказов', migratePaymentModel);
     step('Склад: остатки материалов', migrateStockColumns);
+    step('Поля для документов (год, пробег, светопроп., элементы)', addOrderDocColumns);
     return { steps: steps, status: getSetupStatus_() };
   });
 }
@@ -334,6 +335,27 @@ function addDueDateColumn() {
   sheet.autoResizeColumn(beznalIdx + 2);
   Logger.log('Добавлена колонка "Срок оплаты" на позицию ' + (beznalIdx + 2));
   return 'Готово: колонка "Срок оплаты" добавлена';
+}
+
+// ─── МИГРАЦИЯ: поля для документов (год, пробег, светопроп., элементы) ───────
+
+/** Добавить в лист «Заказы» колонки для договоров. Идемпотентно. */
+function addOrderDocColumns() {
+  const sheet = getTab('DATABASE', 'ORDERS');
+  let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const need = ['Год выпуска', 'Пробег', 'Светопропускаемость', 'Элементы'];
+  const added = [];
+  need.forEach(function(col) {
+    if (headers.indexOf(col) >= 0) return;
+    const lastCol = sheet.getLastColumn();
+    sheet.insertColumnAfter(lastCol);
+    sheet.getRange(1, lastCol + 1).setValue(col)
+      .setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff');
+    headers.push(col);
+    added.push(col);
+  });
+  Logger.log(added.length ? 'Добавлены: ' + added.join(', ') : 'Все колонки уже есть');
+  return added.length ? ('Добавлены колонки: ' + added.join(', ')) : 'Колонки документов уже есть';
 }
 
 // ─── МИГРАЦИЯ v1.5: «Тип оплаты» и «Проверено» ──────────────────────────────

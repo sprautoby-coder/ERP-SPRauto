@@ -377,6 +377,11 @@ function updateOrder(id, payload) {
       if (payload.car         !== undefined) setCell('Авто',            payload.car);
       if (payload.plate       !== undefined) setCell('Госномер',        payload.plate);
       if (payload.vin         !== undefined) setCell('VIN',             payload.vin);
+      // Поля для документов (если колонки добавлены миграцией addOrderDocColumns)
+      if (payload.year             !== undefined) setCell('Год выпуска',        payload.year);
+      if (payload.mileage          !== undefined) setCell('Пробег',            payload.mileage);
+      if (payload.lightTransmission!== undefined) setCell('Светопропускаемость', payload.lightTransmission);
+      if (payload.elements         !== undefined) setCell('Элементы',          payload.elements);
       if (payload.dueDate     !== undefined) setCell('Дата выполнения', payload.dueDate);
       if (payload.duePayDate  !== undefined) setCell('Срок оплаты',     payload.duePayDate);
       if (payload.notes       !== undefined) setCell('Заметки',         payload.notes);

@@ -4428,15 +4428,19 @@ function renderOrderCard(order) {
       // ЛЕВАЯ КОЛОНКА — операционные данные
       '<div style="display:flex;flex-direction:column;gap:12px;min-width:0">' +
 
-        // Клиент и авто — единый компактный блок (поля в 2 колонки)
+        // Клиент и авто — РЕДАКТИРУЕМЫЙ блок (нужно для договора/наряда)
         cardSection_('Клиент и автомобиль' + (isLegal ? ' · юрлицо' : ''),
-          '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 18px">' +
-            infoLine_('Имя', order['Клиент']) +
-            infoLine_('Авто', order['Авто']) +
-            infoLine_('Телефон', order['Телефон']) +
-            infoLine_('Госномер', order['Госномер']) +
-            infoLine_('VIN', order['VIN']) +
-          '</div>') +
+          '<div class="cardveh-grid">' +
+            cvInput_('Имя / организация', 'cv-name', order['Клиент']) +
+            cvInput_('Телефон', 'cv-phone', order['Телефон']) +
+            cvInput_('Авто (марка, модель)', 'cv-car', order['Авто']) +
+            cvInput_('Гос. номер', 'cv-plate', order['Госномер']) +
+            cvInput_('VIN', 'cv-vin', order['VIN']) +
+            cvInput_('Год выпуска', 'cv-year', order['Год выпуска']) +
+            cvInput_('Пробег, км', 'cv-mileage', order['Пробег']) +
+            (/тонир|tint/i.test(order['Услуга']||'') ? cvInput_('Светопропуск., %', 'cv-light', order['Светопропускаемость']) : '') +
+          '</div>' +
+          '<div style="text-align:right;margin-top:8px"><button class="btn btn-primary" style="padding:5px 14px;font-size:12px" onclick="saveCardVehicle()">💾 Сохранить</button></div>') +
 
         // Материалы (редактируемый расход плёнки)
         '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden">' +
@@ -5021,6 +5025,35 @@ function infoLine_(label, value) {
   return '<div style="display:flex;gap:8px;margin-bottom:3px;font-size:12.5px">' +
     '<span style="color:var(--text3);min-width:72px">' + label + ':</span>' +
     '<span style="font-weight:500">' + value + '</span></div>';
+}
+
+// Редактируемое поле блока «Клиент и автомобиль»
+function cvInput_(label, id, value) {
+  var v = String(value == null ? '' : value).replace(/"/g, '&quot;');
+  return '<div class="cardveh-field"><label>' + label + '</label>' +
+    '<input id="' + id + '" value="' + v + '"></div>';
+}
+
+// Сохранить отредактированные данные клиента/авто заказа
+function saveCardVehicle() {
+  var id = App._currentOrderId;
+  if (!id) return;
+  var val = function(eid){ var e = document.getElementById(eid); return e ? e.value.trim() : undefined; };
+  var payload = {
+    clientName: val('cv-name'), clientPhone: val('cv-phone'),
+    car: val('cv-car'), plate: val('cv-plate'), vin: val('cv-vin'),
+    year: val('cv-year'), mileage: val('cv-mileage'),
+  };
+  var light = val('cv-light'); if (light !== undefined) payload.lightTransmission = light;
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast('Данные сохранены', 'success');
+      App.orders = []; App._cardCache = {};
+      if (App._cardCache) delete App._cardCache[id];
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .updateOrder(id, payload);
 }
 
 function finLine_(label, value, color, bold) {

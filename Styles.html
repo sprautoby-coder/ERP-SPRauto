@@ -366,6 +366,12 @@ body {
 .inline-cols { display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start; }
 .inline-cols > div { flex:1 1 320px; min-width:300px; }
 .inline-foot { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:10px; padding-top:8px; border-top:1px solid var(--border); }
+/* редактируемый блок «Клиент и автомобиль» в карточке */
+.cardveh-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px 16px; }
+.cardveh-field { display:flex; flex-direction:column; gap:2px; }
+.cardveh-field label { font-size:11px; color:var(--text3); }
+.cardveh-field input { padding:5px 8px; border:1px solid var(--border); border-radius:6px; background:var(--inp); color:var(--text); font-size:13px; }
+.cardveh-field input:focus { border-color:var(--accent); outline:none; }
 .tab-cnt { display:inline-block; min-width:16px; padding:0 5px; margin-left:2px; border-radius:9px; background:var(--bg-hover); color:var(--text2); font-size:10.5px; font-weight:700; line-height:16px; text-align:center; vertical-align:middle; }
 .filter-tab.active .tab-cnt { background:rgba(255,255,255,.25); color:#fff; }
 
