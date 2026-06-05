@@ -46,6 +46,8 @@ var PAGE_TITLES = {
 };
 
 function goPage(name) {
+  // Досохраняем несохранённые правки блока «Клиент и автомобиль» перед уходом
+  if (typeof cvFlush_ === 'function') cvFlush_();
   // Закрываем все открытые модальные окна при смене страницы
   closeAllModals();
 
@@ -4269,6 +4271,7 @@ function cardSkeleton_() {
 }
 
 function openOrderCard(orderId) {
+  if (typeof cvFlush_ === 'function') cvFlush_();   // досохранить правки прошлой карточки (до смены id)
   App._currentOrderId = orderId;
   goPage('order-card');
   var content = document.getElementById('order-card-content');
@@ -4445,7 +4448,7 @@ function renderOrderCard(order) {
                        cvInput_('Доверенность (№, дата)', 'cv-attorney', order['Доверенность']) : '') +
           '</div>' +
           (isLegal ? '<div style="font-size:11px;color:var(--text3);margin-top:4px">Заполните «Подписант» и «Доверенность» — если договор подписывает не директор, а представитель по доверенности.</div>' : '') +
-          '<div style="text-align:right;margin-top:8px"><button class="btn btn-primary" style="padding:5px 14px;font-size:12px" onclick="saveCardVehicle()">💾 Сохранить</button></div>') +
+          '<div style="text-align:right;margin-top:6px;font-size:11px;color:var(--text3);min-height:14px"><span id="cv-status"></span></div>') +
 
         // Материалы (редактируемый расход плёнки)
         '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden">' +
@@ -5036,32 +5039,56 @@ function infoLine_(label, value) {
 function cvInput_(label, id, value) {
   var v = String(value == null ? '' : value).replace(/"/g, '&quot;');
   return '<div class="cardveh-field"><label>' + label + '</label>' +
-    '<input id="' + id + '" value="' + v + '"></div>';
+    '<input id="' + id + '" value="' + v + '" oninput="cvAutoSave()"></div>';
 }
 
-// Сохранить отредактированные данные клиента/авто заказа
-function saveCardVehicle() {
-  var id = App._currentOrderId;
-  if (!id) return;
+// Собрать payload из полей блока «Клиент и автомобиль»
+function cvCollect_() {
   var val = function(eid){ var e = document.getElementById(eid); return e ? e.value.trim() : undefined; };
-  var payload = {
+  var p = {
     clientName: val('cv-name'), clientPhone: val('cv-phone'),
     car: val('cv-car'), plate: val('cv-plate'), vin: val('cv-vin'),
     year: val('cv-year'), mileage: val('cv-mileage'),
   };
-  var light = val('cv-light'); if (light !== undefined) payload.lightTransmission = light;
-  var elems = val('cv-elements'); if (elems !== undefined) payload.elements = elems;
-  var sig = val('cv-signatory'); if (sig !== undefined) payload.signatory = sig;
-  var att = val('cv-attorney');  if (att !== undefined) payload.attorney = att;
+  var light = val('cv-light'); if (light !== undefined) p.lightTransmission = light;
+  var elems = val('cv-elements'); if (elems !== undefined) p.elements = elems;
+  var sig = val('cv-signatory'); if (sig !== undefined) p.signatory = sig;
+  var att = val('cv-attorney');  if (att !== undefined) p.attorney = att;
+  return p;
+}
+
+function cvSetStatus_(text, color) {
+  var el = document.getElementById('cv-status');
+  if (el) { el.textContent = text; el.style.color = color || 'var(--text3)'; }
+}
+
+// Автосохранение с задержкой: запускается при вводе, сохраняет через 0.7с после паузы
+function cvAutoSave() {
+  App._cvDirty = true;
+  cvSetStatus_('● не сохранено', 'var(--warning)');
+  clearTimeout(App._cvTimer);
+  App._cvTimer = setTimeout(function(){ cvFlush_(); }, 700);
+}
+
+// Немедленно сохранить (вызывается debounce-таймером и перед печатью документов)
+function cvFlush_(cb) {
+  clearTimeout(App._cvTimer);
+  if (!App._cvDirty) { if (cb) cb(); return; }
+  var id = App._currentOrderId;
+  if (!id) { if (cb) cb(); return; }
+  App._cvDirty = false;   // сбрасываем сразу, чтобы повторный синхронный вызов не дублировал
+  cvSetStatus_('сохранение…');
   google.script.run
     .withSuccessHandler(function(resp){
-      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
-      toast('Данные сохранены', 'success');
-      App.orders = []; App._cardCache = {};
-      if (App._cardCache) delete App._cardCache[id];
+      if (!resp || !resp.ok) { cvSetStatus_('ошибка сохранения', 'var(--danger)'); if (cb) cb(); return; }
+      App._cvDirty = false;
+      cvSetStatus_('✓ сохранено', 'var(--success)');
+      App.orders = []; App._dashCache = null;          // списки пересоберутся
+      if (App._cardCache) delete App._cardCache[id];   // карточка перечитается свежей
+      if (cb) cb();
     })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
-    .updateOrder(id, payload);
+    .withFailureHandler(function(e){ cvSetStatus_('ошибка: ' + e.message, 'var(--danger)'); if (cb) cb(); })
+    .updateOrder(id, cvCollect_());
 }
 
 function finLine_(label, value, color, bold) {
@@ -5070,41 +5097,23 @@ function finLine_(label, value, color, bold) {
     '<span style="font-weight:600;color:' + (color||'') + '">' + value + '</span></div>';
 }
 
-function printOrderContract() {
+// Печать документа: сперва досохраняем правки (cvFlush_), затем генерируем
+function printDoc_(genFnName) {
   var id = App._currentOrderId;
   if (!id) return;
-  google.script.run
-    .withSuccessHandler(function(resp) {
-      if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
-      var w = window.open('','_blank'); if(w){ w.document.write(resp.data); w.document.close(); }
-    })
-    .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
-    .generateContractHtml(id);
+  cvFlush_(function(){
+    google.script.run
+      .withSuccessHandler(function(resp) {
+        if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
+        var w = window.open('','_blank'); if(w){ w.document.write(resp.data); w.document.close(); }
+      })
+      .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
+      [genFnName](id);
+  });
 }
-
-function printOrderNarad() {
-  var id = App._currentOrderId;
-  if (!id) return;
-  google.script.run
-    .withSuccessHandler(function(resp) {
-      if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
-      var w = window.open('','_blank'); if(w){ w.document.write(resp.data); w.document.close(); }
-    })
-    .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
-    .generateOrderNaradHtml(id);
-}
-
-function printWorkCard() {
-  var id = App._currentOrderId;
-  if (!id) return;
-  google.script.run
-    .withSuccessHandler(function(resp) {
-      if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
-      var w = window.open('','_blank'); if(w){ w.document.write(resp.data); w.document.close(); }
-    })
-    .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
-    .generateWorkCardHtml(id);
-}
+function printOrderContract() { printDoc_('generateContractHtml'); }
+function printOrderNarad()    { printDoc_('generateOrderNaradHtml'); }
+function printWorkCard()      { printDoc_('generateWorkCardHtml'); }
 
 /* ===== ИНИЦИАЛИЗАЦИЯ ===== */
 function init() {
