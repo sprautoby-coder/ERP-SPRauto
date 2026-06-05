@@ -4441,7 +4441,10 @@ function renderOrderCard(order) {
             (/тонир|tint/i.test(order['Услуга']||'')
               ? cvInput_('Светопропуск., %', 'cv-light', order['Светопропускаемость'])
               : cvInput_('Элементы оклейки', 'cv-elements', order['Элементы'])) +
+            (isLegal ? cvInput_('Подписант (если по доверенности)', 'cv-signatory', order['Подписант']) +
+                       cvInput_('Доверенность (№, дата)', 'cv-attorney', order['Доверенность']) : '') +
           '</div>' +
+          (isLegal ? '<div style="font-size:11px;color:var(--text3);margin-top:4px">Заполните «Подписант» и «Доверенность» — если договор подписывает не директор, а представитель по доверенности.</div>' : '') +
           '<div style="text-align:right;margin-top:8px"><button class="btn btn-primary" style="padding:5px 14px;font-size:12px" onclick="saveCardVehicle()">💾 Сохранить</button></div>') +
 
         // Материалы (редактируемый расход плёнки)
@@ -5048,6 +5051,8 @@ function saveCardVehicle() {
   };
   var light = val('cv-light'); if (light !== undefined) payload.lightTransmission = light;
   var elems = val('cv-elements'); if (elems !== undefined) payload.elements = elems;
+  var sig = val('cv-signatory'); if (sig !== undefined) payload.signatory = sig;
+  var att = val('cv-attorney');  if (att !== undefined) payload.attorney = att;
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }

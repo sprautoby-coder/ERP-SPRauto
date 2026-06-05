@@ -382,6 +382,8 @@ function updateOrder(id, payload) {
       if (payload.mileage          !== undefined) setCell('Пробег',            payload.mileage);
       if (payload.lightTransmission!== undefined) setCell('Светопропускаемость', payload.lightTransmission);
       if (payload.elements         !== undefined) setCell('Элементы',          payload.elements);
+      if (payload.signatory        !== undefined) setCell('Подписант',         payload.signatory);
+      if (payload.attorney         !== undefined) setCell('Доверенность',      payload.attorney);
       if (payload.dueDate     !== undefined) setCell('Дата выполнения', payload.dueDate);
       if (payload.duePayDate  !== undefined) setCell('Срок оплаты',     payload.duePayDate);
       if (payload.notes       !== undefined) setCell('Заметки',         payload.notes);
