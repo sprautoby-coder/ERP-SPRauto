@@ -1719,7 +1719,7 @@ function runSetupWizardUI() {
         '<div style="height:10px"></div>' + setupStatusHtml_(d.status);
       toast('Настройка выполнена', 'success');
       // сбрасываем кэши — структура могла измениться
-      App._materials = []; App.orders = []; App.clients = []; App._teamList = []; App._dashCache = null; App._debtCache = null;
+      App._materials = []; App.orders = []; App._cardCache = {}; App.clients = []; App._teamList = []; App._dashCache = null; App._debtCache = null;
     })
     .withFailureHandler(function(e){
       if (btn) { btn.disabled = false; btn.textContent = 'Запустить настройку'; }
@@ -2321,7 +2321,7 @@ function inlineDelExp(id, i) { var st = App._inline[id]; if (!st) return; st.exp
 function inlineToggleVer(id) {
   var st = App._inline[id]; if (!st) return;
   var prev = !!st.verified; st.verified = !prev; inlineRender(id);
-  App.orders = []; App._dashCache = null;
+  App.orders = []; App._cardCache = {}; App._dashCache = null;
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) { st.verified = prev; inlineRender(id); toast('Ошибка: ' + (resp?resp.error:''), 'error'); }
@@ -2347,7 +2347,7 @@ function inlineSave(id) {
           google.script.run
             .withSuccessHandler(function(){
               toast('Сохранено, финансы пересчитаны', 'success');
-              App.orders = []; App._dashCache = null; App._debtCache = null;  // карточка/заказы/дашборд обновятся
+              App.orders = []; App._cardCache = {}; App._dashCache = null; App._debtCache = null;  // карточка/заказы/дашборд обновятся
               if (App.currentPage === 'orders') loadOrders(true);
               else if (App.currentPage === 'dashboard') renderDashboard();
             })
@@ -3336,7 +3336,7 @@ function toggleOrderVerDash(id, btn) {
   var willOn = !prev;
   if (o) o.verified = willOn;
   if (btn) { btn.className = 'ver-btn ' + (willOn ? 'ver-on' : 'ver-off'); btn.textContent = willOn ? '✓' : 'проверено'; }
-  App.orders = [];  // список заказов пересоберётся с новым статусом проверки
+  App.orders = []; App._cardCache = {};  // список заказов пересоберётся с новым статусом проверки
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) {
@@ -4053,7 +4053,7 @@ function confirmPayOrder() {
       if (App.currentPage==='orders')     loadOrders(true);
       if (App.currentPage==='dds')        loadDDS();
       if (App.currentPage==='debt')       loadDebt();
-      if (App.currentPage==='order-card') openOrderCard(id);
+      if (App.currentPage==='order-card') reopenCard(id);
     })
     .withFailureHandler(function(e){ if(btn){btn.disabled=false;btn.textContent='Принять платёж';} toast('Ошибка: '+e.message,'error'); })
     .addOrderPayment(id, { amount: amount, payType: payType, comment: comment });
@@ -4171,34 +4171,50 @@ function printSalary() {
 
 App._currentOrderId = null;
 
+App._cardCache = {};   // кэш карточек по orderId (мгновенное повторное открытие)
+
+// перерисовать карточку после правки: сбросить кэш этого заказа и открыть заново
+function reopenCard(id) { if (id && App._cardCache) delete App._cardCache[id]; openOrderCard(id); }
+
+function cardSkeleton_() {
+  return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">' +
+    '<div class="kpi-skeleton" style="min-height:120px"></div><div class="kpi-skeleton" style="min-height:120px"></div>' +
+    '<div class="kpi-skeleton" style="min-height:160px"></div><div class="kpi-skeleton" style="min-height:160px"></div>' +
+    '</div>';
+}
+
 function openOrderCard(orderId) {
   App._currentOrderId = orderId;
   goPage('order-card');
   var content = document.getElementById('order-card-content');
-  if (content) content.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</div>';
 
-  var loadCard = function() {
-    google.script.run
-      .withSuccessHandler(function(resp) {
-        if (!resp||!resp.ok) { toast('Ошибка загрузки заказа','error'); return; }
-        renderOrderCard(resp.data);
-      })
-      .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
-      .getOrderFull(orderId);
-  };
+  // 1) Мгновенно из кэша, если карточка уже открывалась
+  var cached = App._cardCache[orderId];
+  if (cached) { renderOrderCard(cached); }
+  else if (content) { content.innerHTML = cardSkeleton_(); }
 
-  // Справочник материалов нужен для выпадающего списка в редакторе расхода плёнки
-  if (App._materials && App._materials.length) {
-    loadCard();
-  } else {
+  // 2) Справочник плёнок грузим ПАРАЛЛЕЛЬНО (не блокирует карточку);
+  //    когда придёт — обновим выпадающие списки плёнки, если карточка открыта
+  if (!App._materials || !App._materials.length) {
     google.script.run
       .withSuccessHandler(function(resp) {
         App._materials = (resp && resp.ok) ? (resp.data || []) : [];
-        loadCard();
+        if (App.currentPage === 'order-card' && App._currentOrderId === orderId &&
+            App._currentOrder && document.getElementById('card-mat-tbody')) refreshCardMats();
       })
-      .withFailureHandler(function(){ loadCard(); })
+      .withFailureHandler(function(){})
       .getMaterials(null);
   }
+
+  // 3) Полные данные заказа — один запрос; кэшируем и перерисовываем
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { if (!cached) toast('Ошибка загрузки заказа', 'error'); return; }
+      App._cardCache[orderId] = resp.data;
+      if (App._currentOrderId === orderId) renderOrderCard(resp.data);
+    })
+    .withFailureHandler(function(e){ if (!cached) toast('Ошибка: ' + e.message, 'error'); })
+    .getOrderFull(orderId);
 }
 
 // Удалить платёж из карточки заказа (бэкенд пересчитает статус оплаты и остаток)
@@ -4209,8 +4225,8 @@ function deletePaymentFromCard(paymentId) {
       .withSuccessHandler(function(resp){
         if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
         toast('Платёж удалён', 'success');
-        App.orders = []; App._dashCache = null; App._debtCache = null; // пересчитать списки/дашборд/дебиторку
-        if (App._currentOrderId) openOrderCard(App._currentOrderId);   // перерисовать карточку
+        App.orders = []; App._cardCache = {}; App._dashCache = null; App._debtCache = null; // пересчитать списки/дашборд/дебиторку
+        if (App._currentOrderId) reopenCard(App._currentOrderId);   // перерисовать карточку
       })
       .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
       .deleteOrderPayment(paymentId);
@@ -4690,7 +4706,7 @@ function saveCardMaterials() {
       if (!resp || !resp.ok) { toast('Ошибка сохранения: ' + (resp?resp.error:''), 'error'); return; }
       // Пересчитываем финансы заказа и обновляем карточку
       google.script.run
-        .withSuccessHandler(function(){ toast('Расход плёнки обновлён, финансы пересчитаны', 'success'); openOrderCard(o['ID']); })
+        .withSuccessHandler(function(){ toast('Расход плёнки обновлён, финансы пересчитаны', 'success'); reopenCard(o['ID']); })
         .withFailureHandler(function(e){ toast('Ошибка пересчёта: ' + e.message, 'error'); })
         .recalcOrderFinance(o['ID']);
     })
@@ -4794,7 +4810,7 @@ function saveCardExpenses() {
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) { toast('Ошибка сохранения: ' + (resp?resp.error:''), 'error'); return; }
       google.script.run
-        .withSuccessHandler(function(){ toast('Расходы сохранены, финансы пересчитаны', 'success'); openOrderCard(o['ID']); })
+        .withSuccessHandler(function(){ toast('Расходы сохранены, финансы пересчитаны', 'success'); reopenCard(o['ID']); })
         .withFailureHandler(function(e){ toast('Ошибка пересчёта: ' + e.message, 'error'); })
         .recalcOrderFinance(o['ID']);
     })
@@ -4857,7 +4873,7 @@ function updateOrderCardField(orderId, payload) {
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
       toast('Сохранено', 'success');
-      openOrderCard(orderId);
+      reopenCard(orderId);
     })
     .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
     .updateOrder(orderId, payload);
@@ -4868,7 +4884,7 @@ function setOrderCardDueDate(orderId, val) {
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
       toast('Срок оплаты сохранён', 'success');
-      openOrderCard(orderId);
+      reopenCard(orderId);
     })
     .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
     .setOrderDueDate(orderId, val);
@@ -4884,7 +4900,7 @@ function createInstallmentPlanCard(orderId) {
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
       toast('График: ' + resp.data.months + ' взносов по ~' + resp.data.perPayment + ' ' + CUR, 'success');
-      openOrderCard(orderId);
+      reopenCard(orderId);
     })
     .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
     .createInstallmentPlan(orderId, { months: months, startDate: start });
@@ -4896,7 +4912,7 @@ function deleteScheduleCard(orderId) {
       .withSuccessHandler(function(resp) {
         if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
         toast('График удалён', 'success');
-        openOrderCard(orderId);
+        reopenCard(orderId);
       })
       .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
       .deletePaymentSchedule(orderId);
