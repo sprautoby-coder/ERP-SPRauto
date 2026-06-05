@@ -1821,7 +1821,10 @@ function toggleReminders() {
 function fillSettingsForm(s) {
   var set=function(id,key){var el=document.getElementById(id);if(el&&s[key]!==undefined)el.value=s[key];};
   set('set-company-name','company_name'); set('set-company-slogan','company_slogan');
-  set('set-unp','unp'); set('set-address','address');
+  set('set-unp','unp'); set('set-address','legal_address');
+  set('set-postal','postal_address'); set('set-bank-account','bank_account');
+  set('set-bank-name','bank_name'); set('set-director','director');
+  set('set-clerk','order_clerk'); set('set-warranty','warranty_months');
   set('set-phone','phone'); set('set-email','email');
   set('set-currency','currency'); set('set-bonus-pool','bonus_pool_pct');
   set('set-cycle-1','cycle_day_1'); set('set-cycle-2','cycle_day_2');
@@ -1834,7 +1837,10 @@ function fillSettingsForm(s) {
 function saveAllSettings() {
   var s={},g=function(id,key){var el=document.getElementById(id);if(el)s[key]=el.value;};
   g('set-company-name','company_name'); g('set-company-slogan','company_slogan');
-  g('set-unp','unp'); g('set-address','address');
+  g('set-unp','unp'); g('set-address','legal_address');
+  g('set-postal','postal_address'); g('set-bank-account','bank_account');
+  g('set-bank-name','bank_name'); g('set-director','director');
+  g('set-clerk','order_clerk'); g('set-warranty','warranty_months');
   g('set-phone','phone'); g('set-email','email');
   g('set-currency','currency'); g('set-bonus-pool','bonus_pool_pct');
   g('set-cycle-1','cycle_day_1'); g('set-cycle-2','cycle_day_2');
