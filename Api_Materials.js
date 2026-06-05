@@ -29,6 +29,7 @@ function getMaterials(serviceCode) {
  */
 function createMaterial(payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!payload || !payload.name) throw new Error('Укажите название материала');
     if (!payload.unit)            throw new Error('Укажите единицу измерения');
     if (!payload.price)           throw new Error('Укажите цену');
@@ -64,6 +65,7 @@ function createMaterial(payload) {
  */
 function updateMaterial(id, payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     const sheet   = getTab('DATABASE', 'MATERIALS');
     const data    = sheet.getDataRange().getValues();
     const headers = data[0];
@@ -110,6 +112,7 @@ function deactivateMaterial(id) {
  */
 function deleteMaterialRow(id) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!id) throw new Error('Не указан ID материала');
     const sheet   = getTab('DATABASE', 'MATERIALS');
     const data    = sheet.getDataRange().getValues();

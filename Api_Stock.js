@@ -53,6 +53,7 @@ function getStockMoves(materialId, limit) {
 /** Приход на склад (+qty). */
 function stockReceipt(materialId, qty, comment) {
   return safeCall(function() {
+    bumpDataVersion_();
     qty = Number(qty) || 0;
     if (qty <= 0) throw new Error('Количество должно быть больше 0');
     return applyStockMove_(materialId, qty, 'Приход', comment, '');
@@ -62,6 +63,7 @@ function stockReceipt(materialId, qty, comment) {
 /** Ручное списание со склада (−qty). */
 function stockWriteoff(materialId, qty, comment, orderId) {
   return safeCall(function() {
+    bumpDataVersion_();
     qty = Number(qty) || 0;
     if (qty <= 0) throw new Error('Количество должно быть больше 0');
     return applyStockMove_(materialId, -qty, 'Списание', comment, orderId || '');
@@ -71,6 +73,7 @@ function stockWriteoff(materialId, qty, comment, orderId) {
 /** Коррекция: выставить точный остаток (разница уходит в движение). */
 function stockAdjust(materialId, newQty, comment) {
   return safeCall(function() {
+    bumpDataVersion_();
     newQty = Number(newQty) || 0;
     var cur = getMaterialStock_(materialId).stock;
     var delta = round2(newQty - cur);

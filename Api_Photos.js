@@ -49,6 +49,7 @@ function getSettingValue_(key) {
  */
 function uploadOrderPhoto(payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     payload = payload || {};
     var orderId = String(payload.orderId || '').trim();
     var kind    = (payload.kind === 'После') ? 'После' : 'До';
@@ -106,6 +107,7 @@ function getOrderPhotos(orderId) {
 /** Удалить фото (строку из листа + файл в корзину Drive). */
 function deleteOrderPhoto(photoId) {
   return safeCall(function() {
+    bumpDataVersion_();
     photoId = String(photoId || '');
     var sheet = getTab('DATABASE', 'ORDER_PHOTOS');
     var data  = sheet.getDataRange().getValues();

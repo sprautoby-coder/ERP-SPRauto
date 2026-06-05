@@ -18,6 +18,7 @@ function getSettings() {
 
 function saveSetting(key, value, description, category) {
   return safeCall(function() {
+    bumpDataVersion_();
     var sheet = getTab('DATABASE', 'SETTINGS');
     var data = sheet.getDataRange().getValues();
     for (var i = 1; i < data.length; i++) {

@@ -15,8 +15,14 @@ function _dataVersion_() {
   return v;
 }
 
+// Флаг «этот запрос меняет данные» — сбрасывается на старте каждого исполнения
+// (глобалы в Apps Script не живут между запросами). В таких запросах читаем листы
+// ЖИВЬЁМ (мимо кэша), чтобы исключить любое устаревание внутри операции записи.
+var _CACHE_BYPASS = false;
+
 /** Сбросить весь серверный кэш чтений (вызывать в КАЖДОЙ функции, меняющей данные). */
 function bumpDataVersion_() {
+  _CACHE_BYPASS = true;   // дальше в этом запросе — только живые чтения
   try {
     var c = CacheService.getScriptCache();
     var v = parseInt(c.get('dataVersion') || '0', 10) + 1;
@@ -63,6 +69,18 @@ function getNextId(bookKey, tabKey, prefix) {
  * не может передать объект в браузер (возвращает null).
  */
 function readSheetAsObjects(bookKey, tabKey) {
+  // Кэш чтения листа (между запросами). В запросах с записью (_CACHE_BYPASS)
+  // и при сбое кэша — читаем живьём. Ключ версионный → инвалидируется bumpDataVersion_.
+  var cache = null, ckey = null;
+  if (!_CACHE_BYPASS) {
+    try {
+      cache = CacheService.getScriptCache();
+      ckey  = 'rs:' + bookKey + ':' + tabKey + ':v' + _dataVersion_();
+      var hit = cache.get(ckey);
+      if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+    } catch (e) { cache = null; }
+  }
+
   var sheet = getTab(bookKey, tabKey);
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
@@ -85,6 +103,7 @@ function readSheetAsObjects(bookKey, tabKey) {
     }
     result.push(obj);
   }
+  if (cache && ckey) { try { cache.put(ckey, JSON.stringify(result), 30); } catch (e) { /* > лимита — не кэшируем */ } }
   return result;
 }
 

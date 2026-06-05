@@ -43,6 +43,7 @@ function getAppointmentsRange(fromStr, toStr) {
 /** Создать запись. */
 function createAppointment(payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     payload = payload || {};
     var date = String(payload.date || '').trim();
     var time = String(payload.time || '').trim();
@@ -74,6 +75,7 @@ function createAppointment(payload) {
 /** Обновить поля записи (дата/время/мастер/услуга/длительность/комментарий). */
 function updateAppointment(id, fields) {
   return safeCall(function() {
+    bumpDataVersion_();
     fields = fields || {};
     var map = {
       date: 'Дата', time: 'Время', duration: 'Длительность', client: 'Клиент',
@@ -88,6 +90,7 @@ function updateAppointment(id, fields) {
 /** Сменить статус записи: Запланирована / Пришёл / Отменена. */
 function setAppointmentStatus(id, status) {
   return safeCall(function() {
+    bumpDataVersion_();
     var allowed = ['Запланирована', 'Пришёл', 'Отменена'];
     if (allowed.indexOf(status) < 0) throw new Error('Неизвестный статус');
     return updateAppointmentRow_(id, { 'Статус': status });
@@ -97,6 +100,7 @@ function setAppointmentStatus(id, status) {
 /** Удалить запись. */
 function deleteAppointment(id) {
   return safeCall(function() {
+    bumpDataVersion_();
     id = String(id || '');
     var sheet = getTab('DATABASE', 'APPOINTMENTS');
     var data = sheet.getDataRange().getValues();
@@ -111,6 +115,7 @@ function deleteAppointment(id) {
 /** Привязать запись к созданному заказу и отметить, что клиент пришёл. */
 function linkAppointmentOrder(id, orderId) {
   return safeCall(function() {
+    bumpDataVersion_();
     return updateAppointmentRow_(id, { 'Заказ ID': String(orderId || ''), 'Статус': 'Пришёл' });
   });
 }

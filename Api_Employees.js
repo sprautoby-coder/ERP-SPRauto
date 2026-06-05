@@ -24,6 +24,7 @@ function getEmployee(id) {
 
 function createEmployee(payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!payload) throw new Error('Нет данных');
     if (!payload.fio) throw new Error('Не указано ФИО');
     if (!payload.position) throw new Error('Не указана должность');
@@ -76,6 +77,7 @@ function createEmployee(payload) {
  */
 function updateEmployee(id, payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     var sheet = getTab('DATABASE', 'EMPLOYEES');
     var data = sheet.getDataRange().getValues();
     var headers = data[0];
@@ -117,6 +119,7 @@ function updateEmployee(id, payload) {
  */
 function updateEmployeeStatus(id, newStatus) {
   return safeCall(function() {
+    bumpDataVersion_();
     var sheet = getTab('DATABASE', 'EMPLOYEES');
     var data = sheet.getDataRange().getValues();
     var headers = data[0];
