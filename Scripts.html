@@ -46,8 +46,9 @@ var PAGE_TITLES = {
 };
 
 function goPage(name) {
-  // Досохраняем несохранённые правки блока «Клиент и автомобиль» перед уходом
+  // Досохраняем несохранённые правки карточки и инлайн-редакторов перед уходом
   if (typeof flushCard_ === 'function') flushCard_();
+  if (typeof flushAllInline_ === 'function') flushAllInline_();
   // Закрываем все открытые модальные окна при смене страницы
   closeAllModals();
 
@@ -2247,7 +2248,7 @@ function toggleOrderFilms(id, ctrl) {
   var tr = ctrl.closest('tr');
   if (!tr) return;
   var next = tr.nextElementSibling;
-  if (next && next.classList.contains('film-detail-row')) { next.remove(); ctrl.classList.remove('open'); return; }
+  if (next && next.classList.contains('film-detail-row')) { inlineFlush_(id); next.remove(); ctrl.classList.remove('open'); return; }
   ctrl.classList.add('open');
   var colspan = tr.children.length;
   var detail = document.createElement('tr');
@@ -2327,9 +2328,9 @@ function buildInlineEditor(id) {
       '</div>' +
     '</div>' +
     '<div class="inline-foot">' +
-      '<button class="btn btn-primary" style="padding:5px 16px;font-size:12px" onclick="inlineSave(\'' + id + '\')">💾 Сохранить</button>' +
       verBtn +
       '<span style="font-size:12px;color:var(--text2)">Итого плёнка (нетто): <b id="inline-mattot-' + id + '">' + _inlFmt(matTot) + '</b> · Расходы: <b id="inline-exptot-' + id + '">' + _inlFmt(expTot) + '</b></span>' +
+      '<span id="inline-status-' + id + '" style="font-size:11px;color:var(--text3);margin-left:auto"></span>' +
     '</div>';
 }
 
@@ -2348,8 +2349,8 @@ function inlineRecalc(id) {
   var et = document.getElementById('inline-exptot-' + id); if (et) et.textContent = _inlFmt(expTot);
 }
 
-function inlineNum(id, i, field, val) { var st = App._inline[id]; if (!st) return; st.mats[i][field] = Number(val) || 0; inlineRecalc(id); }
-function inlineField(id, i, field, val) { var st = App._inline[id]; if (!st) return; st.mats[i][field] = val; inlineRender(id); }
+function inlineNum(id, i, field, val) { var st = App._inline[id]; if (!st) return; st.mats[i][field] = Number(val) || 0; inlineRecalc(id); inlineAutoSave(id); }
+function inlineField(id, i, field, val) { var st = App._inline[id]; if (!st) return; st.mats[i][field] = val; inlineRender(id); inlineAutoSave(id); }
 function inlineMatSelect(id, i, sel) {
   var st = App._inline[id]; if (!st) return;
   var opt = sel.selectedOptions && sel.selectedOptions[0];
@@ -2361,12 +2362,13 @@ function inlineMatSelect(id, i, sel) {
     if (opt.dataset.unit) st.mats[i].unit = opt.dataset.unit;
   }
   inlineRender(id);
+  inlineAutoSave(id);
 }
-function inlineExp(id, i, field, val) { var st = App._inline[id]; if (!st) return; st.exps[i][field] = (field === 'amount') ? (Number(val)||0) : val; if (field === 'amount') inlineRecalc(id); }
+function inlineExp(id, i, field, val) { var st = App._inline[id]; if (!st) return; st.exps[i][field] = (field === 'amount') ? (Number(val)||0) : val; if (field === 'amount') inlineRecalc(id); inlineAutoSave(id); }
 function inlineAddMat(id) { var st = App._inline[id]; if (!st) return; st.mats.push({ matId:'', name:'', unit:'пм', qty:0, roll:1.52, price:0, type:'расход' }); inlineRender(id); }
-function inlineDelMat(id, i) { var st = App._inline[id]; if (!st) return; st.mats.splice(i,1); inlineRender(id); }
+function inlineDelMat(id, i) { var st = App._inline[id]; if (!st) return; st.mats.splice(i,1); inlineRender(id); inlineAutoSave(id); }
 function inlineAddExp(id) { var st = App._inline[id]; if (!st) return; st.exps.push({ name:'', amount:0 }); inlineRender(id); }
-function inlineDelExp(id, i) { var st = App._inline[id]; if (!st) return; st.exps.splice(i,1); inlineRender(id); }
+function inlineDelExp(id, i) { var st = App._inline[id]; if (!st) return; st.exps.splice(i,1); inlineRender(id); inlineAutoSave(id); }
 
 function inlineToggleVer(id) {
   var st = App._inline[id]; if (!st) return;
@@ -2381,34 +2383,48 @@ function inlineToggleVer(id) {
     .toggleOrderVerification(id);
 }
 
-function inlineSave(id) {
-  var st = App._inline[id]; if (!st) return;
+App._inlineTimers = {};
+App._inlineDirty  = {};
+
+function inlineSetStatus_(id, text, color) {
+  var el = document.getElementById('inline-status-' + id);
+  if (el) { el.textContent = text; el.style.color = color || 'var(--text3)'; }
+}
+
+// Автосохранение инлайн-редактора в таблице (debounce, без перезагрузки таблицы)
+function inlineAutoSave(id) {
+  App._inlineDirty[id] = true;
+  inlineSetStatus_(id, '● не сохранено', 'var(--warning)');
+  clearTimeout(App._inlineTimers[id]);
+  App._inlineTimers[id] = setTimeout(function(){ inlineFlush_(id); }, 900);
+}
+
+function inlineFlush_(id, cb) {
+  clearTimeout(App._inlineTimers[id]);
+  if (!App._inlineDirty[id]) { if (cb) cb(); return; }
+  App._inlineDirty[id] = false;
+  var st = App._inline[id]; if (!st) { if (cb) cb(); return; }
   var matLines = st.mats.filter(function(m){ return m.matId || String(m.name||'').trim() || Number(m.qty) > 0; })
     .map(function(m){ return { materialId:m.matId||'', name:m.name||'', unit:m.unit||'пм', qty:Number(m.qty)||0, rollWidth:Number(m.roll)||1.52, pricePerSqm:Number(m.price)||0, type:m.type==='остаток'?'остаток':'расход' }; });
   var expLines = st.exps.filter(function(e){ return String(e.name||'').trim() || Number(e.amount) > 0; })
     .map(function(e){ return { name:e.name||'', amount:Number(e.amount)||0 }; });
-  toast('Сохранение…', '');
-  google.script.run
-    .withSuccessHandler(function(r1){
-      if (!r1 || !r1.ok) { toast('Ошибка плёнки: ' + (r1?r1.error:''), 'error'); return; }
-      google.script.run
-        .withSuccessHandler(function(r2){
-          if (!r2 || !r2.ok) { toast('Ошибка расходов: ' + (r2?r2.error:''), 'error'); return; }
-          google.script.run
-            .withSuccessHandler(function(){
-              toast('Сохранено, финансы пересчитаны', 'success');
-              App.orders = []; App._cardCache = {}; App._dashCache = null; App._debtCache = null;  // карточка/заказы/дашборд обновятся
-              if (App.currentPage === 'orders') loadOrders(true);
-              else if (App.currentPage === 'dashboard') renderDashboard();
-            })
-            .withFailureHandler(function(e){ toast('Ошибка пересчёта: ' + e.message, 'error'); })
-            .recalcOrderFinance(id);
-        })
-        .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
-        .saveOrderExpenses(id, expLines);
-    })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
-    .saveOrderMaterials(id, matLines);
+  inlineSetStatus_(id, 'сохранение…');
+  var fail = function(){ inlineSetStatus_(id, 'ошибка сохранения', 'var(--danger)'); if (cb) cb(); };
+  google.script.run.withSuccessHandler(function(r1){
+    if (!r1 || !r1.ok) { fail(); return; }
+    google.script.run.withSuccessHandler(function(r2){
+      if (!r2 || !r2.ok) { fail(); return; }
+      google.script.run.withSuccessHandler(function(){
+        App.orders = []; App._cardCache = {}; App._dashCache = null; App._debtCache = null;
+        inlineSetStatus_(id, '✓ сохранено', 'var(--success)'); if (cb) cb();
+      }).withFailureHandler(fail).recalcOrderFinance(id);
+    }).withFailureHandler(fail).saveOrderExpenses(id, expLines);
+  }).withFailureHandler(fail).saveOrderMaterials(id, matLines);
+}
+
+// Досохранить все открытые инлайн-редакторы (перед навигацией)
+function flushAllInline_() {
+  Object.keys(App._inlineDirty || {}).forEach(function(id){ if (App._inlineDirty[id]) inlineFlush_(id); });
 }
 
 /* ===== КАНБАН-ДОСКА ===== */
@@ -4823,29 +4839,55 @@ function renderCardPersonnel() {
         if (!n) return '';
         var on = mastersList.indexOf(n) >= 0;
         return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">' +
-          '<input type="checkbox" class="card-master-cb" value="' + n.replace(/"/g,'&quot;') + '"' + (on ? ' checked' : '') + '> ' + n + '</label>';
+          '<input type="checkbox" class="card-master-cb" value="' + n.replace(/"/g,'&quot;') + '"' + (on ? ' checked' : '') + ' onchange="persAutoSave()"> ' + n + '</label>';
       }).join('')
     : '<div style="font-size:11px;color:var(--text3)">Список сотрудников пуст — добавьте в разделе «Сотрудники»</div>';
 
   return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:12px">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
       '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2)">Персонал · кто клеил</div>' +
-      '<button class="btn" onclick="saveCardPersonnel()" title="Сохранить персонал" style="padding:3px 9px;font-size:11px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:6px">💾</button>' +
+      '<span id="card-pers-status" style="font-size:11px;color:var(--text3)"></span>' +
     '</div>' +
     '<label style="font-size:10px;color:var(--text3)">Менеджер</label>' +
-    '<select id="card-mgr" style="' + inp + ';margin:2px 0 8px">' + mgrOpts + '</select>' +
+    '<select id="card-mgr" style="' + inp + ';margin:2px 0 8px" onchange="persAutoSave()">' + mgrOpts + '</select>' +
     '<div style="font-size:10px;color:var(--text3);margin-bottom:2px">Мастера (оклейщики)</div>' +
     '<div style="max-height:118px;overflow:auto">' + masterChecks + '</div>' +
   '</div>';
 }
 
-function saveCardPersonnel() {
-  var o = App._currentOrder;
-  if (!o) return;
+function persAutoSave() {
+  App._persDirty = true;
+  var el = document.getElementById('card-pers-status'); if (el) { el.textContent = '● не сохранено'; el.style.color = 'var(--warning)'; }
+  clearTimeout(App._persTimer);
+  App._persTimer = setTimeout(function(){ persFlush_(); }, 700);
+}
+function persFlush_(cb) {
+  clearTimeout(App._persTimer);
+  if (!App._persDirty) { if (cb) cb(); return; }
+  App._persDirty = false;
+  var o = App._currentOrder; if (!o || !o['ID']) { if (cb) cb(); return; }
+  var id = o['ID'];
   var mgr = (document.getElementById('card-mgr') || {}).value || '';
   var masters = [];
-  document.querySelectorAll('.card-master-cb:checked').forEach(function(cb){ masters.push(cb.value); });
-  updateOrderCardField(o['ID'], { manager: mgr, masters: masters.join(', ') });
+  document.querySelectorAll('.card-master-cb:checked').forEach(function(cb2){ masters.push(cb2.value); });
+  var st = function(t,c){ var e=document.getElementById('card-pers-status'); if(e){e.textContent=t; e.style.color=c||'var(--text3)';} };
+  st('сохранение…');
+  // обновим модель сразу (для документов/перерисовки)
+  o['Менеджер'] = mgr; o['Оклейщики'] = masters.join(', ');
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { st('ошибка сохранения', 'var(--danger)'); if (cb) cb(); return; }
+      var f = resp.data && resp.data.finance;
+      if (f) {
+        o['Валовая прибыль']=f.grossProfit; o['Бонус менеджера']=f.managerBonus;
+        o['Бонус оклейщика']=f.masterBonus; o['Маржинальная прибыль']=f.marginalProfit;
+        var box=document.getElementById('card-fin-box'); if(box) box.innerHTML=renderCardFinance_(o);
+      }
+      App.orders = []; App._dashCache = null; if (App._cardCache) delete App._cardCache[id];
+      st('✓ сохранено', 'var(--success)'); if (cb) cb();
+    })
+    .withFailureHandler(function(e){ st('ошибка: ' + e.message, 'var(--danger)'); if (cb) cb(); })
+    .updateOrder(id, { manager: mgr, masters: masters.join(', ') });
 }
 
 /* --- Карточка заказа: редактор расходов (такси, арматура) --- */
@@ -5145,8 +5187,8 @@ function matFlush_(cb) {
   }).withFailureHandler(fail).saveOrderMaterials(id, matLines);
 }
 
-// Общий флаш карточки (поля авто + плёнка/расходы) — перед печатью и уходом
-function flushCard_(cb) { cvFlush_(function(){ matFlush_(cb); }); }
+// Общий флаш карточки (поля авто + плёнка/расходы + персонал) — перед печатью и уходом
+function flushCard_(cb) { cvFlush_(function(){ matFlush_(function(){ persFlush_(cb); }); }); }
 
 function finLine_(label, value, color, bold) {
   return '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px' + (bold?';font-weight:700':'') + '">' +

@@ -403,6 +403,7 @@ function updateOrder(id, payload) {
       // Пересчёт финансов при изменении цены, условий оплаты или персонала
       const needsRecalc = payload.price !== undefined || payload.payType !== undefined
                        || payload.manager !== undefined || payload.masters !== undefined;
+      let financeResult = null;
       if (needsRecalc) {
         const price      = payload.price   !== undefined ? Number(payload.price)  : Number(row['Стоимость заказа']) || 0;
         const payType    = payload.payType !== undefined ? payload.payType         : String(row['Тип оплаты'] || '');
@@ -410,18 +411,18 @@ function updateOrder(id, payload) {
         const masters    = payload.masters !== undefined ? payload.masters         : String(row['Оклейщики']  || '');
         const matCost    = Number(row['Итого материалы']) || 0;
         const expCost    = Number(row['Итого расходы'])   || 0;
-        const finance    = calcOrderFinance_(price, matCost, expCost, payType, manager, masters);
+        financeResult    = calcOrderFinance_(price, matCost, expCost, payType, manager, masters);
 
         if (payload.price !== undefined) setCell('Стоимость заказа', price);
-        setCell('Валовая прибыль',      finance.grossProfit);
-        setCell('Бонус менеджера',      finance.managerBonus);
-        setCell('Бонус оклейщика',      finance.masterBonus);
-        setCell('Маржинальная прибыль', finance.marginalProfit);
+        setCell('Валовая прибыль',      financeResult.grossProfit);
+        setCell('Бонус менеджера',      financeResult.managerBonus);
+        setCell('Бонус оклейщика',      financeResult.masterBonus);
+        setCell('Маржинальная прибыль', financeResult.marginalProfit);
       }
 
       setCell('Обновлён', nowStr);
       logActivity('Редактировал', 'Заказ', id, '', '');
-      return { id: id };
+      return { id: id, finance: financeResult };
     }
     throw new Error('Заказ не найден: ' + id);
   });
