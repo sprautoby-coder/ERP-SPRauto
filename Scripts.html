@@ -4438,7 +4438,9 @@ function renderOrderCard(order) {
             cvInput_('VIN', 'cv-vin', order['VIN']) +
             cvInput_('Год выпуска', 'cv-year', order['Год выпуска']) +
             cvInput_('Пробег, км', 'cv-mileage', order['Пробег']) +
-            (/тонир|tint/i.test(order['Услуга']||'') ? cvInput_('Светопропуск., %', 'cv-light', order['Светопропускаемость']) : '') +
+            (/тонир|tint/i.test(order['Услуга']||'')
+              ? cvInput_('Светопропуск., %', 'cv-light', order['Светопропускаемость'])
+              : cvInput_('Элементы оклейки', 'cv-elements', order['Элементы'])) +
           '</div>' +
           '<div style="text-align:right;margin-top:8px"><button class="btn btn-primary" style="padding:5px 14px;font-size:12px" onclick="saveCardVehicle()">💾 Сохранить</button></div>') +
 
@@ -5045,6 +5047,7 @@ function saveCardVehicle() {
     year: val('cv-year'), mileage: val('cv-mileage'),
   };
   var light = val('cv-light'); if (light !== undefined) payload.lightTransmission = light;
+  var elems = val('cv-elements'); if (elems !== undefined) payload.elements = elems;
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }

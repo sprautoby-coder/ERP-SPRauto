@@ -208,7 +208,7 @@ function naradTemplateHtml_(isTint) {
     <tr><th style="width:33%">Стоимость работ</th><th style="width:33%">Стоимость материалов</th><th>Всего к оплате</th></tr>
     <tr><td class="right">{{Работ стоимость}} руб.</td><td class="right">{{Материалов стоимость}} руб.</td><td class="right"><b>{{Сумма}} руб.</b> (без НДС)</td></tr>
   </table>
-  <p>Общая стоимость прописью: <b>{{Сумма прописью}}</b> руб. 00 коп.</p>
+  <p>Общая стоимость прописью: <b>{{Сумма прописью}}</b></p>
 
   <div class="sign" style="margin-top:14px">
     <span>Заказ оформил: _____________ / {{Заказ оформил}}</span>
@@ -636,27 +636,52 @@ function contractTemplateHtml_(isLegal) {
   `;
 }
 
+/**
+ * Сумма прописью с рублями и копейками (до сотен миллионов).
+ * Напр. 2700 → «Две тысячи семьсот рублей 00 копеек».
+ */
 function numToWords_(n) {
-  // Упрощённый вариант для целых рублей
-  const int = Math.floor(n);
-  const dec = Math.round((n - int) * 100);
-  const units = ['','один','два','три','четыре','пять','шесть','семь','восемь','девять'];
-  const tens  = ['','десять','двадцать','тридцать','сорок','пятьдесят','шестьдесят','семьдесят','восемьдесят','девяносто'];
-  const hunds = ['','сто','двести','триста','четыреста','пятьсот','шестьсот','семьсот','восемьсот','девятьсот'];
-  const teens = ['десять','одиннадцать','двенадцать','тринадцать','четырнадцать','пятнадцать','шестнадцать','семнадцать','восемнадцать','девятнадцать'];
-  const thous = ['','одна тысяча','две тысячи','три тысячи','четыре тысячи'];
+  n = Number(n) || 0;
+  var rub = Math.floor(n);
+  var kop = Math.round((n - rub) * 100);
+  var ones = ['','один','два','три','четыре','пять','шесть','семь','восемь','девять','десять','одиннадцать','двенадцать','тринадцать','четырнадцать','пятнадцать','шестнадцать','семнадцать','восемнадцать','девятнадцать'];
+  var tens = ['','','двадцать','тридцать','сорок','пятьдесят','шестьдесят','семьдесят','восемьдесят','девяносто'];
+  var hund = ['','сто','двести','триста','четыреста','пятьсот','шестьсот','семьсот','восемьсот','девятьсот'];
 
-  if (int === 0) return 'ноль';
-  let result = '';
-  const th = Math.floor(int / 1000);
-  const rem = int % 1000;
-  if (th > 0 && th < 5) result += thous[th] + ' ';
-  else if (th >= 5) result += units[th] + ' тысяч ';
-  const h = Math.floor(rem / 100);
-  const t = Math.floor((rem % 100) / 10);
-  const u = rem % 10;
-  if (h) result += hunds[h] + ' ';
-  if (t === 1) { result += teens[u] + ' '; }
-  else { if (t) result += tens[t] + ' '; if (u) result += units[u] + ' '; }
-  return result.trim() + (dec > 0 ? ' ' + dec + ' коп.' : '');
+  function triad(num, fem) {       // 0..999 в слова; fem — женский род для 1/2
+    var s = '', h = Math.floor(num / 100), rest = num % 100, t = Math.floor(rest / 10), o = rest % 10;
+    if (h) s += hund[h] + ' ';
+    if (rest < 20 && rest > 0) {
+      var w = ones[rest];
+      if (fem && rest === 1) w = 'одна';
+      if (fem && rest === 2) w = 'две';
+      s += w + ' ';
+    } else {
+      if (t) s += tens[t] + ' ';
+      if (o) {
+        var w2 = ones[o];
+        if (fem && o === 1) w2 = 'одна';
+        if (fem && o === 2) w2 = 'две';
+        s += w2 + ' ';
+      }
+    }
+    return s;
+  }
+  function plural(num, f) {         // f = [для 1, для 2-4, для 5+]
+    var n10 = num % 10, n100 = num % 100;
+    if (n10 === 1 && n100 !== 11) return f[0];
+    if (n10 >= 2 && n10 <= 4 && (n100 < 10 || n100 >= 20)) return f[1];
+    return f[2];
+  }
+
+  var mil = Math.floor(rub / 1000000), th = Math.floor((rub % 1000000) / 1000), rest = rub % 1000;
+  var words = '';
+  if (mil) words += triad(mil, false) + plural(mil, ['миллион','миллиона','миллионов']) + ' ';
+  if (th)  words += triad(th, true)   + plural(th,  ['тысяча','тысячи','тысяч']) + ' ';
+  if (rest || (!mil && !th)) words += triad(rest, false);
+  words = words.trim() || 'ноль';
+
+  var kopStr = (kop < 10 ? '0' + kop : '' + kop);
+  var res = words + ' ' + plural(rub, ['рубль','рубля','рублей']) + ' ' + kopStr + ' ' + plural(kop, ['копейка','копейки','копеек']);
+  return res.charAt(0).toUpperCase() + res.slice(1);
 }
