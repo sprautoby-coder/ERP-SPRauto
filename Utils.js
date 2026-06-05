@@ -2,6 +2,45 @@
  * Utils.gs — общие хелперы
  */
 
+// ─── СЕРВЕРНЫЙ КЭШ ЧТЕНИЙ (CacheService) С ВЕРСИОННОЙ ИНВАЛИДАЦИЕЙ ─────────────
+// Тяжёлые read-эндпоинты (getOrders, дашборд, дебиторка) кэшируются между запросами.
+// Любая запись данных вызывает bumpDataVersion_() → версия меняется → все старые
+// ключи кэша становятся недостижимыми (мгновенная инвалидация, без устаревания).
+// TTL — лишь подстраховка/уборка. Если результат > лимита CacheService — просто не кэшируется.
+
+function _dataVersion_() {
+  var c = CacheService.getScriptCache();
+  var v = c.get('dataVersion');
+  if (!v) { v = '1'; c.put('dataVersion', v, 21600); }
+  return v;
+}
+
+/** Сбросить весь серверный кэш чтений (вызывать в КАЖДОЙ функции, меняющей данные). */
+function bumpDataVersion_() {
+  try {
+    var c = CacheService.getScriptCache();
+    var v = parseInt(c.get('dataVersion') || '0', 10) + 1;
+    c.put('dataVersion', String(v), 21600);
+  } catch (e) { /* кэш недоступен — не критично */ }
+}
+
+/**
+ * Вернуть данные из кэша по ключу или вычислить и закэшировать.
+ * @param {string} key      — логический ключ (версия добавляется автоматически)
+ * @param {number} ttl      — секунды (по умолчанию 45)
+ * @param {Function} producer — функция, возвращающая JSON-сериализуемые данные
+ */
+function cachedRead_(key, ttl, producer) {
+  var c;
+  try { c = CacheService.getScriptCache(); } catch (e) { return producer(); }
+  var ck = key + ':v' + _dataVersion_();
+  var hit = c.get(ck);
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  var data = producer();
+  try { c.put(ck, JSON.stringify(data), ttl || 45); } catch (e) { /* > лимита — не кэшируем */ }
+  return data;
+}
+
 /**
  * Генерация ID с префиксом
  */

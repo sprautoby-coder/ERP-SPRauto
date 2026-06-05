@@ -87,9 +87,10 @@ function generateContractNumber_(serviceCode) {
  * @param {Object} filter — { from, to, service, status, clientId, search }
  */
 function getOrders(filter) {
+  filter = filter || {};
   return safeCall(function() {
+   return cachedRead_('orders:' + JSON.stringify(filter), 45, function() {
     var all = readSheetAsObjects('DATABASE', 'ORDERS');
-    filter = filter || {};
 
     // Карта типа клиента (физ/юр) — для подсветки юрлиц (контроль дебиторки)
     var clientType = {};
@@ -161,6 +162,7 @@ function getOrders(filter) {
       o._finalPay   = (finalPayByOrder[String(o['ID'])] || {}).date || '';
       return o;
     });
+   });
   });
 }
 
@@ -192,6 +194,7 @@ function getOrder(id) {
  */
 function createOrder(payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!payload)         throw new Error('Нет данных');
     if (!payload.price)   throw new Error('Укажите стоимость заказа');
     if (!payload.service) throw new Error('Укажите услугу');
@@ -281,6 +284,7 @@ function createOrder(payload) {
  */
 function recalcOrderFinance(orderId) {
   return safeCall(function() {
+    bumpDataVersion_();
     const sheet   = getTab('DATABASE', 'ORDERS');
     const data    = sheet.getDataRange().getValues();
     const headers = data[0];
@@ -339,6 +343,7 @@ function recalcOrderFinance(orderId) {
  */
 function updateOrder(id, payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!id) throw new Error('Нет ID заказа');
     if (!payload) throw new Error('Нет данных для обновления');
 
@@ -416,6 +421,7 @@ function updateOrder(id, payload) {
  */
 function toggleOrderVerification(id) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!id) throw new Error('Нет ID заказа');
 
     const sheet   = getTab('DATABASE', 'ORDERS');
@@ -448,6 +454,7 @@ function toggleOrderVerification(id) {
  */
 function updateOrderStatus(id, status) {
   return safeCall(function() {
+    bumpDataVersion_();
     var allowed = ['Новый', 'В работе', 'Готов', 'Выдан', 'Отменён'];
     if (allowed.indexOf(status) < 0) throw new Error('Недопустимый статус: ' + status);
 

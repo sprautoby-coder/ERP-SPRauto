@@ -20,9 +20,9 @@ function getDashboardBundle(period) {
 }
 
 function getDashboardData(period) {
+  period = period || {};
   return safeCall(function() {
-    period = period || {};
-
+   return cachedRead_('dash:' + JSON.stringify(period), 45, function() {
     const orders   = readSheetAsObjects('DATABASE', 'ORDERS');
     const expenses = readSheetAsObjects('DATABASE', 'EXPENSES');
 
@@ -148,6 +148,7 @@ function getDashboardData(period) {
       recentOrders:  recent,
       expByCategory: expByCategory,
     };
+   });
   });
 }
 

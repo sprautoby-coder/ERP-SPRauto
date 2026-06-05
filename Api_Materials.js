@@ -164,6 +164,7 @@ function getOrderMaterials(orderId) {
  */
 function saveOrderMaterials(orderId, lines) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!orderId) throw new Error('Не указан ID заказа');
     lines = lines || [];
 
@@ -245,6 +246,7 @@ function getOrderExpenses(orderId) {
  */
 function saveOrderExpenses(orderId, lines) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!orderId) throw new Error('Не указан ID заказа');
     lines = lines || [];
 

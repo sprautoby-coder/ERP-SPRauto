@@ -28,6 +28,7 @@ function getOrderPayments(orderId) {
  */
 function addOrderPayment(orderId, payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!orderId) throw new Error('Не указан ID заказа');
     const amount = Number(payload.amount) || 0;
     if (!amount || amount <= 0) throw new Error('Укажите сумму платежа');
@@ -65,6 +66,7 @@ function addOrderPayment(orderId, payload) {
  */
 function deleteOrderPayment(paymentId) {
   return safeCall(function() {
+    bumpDataVersion_();
     const sheet   = getTab('DATABASE', 'PAYMENTS');
     const data    = sheet.getDataRange().getValues();
     const headers = data[0];
@@ -156,6 +158,7 @@ function updateOrderPaymentStatus_(orderId) {
  */
 function setOrderDueDate(orderId, dueDate) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!orderId) throw new Error('Не указан ID заказа');
 
     const sheet   = getTab('DATABASE', 'ORDERS');
@@ -198,6 +201,7 @@ function setOrderDueDate(orderId, dueDate) {
  */
 function getDebtOrders() {
   return safeCall(function() {
+   return cachedRead_('debt', 45, function() {
     const orders   = readSheetAsObjects('DATABASE', 'ORDERS');
     const payments = readSheetAsObjects('DATABASE', 'PAYMENTS');
     const today    = new Date();
@@ -285,6 +289,7 @@ function getDebtOrders() {
     });
 
     return result;
+   });
   });
 }
 
@@ -333,6 +338,7 @@ function getPaymentSchedule(orderId) {
  */
 function createInstallmentPlan(orderId, payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!orderId) throw new Error('Не указан заказ');
     const months = Math.max(1, parseInt(payload.months, 10) || 0);
 
@@ -392,6 +398,7 @@ function createInstallmentPlan(orderId, payload) {
  */
 function deletePaymentSchedule(orderId) {
   return safeCall(function() {
+    bumpDataVersion_();
     clearPaymentSchedule_(orderId);
     setOrderDueDateRaw_(orderId, '');
     return { orderId: orderId };

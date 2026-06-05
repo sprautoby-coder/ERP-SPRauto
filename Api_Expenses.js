@@ -31,6 +31,7 @@ function getExpenses(filter) {
 
 function createExpense(payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!payload.amount) throw new Error('Укажите сумму');
     if (!payload.category) throw new Error('Укажите категорию');
 
@@ -65,6 +66,7 @@ function createExpense(payload) {
 
 function deleteExpense(id) {
   return safeCall(function() {
+    bumpDataVersion_();
     const sheet   = getTab('DATABASE', 'EXPENSES');
     const data    = sheet.getDataRange().getValues();
     const headers = data[0];

@@ -53,6 +53,7 @@ function getClient(id) {
  */
 function createClient(payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!payload) throw new Error('Нет данных');
     if (!payload.name) throw new Error('Укажите имя или название организации');
     if (!payload.type) throw new Error('Укажите тип клиента (физ/юр)');
@@ -108,6 +109,7 @@ function createClient(payload) {
  */
 function updateClient(id, payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     var sheet = getTab('DATABASE', 'CLIENTS');
     var data = sheet.getDataRange().getValues();
     var headers = data[0];
@@ -184,6 +186,7 @@ function getClientVehicles(clientId) {
  */
 function createVehicle(payload) {
   return safeCall(function() {
+    bumpDataVersion_();
     if (!payload.clientId) throw new Error('Не указан ID клиента');
     if (!payload.brand) throw new Error('Укажите марку автомобиля');
     
