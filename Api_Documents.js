@@ -42,6 +42,16 @@ function getOrderForDocument(orderId) {
  */
 function generateContractHtml(orderId) {
   return safeCall(function() {
+    var d = getDocData_(orderId);
+    var map = buildDocPlaceholders_(d);
+    var body = fillTemplate_(contractTemplateHtml_(), map);
+    return docWrap_('Договор ' + (map['Номер договора'] || ''), body);
+  });
+}
+
+// (старый генератор договора — оставлен как референс, не вызывается)
+function generateContractHtmlLegacy_(orderId) {
+  return safeCall(function() {
     const resp = getOrderForDocument(orderId);
     if (!resp.ok) throw new Error(resp.error);
     const d = resp.data;
@@ -268,6 +278,222 @@ function finRow_(label, value, bold) {
 function formatToday_() {
   const d = new Date();
   return ('0'+d.getDate()).slice(-2) + '.' + ('0'+(d.getMonth()+1)).slice(-2) + '.' + d.getFullYear();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  ДВИЖОК ДОКУМЕНТОВ (плейсхолдеры {{...}} → данные заказа, white-label)
+// ════════════════════════════════════════════════════════════════════════════
+
+/** Собрать данные для документа: заказ + клиент + реквизиты компании + материалы. */
+function getDocData_(orderId) {
+  var orders = readSheetAsObjects('DATABASE', 'ORDERS');
+  var order = null;
+  for (var i = 0; i < orders.length; i++) {
+    if (String(orders[i]['ID']) === String(orderId)) { order = orders[i]; break; }
+  }
+  if (!order) throw new Error('Заказ не найден: ' + orderId);
+
+  var materials = readSheetAsObjects('DATABASE', 'ORDER_MATERIALS')
+    .filter(function(r){ return String(r['Заказ ID']) === String(orderId) && r['Тип'] === 'расход'; });
+
+  var client = {};
+  if (order['Клиент ID']) {
+    var cs = readSheetAsObjects('DATABASE', 'CLIENTS');
+    for (var k = 0; k < cs.length; k++) {
+      if (String(cs[k]['ID']) === String(order['Клиент ID'])) { client = cs[k]; break; }
+    }
+  }
+  // Реквизиты компании — позиционным чтением (ключ→значение), надёжно
+  var sResp = getSettings();
+  var company = (sResp && sResp.ok) ? sResp.data : {};
+  return { order: order, client: client, company: company, materials: materials };
+}
+
+/** Фамилия + инициалы: «Иванов Иван Иванович» → «Иванов И.И.» */
+function surnameInitials_(fio) {
+  var p = String(fio || '').trim().split(/\s+/);
+  if (!p[0]) return fio || '';
+  var s = p[0];
+  if (p[1]) s += ' ' + p[1].charAt(0).toUpperCase() + '.';
+  if (p[2]) s += p[2].charAt(0).toUpperCase() + '.';
+  return s;
+}
+
+/** Дата прописью: «02.04.2026» → «02 апреля 2026 г.» */
+function dateLong_(dateStr) {
+  var m = String(dateStr || '').match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+  var d = m ? new Date(+m[3], +m[2] - 1, +m[1]) : new Date();
+  var months = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+  return ('0' + d.getDate()).slice(-2) + ' ' + months[d.getMonth()] + ' ' + d.getFullYear() + ' г.';
+}
+
+/** Приблизительное склонение ФИО в родительный падеж (с ручной правкой как fallback). */
+function genitiveFio_(fio) {
+  var p = String(fio || '').trim().split(/\s+/);
+  if (!p[0]) return fio || '';
+  var last = p[0], first = p[1] || '', patr = p[2] || '';
+  var female = /(вна|чна)$/i.test(patr) || /(ова|ева|ина|ская|ая)$/i.test(last);
+  function gl(s){ if(!s) return s;
+    if(female){ if(/(ова|ева|ина)$/i.test(s)) return s+'ой'.slice(0); // Иванова→Ивановой
+      if(/ская$/i.test(s)) return s.slice(0,-2)+'ой'; if(/ая$/i.test(s)) return s.slice(0,-2)+'ой';
+      return s; }
+    if(/(ов|ев|ин|ын)$/i.test(s)) return s+'а';
+    if(/(ий|ый|ой)$/i.test(s)) return s.slice(0,-2)+'ого';
+    if(/[бвгджзйклмнпрстфхцчшщ]$/i.test(s)) return s+'а';
+    if(/я$/i.test(s)) return s.slice(0,-1)+'и'; if(/а$/i.test(s)) return s.slice(0,-1)+'ы';
+    return s; }
+  function gf(s){ if(!s) return s;
+    if(female){ if(/я$/i.test(s)) return s.slice(0,-1)+'и'; if(/а$/i.test(s)) return s.slice(0,-1)+'ы'; return s; }
+    if(/й$/i.test(s)) return s.slice(0,-1)+'я'; if(/я$/i.test(s)) return s.slice(0,-1)+'и';
+    if(/а$/i.test(s)) return s.slice(0,-1)+'ы'; if(/ь$/i.test(s)) return s.slice(0,-1)+'я';
+    if(/[бвгджзклмнпрстфхцчшщ]$/i.test(s)) return s+'а'; return s; }
+  function gp(s){ if(!s) return s;
+    if(female){ if(/на$/i.test(s)) return s.slice(0,-2)+'ны'; return s; }
+    if(/ич$/i.test(s)) return s+'а'; return s; }
+  return [gl(last), gf(first), gp(patr)].filter(Boolean).join(' ');
+}
+
+/** Карта подстановок {{...}} → значение. Реквизиты — из настроек, дефолт «САНПРОТЕКТ». */
+function buildDocPlaceholders_(d) {
+  var o = d.order, c = d.client, co = d.company;
+  var fio   = o['Клиент'] || c['ФИО'] || c['Название организации'] || '';
+  var price = Number(o['Стоимость заказа']) || 0;
+  var auto  = String(o['Авто'] || '').trim();
+  var marka = auto.split(/\s+/)[0] || '';
+  var model = auto.split(/\s+/).slice(1).join(' ');
+  var film  = (d.materials[0] || {})['Название'] || '';
+  var usedFilm = d.materials.reduce(function(s, m){ return s + (Number(m['Кол-во']) || 0); }, 0);
+  var get = function(k, def){ return (co[k] != null && co[k] !== '') ? co[k] : def; };
+  return {
+    'Номер договора':  o['Номер договора'] || '',
+    'Дата':            o['Дата'] || formatToday_(),
+    'Дата прописью':   dateLong_(o['Дата']),
+    'Дата выдачи авто': o['Дата выполнения'] || '',
+    'Начало выполнения работ': o['Дата'] || formatToday_(),
+    'ФИО':             fio,
+    'Фамилия И.О.':    surnameInitials_(fio),
+    'ФИО род.':        c['ФИО род.'] || c['ФИО родительный'] || genitiveFio_(fio),
+    'Паспорт':         c['Паспорт'] || '',
+    'Марка авто':      marka,
+    'Модель':          model,
+    'Гос.номер':       o['Госномер'] || '',
+    'VIN':             o['VIN'] || '',
+    'Год выпуска':     o['Год выпуска'] || c['Год выпуска'] || '',
+    'Пробег':          o['Пробег'] || '',
+    'Пленка':          film,
+    'Светопр-ть':      o['Светопропускаемость'] || '',
+    'Использовано пленки': usedFilm || '',
+    'Элементы для оклейки': o['Элементы'] || o['Услуга'] || '',
+    'Сумма':           price.toFixed(2),
+    'Сумма прописью':  numToWords_(price),
+    'Стоимость работ': price.toFixed(2),
+    'Стоимость работ прописью': numToWords_(price),
+    // Реквизиты Исполнителя (white-label; дефолт — реальные данные САНПРОТЕКТ)
+    'Компания':   get('company_name', 'Общество с ограниченной ответственностью «САНПРОТЕКТ»'),
+    'УНП':        get('unp', '391413250'),
+    'Юр.адрес':   get('legal_address', '223043, Минская обл., Минский р-н, Папернянский с/с, д. Цнянка, ул. Дзержинского, 44'),
+    'Почт.адрес': get('postal_address', '220138, а/я 35, г. Минск'),
+    'Р/с':        get('bank_account', 'BY87BLNB30120000490087000933'),
+    'Банк':       get('bank_name', "ОАО «БНБ-БАНК», код BLNBBY2X"),
+    'Директор':   get('director', 'Котляров И.В.'),
+    'Директор род.': genitiveFio_(get('director', 'Котляров И.В.')),
+    'Гарантия мес': get('warranty_months', '120'),
+    'Телефон':    get('phone', '+375172525569, +375291090001'),
+  };
+}
+
+/** Заменить {{плейсхолдеры}}; отсутствующие → линия для ручного заполнения. */
+function fillTemplate_(html, map) {
+  return html.replace(/\{\{\s*([^}]+?)\s*\}\}/g, function(_, key) {
+    var v = map[key.trim()];
+    return (v === undefined || v === null || v === '') ? '<span class="blank"></span>' : String(v);
+  });
+}
+
+/** Обёртка печатного документа: общий CSS + кнопка «Печать». */
+function docWrap_(title, bodyHtml) {
+  return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + title + '</title><style>' +
+    'body{font-family:"Times New Roman",serif;font-size:12.5px;line-height:1.4;color:#000;margin:18mm 16mm}' +
+    'h2{text-align:center;font-size:14px;margin:4px 0}h3{font-size:12.5px;margin:10px 0 4px}' +
+    'table{width:100%;border-collapse:collapse;margin:6px 0}td,th{border:1px solid #000;padding:4px 6px;font-size:11.5px;vertical-align:top}th{background:#eee}' +
+    '.blank{display:inline-block;min-width:130px;border-bottom:1px solid #000}' +
+    '.right{text-align:right}.center{text-align:center}.muted{font-size:10px;color:#444}' +
+    '.sign{display:flex;justify-content:space-between;margin-top:24px}.sign-line{display:inline-block;min-width:180px;border-bottom:1px solid #000}' +
+    '.page-break{page-break-before:always}.bar{display:flex;justify-content:space-between}' +
+    '@media print{.noprint{display:none}}' +
+    '</style></head><body>' +
+    '<div class="noprint" style="text-align:right;margin-bottom:8px"><button onclick="window.print()" style="padding:8px 20px;font-size:13px;cursor:pointer">🖨 Распечатать</button></div>' +
+    bodyHtml + '</body></html>';
+}
+
+/** Шаблон: ДОГОВОР + Протокол согласования цены + Акт выполненных работ (САНПРОТЕКТ). */
+function contractTemplateHtml_() {
+  return `
+  <h2>ДОГОВОР № {{Номер договора}}</h2>
+  <div class="bar"><span>г. Минск</span><span>{{Дата прописью}}</span></div>
+  <p>{{Компания}}, именуемое в дальнейшем «Исполнитель», в лице директора {{Директор род.}}, действующего на основании Устава, с одной стороны, и <b>{{ФИО}}</b>, паспорт серии {{Паспорт}}, именуемый в дальнейшем «Заказчик», заключили настоящий договор о нижеследующем:</p>
+
+  <h3>1. Предмет договора</h3>
+  <p>1.1. Исполнитель по настоящему договору обязуется выполнить работы по установке плёнки {{Пленка}} {{Светопр-ть}} на автомобиль {{Марка авто}} {{Модель}}, гос. номер {{Гос.номер}}, VIN {{VIN}}, а Заказчик обязуется принять результат выполненных работ и оплатить их стоимость.</p>
+  <p>1.2. Сроки выполнения работ:<br>начало выполнения работ: {{Дата}} г.<br>окончание выполнения работ: {{Дата выдачи авто}} г.</p>
+
+  <h3>2. Цена договора</h3>
+  <p>2.1. Цена выполненных работ согласовывается сторонами в Протоколе согласования цены.</p>
+  <p>2.2. Стоимость работ по настоящему договору составляет <b>{{Сумма}} руб. 00 коп.</b> ({{Сумма прописью}}).</p>
+  <p>2.3. Цена договора, предусмотренная п.2.2., является предварительной и может быть изменена в ходе выполнения работ в связи с изменением объёма производимых работ. Окончательная стоимость выполненных работ отражается в Акте приёма-передачи выполненных работ, который является неотъемлемой частью настоящего договора.</p>
+
+  <h3>3. Права и обязанности сторон</h3>
+  <p>3.1. Исполнитель обязуется:</p>
+  <p>3.1.1. Выполнить работы с надлежащим качеством в сроки, предусмотренные п.1.2. настоящего Договора, и сдать их результат Заказчику с одновременным подписанием Акта сдачи-приёмки выполненных работ.</p>
+  <p>3.1.2. Выполнить работы, предусмотренные п.1.1. настоящего договора, используя материал Исполнителя. Количество материала отражается в Протоколе согласования цены и согласовывается сторонами до начала выполнения работ.</p>
+  <p>3.2. Заказчик обязуется:</p>
+  <p>3.2.1. Произвести оплату 50% стоимости до начала работ, а оставшуюся часть в момент подписания Акта сдачи-приёмки выполненных работ путём передачи наличных денег уполномоченному представителю Исполнителя, с одновременным оформлением бланка строгой отчётности, второй экземпляр которого передаётся Заказчику.</p>
+
+  <h3>4. Ответственность сторон</h3>
+  <p>4.1. За ненадлежащее исполнение своих обязательств по настоящему договору стороны несут ответственность в соответствии с действующим законодательством Республики Беларусь.</p>
+
+  <h3>5. Гарантийное обслуживание</h3>
+  <p>5.1. Срок гарантийного обслуживания на результаты выполненных по настоящему договору работ составляет {{Гарантия мес}} месяцев с даты подписания Акта приёмки-сдачи выполненных работ.</p>
+  <p>5.2. В случае обнаружения недостатков в результатах выполненной работы в течение гарантийного срока Заказчик вправе требовать от Исполнителя безвозмездного их устранения в сроки, согласованные с Заказчиком.</p>
+
+  <h3>6. Порядок разрешения споров</h3>
+  <p>6.1. Все споры, возникающие из настоящего договора, разрешаются Сторонами в порядке переговоров. В случае невозможности — спор передаётся на рассмотрение в судебные инстанции в порядке, установленном действующим законодательством.</p>
+
+  <h3>7. Срок действия договора</h3>
+  <p>7.1. Настоящий договор вступает в силу с момента его подписания и действует до полного исполнения сторонами принятых на себя обязательств.</p>
+
+  <h3>8. Заключительные положения</h3>
+  <p>8.1. Настоящий договор составлен в двух экземплярах, имеющих одинаковую юридическую силу, по одному для каждой из сторон.</p>
+
+  <h3>9. Адреса, банковские реквизиты и подписи сторон</h3>
+  <table><tr>
+    <td style="width:50%"><b>Исполнитель:</b><br>{{Компания}}<br>УНП: {{УНП}}<br>Р/сч: {{Р/с}} в {{Банк}}<br>Юр. адрес: {{Юр.адрес}}<br>Почтовый адрес: {{Почт.адрес}}<br>Тел./факс: {{Телефон}}<br><br>Директор _____________ {{Директор}}<br>М.П.</td>
+    <td style="width:50%"><b>Заказчик:</b><br>{{ФИО}}<br>Паспорт: {{Паспорт}}<br><br><br><br>_____________ / {{Фамилия И.О.}}</td>
+  </tr></table>
+
+  <!-- ПРОТОКОЛ СОГЛАСОВАНИЯ ЦЕНЫ -->
+  <div class="page-break"></div>
+  <h2>Протокол согласования цены</h2>
+  <p>от «{{Дата}}» г. к договору № {{Номер договора}} от {{Дата}} г. между {{Компания}} и {{ФИО}}.</p>
+  <table>
+    <thead><tr><th>№ п/п</th><th>Наименование услуги</th><th>Количество</th><th>Цена, руб. (с НДС)</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td>{{Элементы для оклейки}}</td><td>{{Использовано пленки}}</td><td class="right">{{Сумма}} р.</td></tr>
+    </tbody>
+  </table>
+  <p>Внесена предоплата за услуги: {{Сумма прописью}}</p>
+  <div class="sign"><span>Директор ___________ {{Директор}}</span><span>Заказчик ___________ / {{Фамилия И.О.}}</span></div>
+
+  <!-- АКТ ВЫПОЛНЕННЫХ РАБОТ -->
+  <div class="page-break"></div>
+  <h2>АКТ ВЫПОЛНЕННЫХ РАБОТ</h2>
+  <div class="bar"><span>г. Минск</span><span>{{Дата выдачи авто}}</span></div>
+  <p>{{Компания}} в лице директора {{Директор род.}}, именуемое в дальнейшем «Исполнитель», с одной стороны, и <b>{{ФИО}}</b>, именуемый в дальнейшем «Заказчик», с другой стороны, составили настоящий акт о том, что в соответствии с условиями договора № {{Номер договора}} от {{Дата}} г. Исполнитель выполнил следующую работу: установка плёнки {{Пленка}} {{Светопр-ть}} на автомобиль {{Марка авто}} {{Модель}}, VIN {{VIN}}.</p>
+  <p>Сроки проведения работ: {{Дата выдачи авто}}.</p>
+  <p>Работа выполнена в полном объёме. Заказчик к качеству и объёму работ претензий не имеет.</p>
+  <p>Стоимость выполненных работ составляет: <b>{{Сумма}} руб. 00 коп.</b></p>
+  <div class="sign"><span>Исполнитель _____________ / {{Директор}}</span><span>Заказчик _____________ / {{Фамилия И.О.}}</span></div>
+  `;
 }
 
 function numToWords_(n) {
