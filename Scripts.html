@@ -4460,6 +4460,7 @@ function renderOrderCard(order) {
             (/тонир|tint/i.test(order['Услуга']||'')
               ? cvInput_('Светопропуск., %', 'cv-light', order['Светопропускаемость'])
               : cvInput_('Элементы оклейки', 'cv-elements', order['Элементы'])) +
+            (!isLegal ? cvInput_('Паспорт (серия, номер)', 'cv-passport', order['Паспорт']) : '') +
             (isLegal ? cvInput_('Подписант (если по доверенности)', 'cv-signatory', order['Подписант']) +
                        cvInput_('Доверенность (№, дата)', 'cv-attorney', order['Доверенность']) : '') +
           '</div>' +
@@ -5091,6 +5092,7 @@ function cvCollect_() {
   var elems = val('cv-elements'); if (elems !== undefined) p.elements = elems;
   var sig = val('cv-signatory'); if (sig !== undefined) p.signatory = sig;
   var att = val('cv-attorney');  if (att !== undefined) p.attorney = att;
+  var pass = val('cv-passport'); if (pass !== undefined) p.passport = pass;
   return p;
 }
 

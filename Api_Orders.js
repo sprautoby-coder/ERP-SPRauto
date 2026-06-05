@@ -384,6 +384,7 @@ function updateOrder(id, payload) {
       if (payload.elements         !== undefined) setCell('Элементы',          payload.elements);
       if (payload.signatory        !== undefined) setCell('Подписант',         payload.signatory);
       if (payload.attorney         !== undefined) setCell('Доверенность',      payload.attorney);
+      if (payload.passport         !== undefined) setCell('Паспорт',           payload.passport);
       if (payload.dueDate     !== undefined) setCell('Дата выполнения', payload.dueDate);
       if (payload.duePayDate  !== undefined) setCell('Срок оплаты',     payload.duePayDate);
       if (payload.notes       !== undefined) setCell('Заметки',         payload.notes);

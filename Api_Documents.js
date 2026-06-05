@@ -486,7 +486,7 @@ function buildDocPlaceholders_(d) {
     'ФИО':             fio,
     'Фамилия И.О.':    surnameInitials_(fio),
     'ФИО род.':        c['ФИО род.'] || c['ФИО родительный'] || genitiveFio_(fio),
-    'Паспорт':         c['Паспорт'] || '',
+    'Паспорт':         o['Паспорт'] || c['Паспорт'] || '',
     'Телефон клиента': o['Телефон'] || c['Телефон'] || '',
     // Реквизиты Заказчика-юрлица
     'Компания заказчика':     c['Имя'] || fio,
@@ -546,17 +546,24 @@ function fillTemplate_(html, map) {
 /** Обёртка печатного документа: общий CSS + кнопка «Печать». */
 function docWrap_(title, bodyHtml) {
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + title + '</title><style>' +
-    'body{font-family:"Times New Roman",serif;font-size:12.5px;line-height:1.4;color:#000;margin:18mm 16mm}' +
-    'h2{text-align:center;font-size:14px;margin:4px 0}h3{font-size:12.5px;margin:10px 0 4px}' +
-    'table{width:100%;border-collapse:collapse;margin:6px 0}td,th{border:1px solid #000;padding:4px 6px;font-size:11.5px;vertical-align:top}th{background:#eee}' +
-    '.blank{display:inline-block;min-width:130px;border-bottom:1px solid #000}' +
-    '.right{text-align:right}.center{text-align:center}.muted{font-size:10px;color:#444}' +
-    '.sign{display:flex;justify-content:space-between;margin-top:24px}.sign-line{display:inline-block;min-width:180px;border-bottom:1px solid #000}' +
+    '@page{size:A4;margin:12mm 14mm}' +
+    '*{box-sizing:border-box}' +
+    'body{font-family:"Times New Roman",serif;font-size:10.5pt;line-height:1.18;color:#000;margin:0}' +
+    '.doc{max-width:180mm;margin:0 auto}' +
+    'h2{text-align:center;font-size:12pt;margin:2px 0;font-weight:bold}' +
+    'h3{font-size:10.5pt;margin:6px 0 2px;font-weight:bold}' +
+    'p{margin:2px 0;text-align:justify}' +
+    'table{width:100%;border-collapse:collapse;margin:4px 0}' +
+    'td,th{border:1px solid #000;padding:2px 5px;font-size:9.5pt;vertical-align:top}th{background:#eee;font-weight:bold}' +
+    '.blank{display:inline-block;min-width:90px;border-bottom:1px solid #000;line-height:1}' +
+    '.right{text-align:right}.center{text-align:center}.muted{font-size:8.5pt;color:#333}' +
+    '.sign{display:flex;justify-content:space-between;margin-top:12px}' +
     '.page-break{page-break-before:always}.bar{display:flex;justify-content:space-between}' +
+    'h2,h3{page-break-after:avoid}table,p{page-break-inside:avoid}' +
     '@media print{.noprint{display:none}}' +
     '</style></head><body>' +
-    '<div class="noprint" style="text-align:right;margin-bottom:8px"><button onclick="window.print()" style="padding:8px 20px;font-size:13px;cursor:pointer">🖨 Распечатать</button></div>' +
-    bodyHtml + '</body></html>';
+    '<div class="noprint" style="text-align:right;margin:8px 14px"><button onclick="window.print()" style="padding:8px 20px;font-size:13px;cursor:pointer">🖨 Распечатать</button></div>' +
+    '<div class="doc">' + bodyHtml + '</div></body></html>';
 }
 
 /** Шаблон: ДОГОВОР + Протокол согласования цены + Акт выполненных работ (САНПРОТЕКТ).
@@ -627,7 +634,7 @@ function contractTemplateHtml_(isLegal, byProxy) {
   </tr></table>
 
   <!-- ПРОТОКОЛ СОГЛАСОВАНИЯ ЦЕНЫ -->
-  <div class="page-break"></div>
+  <div style="border-top:1px solid #999;margin:10px 0 4px"></div>
   <h2>Протокол согласования цены</h2>
   <p>от «{{Дата}}» г. к договору № {{Номер договора}} от {{Дата}} г. между {{Компания}} и ` + clientName + `.</p>
   <table>
@@ -640,7 +647,7 @@ function contractTemplateHtml_(isLegal, byProxy) {
   <div class="sign"><span>Директор ___________ {{Директор}}</span><span>Заказчик ___________ / ` + clientActSign + `</span></div>
 
   <!-- АКТ ВЫПОЛНЕННЫХ РАБОТ -->
-  <div class="page-break"></div>
+  <div style="border-top:1px solid #999;margin:10px 0 4px"></div>
   <h2>АКТ ВЫПОЛНЕННЫХ РАБОТ</h2>
   <div class="bar"><span>г. Минск</span><span>{{Дата выдачи авто}}</span></div>
   <p>{{Компания}} в лице директора {{Директор род.}}, именуемое в дальнейшем «Исполнитель», с одной стороны, и ` + clientAct + `, с другой стороны, составили настоящий акт о том, что в соответствии с условиями договора № {{Номер договора}} от {{Дата}} г. Исполнитель выполнил следующую работу: установка плёнки {{Пленка}} {{Светопр-ть}} на автомобиль {{Марка авто}} {{Модель}}, VIN {{VIN}}.</p>
