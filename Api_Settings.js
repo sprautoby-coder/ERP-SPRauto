@@ -31,6 +31,50 @@ function saveSetting(key, value, description, category) {
   });
 }
 
+/**
+ * Эффективный каталог услуг (white-label): берёт переопределение из настройки
+ * SERVICES_JSON, иначе — дефолт CONFIG.SERVICES. Используется в config и нумерации.
+ */
+function getServicesCatalog() {
+  try {
+    var sheet = getTab('DATABASE', 'SETTINGS');
+    var lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (var i = 0; i < data.length; i++) {
+        if (data[i][0] === 'SERVICES_JSON' && data[i][1]) {
+          var arr = JSON.parse(data[i][1]);
+          if (Array.isArray(arr) && arr.length) return arr;
+        }
+      }
+    }
+  } catch (e) { /* битый JSON или нет настройки — дефолт */ }
+  return CONFIG.SERVICES;
+}
+
+/** Сохранить пользовательский каталог услуг (white-label). */
+function saveServicesCatalog(list) {
+  return safeCall(function() {
+    if (!Array.isArray(list)) throw new Error('Неверный формат каталога услуг');
+    var clean = list.filter(function(x){ return x && String(x.name || '').trim(); }).map(function(x){
+      return {
+        code:            String(x.code || x.name).toUpperCase().replace(/\s+/g, '_').slice(0, 16),
+        name:            String(x.name).trim(),
+        icon:            x.icon || '🔧',
+        active:          x.active !== false,
+        contractPrefix:  String(x.contractPrefix || '').trim(),
+        calcType:        x.calcType || 'fixed',
+        bonusPoolPct:    Number(x.bonusPoolPct) || 35,
+        managerBonusPct: Number(x.managerBonusPct) || 10,
+      };
+    });
+    if (!clean.length) throw new Error('Каталог услуг не может быть пустым');
+    saveSetting('SERVICES_JSON', JSON.stringify(clean), 'Каталог услуг (white-label)', 'Услуги');
+    bumpDataVersion_();
+    return { count: clean.length, services: clean };
+  });
+}
+
 function saveSettings(settings) {
   return safeCall(function() {
     var keys = Object.keys(settings);

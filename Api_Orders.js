@@ -58,7 +58,12 @@ function round2(n) {
  * Оклейка: 04/01-XXX, Тонировка: 12/01-XXX
  */
 function generateContractNumber_(serviceCode) {
-  var prefix = (serviceCode === 'TINT') ? '12/01-' : '04/01-';
+  // Префикс берём из каталога услуг (white-label), а не из хардкода
+  var catalog = getServicesCatalog();
+  var prefix  = '04/01-';
+  for (var k = 0; k < catalog.length; k++) {
+    if (catalog[k].code === serviceCode && catalog[k].contractPrefix) { prefix = catalog[k].contractPrefix; break; }
+  }
   var sheet  = getTab('DATABASE', 'ORDERS');
   var lastRow = sheet.getLastRow();
   // Ищем максимальный порядковый номер среди уже выданных
@@ -537,17 +542,11 @@ function getOrdersStats() {
 // ─── ВСПОМОГАТЕЛЬНЫЕ ────────────────────────────────────────────────────────
 
 function getServiceName_(code) {
-  var map = {
-    PPF:     'Оклейка PPF',
-    TINT:    'Тонировка',
-    POLISH:  'Полировка',
-    CERAMIC: 'Керамика',
-    ANTICHR: 'Антихром',
-    SOUND:   'Шумоизоляция',
-    CHEMIE:  'Химчистка',
-    ANTICOR: 'Антикор',
-  };
-  return map[code] || code;
+  var catalog = getServicesCatalog();
+  for (var i = 0; i < catalog.length; i++) {
+    if (catalog[i].code === code) return catalog[i].name;
+  }
+  return code;
 }
 
 function parseDate_(val) {

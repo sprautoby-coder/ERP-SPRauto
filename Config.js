@@ -108,15 +108,17 @@ const CONFIG = {
     'Начальник склада',
   ],
   
+  // Каталог услуг по умолчанию. Переопределяется per-tenant через настройку
+  // SERVICES_JSON (white-label). contractPrefix — префикс нумерации договоров услуги.
   SERVICES: [
-    { code: 'PPF',     name: 'Оклейка PPF',   icon: '🛡️', active: true,  calcType: 'area',     bonusPoolPct: 35, managerBonusPct: 5 },
-    { code: 'TINT',    name: 'Тонировка',     icon: '🎨', active: true,  calcType: 'elements', bonusPoolPct: 35, managerBonusPct: 5 },
-    { code: 'POLISH',  name: 'Полировка',     icon: '✨', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5 },
-    { code: 'CERAMIC', name: 'Керамика',      icon: '💎', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5 },
-    { code: 'ANTICHR', name: 'Антихром',      icon: '⬛', active: false, calcType: 'elements', bonusPoolPct: 35, managerBonusPct: 5 },
-    { code: 'SOUND',   name: 'Шумоизоляция',  icon: '🔇', active: false, calcType: 'hourly',   bonusPoolPct: 35, managerBonusPct: 5 },
-    { code: 'CHEMIE',  name: 'Химчистка',     icon: '🧹', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5 },
-    { code: 'ANTICOR', name: 'Антикор',       icon: '🛢️', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5 },
+    { code: 'PPF',     name: 'Оклейка PPF',   icon: '🛡️', active: true,  calcType: 'area',     bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '04/01-' },
+    { code: 'TINT',    name: 'Тонировка',     icon: '🎨', active: true,  calcType: 'elements', bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '12/01-' },
+    { code: 'POLISH',  name: 'Полировка',     icon: '✨', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '05/01-' },
+    { code: 'CERAMIC', name: 'Керамика',      icon: '💎', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '06/01-' },
+    { code: 'ANTICHR', name: 'Антихром',      icon: '⬛', active: false, calcType: 'elements', bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '07/01-' },
+    { code: 'SOUND',   name: 'Шумоизоляция',  icon: '🔇', active: false, calcType: 'hourly',   bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '08/01-' },
+    { code: 'CHEMIE',  name: 'Химчистка',     icon: '🧹', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '09/01-' },
+    { code: 'ANTICOR', name: 'Антикор',       icon: '🛢️', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '10/01-' },
   ],
   
   // Источники лидов (откуда пришёл клиент)

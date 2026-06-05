@@ -687,13 +687,11 @@ function aptFillFormLists() {
       var o = document.createElement('option'); o.value = name; dl.appendChild(o);
     });
   }
-  // услуги — datalist
+  // услуги — datalist из каталога (white-label)
   var sdl = document.getElementById('apt-services-list');
   if (sdl) {
-    sdl.innerHTML = '';
-    ['Оклейка PPF','Тонировка','Антихром','Защита фар','Бронирование','Полировка'].forEach(function(s){
-      var o = document.createElement('option'); o.value = s; sdl.appendChild(o);
-    });
+    var svc = ((App.config && App.config.services) || []).filter(function(s){ return s.active !== false; });
+    if (svc.length) sdl.innerHTML = svc.map(function(s){ return '<option value="' + s.name + '"></option>'; }).join('');
   }
 }
 
@@ -850,6 +848,44 @@ var CURRENCY_SYMBOLS = { BYN: 'Br', RUB: '₽', USD: '$', EUR: '€' };
 function money(n) { return Math.round(Number(n) || 0).toLocaleString('ru') + ' ' + CUR; }
 
 /* ===== БРЕНД ===== */
+// Заполнить все выпадающие списки услуг из каталога (white-label)
+function fillServiceDropdowns() {
+  var services = (App.config && App.config.services) || [];
+  var active = services.filter(function(s){ return s.active !== false; });
+  if (!active.length) return;
+
+  // Форма заказа — value = код услуги
+  var ord = document.getElementById('ord-service');
+  if (ord) ord.innerHTML = active.map(function(s){
+    return '<option value="' + s.code + '">' + (s.icon ? s.icon + ' ' : '') + s.name + '</option>';
+  }).join('');
+
+  // Фильтр заказов — value = название (в заказах хранится название услуги)
+  var filt = document.getElementById('orders-service-filter');
+  if (filt) {
+    var cur = filt.value;
+    filt.innerHTML = '<option value="">Все услуги</option>' + active.map(function(s){
+      return '<option value="' + s.name + '">' + s.name + '</option>';
+    }).join('');
+    filt.value = cur;
+  }
+
+  // Услуга материала (создание и редактирование) — value = код (+ «Универсальная»)
+  ['mat-service', 'edit-mat-service'].forEach(function(mid){
+    var mat = document.getElementById(mid);
+    if (!mat) return;
+    var curM = mat.value;
+    mat.innerHTML = '<option value="Универсальная">Универсальная</option>' + active.map(function(s){
+      return '<option value="' + s.code + '">' + s.name + '</option>';
+    }).join('');
+    mat.value = curM;
+  });
+
+  // Записи — datalist по названиям
+  var apt = document.getElementById('apt-services-list');
+  if (apt) apt.innerHTML = active.map(function(s){ return '<option value="' + s.name + '"></option>'; }).join('');
+}
+
 function applyBrand(brand) {
   if (!brand) return;
   App.brand = brand;
@@ -3850,31 +3886,68 @@ function confirmSetDueDate() {
 
 /* ===== УСЛУГИ ===== */
 
+App._servicesEdit = null;   // рабочая копия каталога услуг для редактирования
+
 function loadServices() {
-  var cards = document.getElementById('services-cards');
-  if (!cards) return;
-  var config = App.config || {};
-  var services = config.services || [];
-  if (!services.length) {
-    cards.innerHTML = '<div style="color:var(--text3);padding:16px">Нет данных об услугах</div>';
-    return;
-  }
-  cards.innerHTML = services.map(function(s) {
-    var active = s.active !== false;
-    return '<div style="padding:16px;background:var(--bg-card);border-radius:12px;border:1px solid var(--border);opacity:' + (active?1:.5) + '">' +
-      '<div style="font-weight:700;font-size:15px;margin-bottom:6px">' + s.name + '</div>' +
-      '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">Тип: ' + (s.calcType||'—') + '</div>' +
-      '<div style="display:flex;gap:10px;font-size:12px">' +
-        '<span style="background:var(--accent-soft);color:var(--accent);padding:2px 8px;border-radius:8px">Мастер ' + (s.bonusPoolPct||35) + '%</span>' +
-        '<span style="background:var(--bg-hover);padding:2px 8px;border-radius:8px">Менеджер ' + (s.managerBonusPct||10) + '%</span>' +
-      '</div>' +
-    '</div>';
+  // рабочая копия из конфига (white-label каталог)
+  App._servicesEdit = ((App.config && App.config.services) || []).map(function(s){
+    return {
+      code: s.code || '', name: s.name || '', icon: s.icon || '🔧',
+      active: s.active !== false, contractPrefix: s.contractPrefix || '',
+      calcType: s.calcType || 'fixed', bonusPoolPct: (s.bonusPoolPct != null ? s.bonusPoolPct : 35),
+      managerBonusPct: (s.managerBonusPct != null ? s.managerBonusPct : 10),
+    };
+  });
+  renderServicesEditor();
+}
+
+function renderServicesEditor() {
+  var tb = document.getElementById('services-tbody');
+  if (!tb) return;
+  var list = App._servicesEdit || [];
+  var inp = 'padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--inp);color:var(--text);font-size:13px;width:100%';
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:16px">Нет услуг — нажмите «+ Услуга»</td></tr>'; return; }
+  tb.innerHTML = list.map(function(s, i){
+    return '<tr>' +
+      '<td><input value="' + (s.icon||'').replace(/"/g,'&quot;') + '" onchange="svcEdit(' + i + ',\'icon\',this.value)" style="' + inp + ';text-align:center" maxlength="2"></td>' +
+      '<td><input value="' + (s.name||'').replace(/"/g,'&quot;') + '" onchange="svcEdit(' + i + ',\'name\',this.value)" placeholder="Название услуги" style="' + inp + '"></td>' +
+      '<td><input value="' + (s.contractPrefix||'').replace(/"/g,'&quot;') + '" onchange="svcEdit(' + i + ',\'contractPrefix\',this.value)" placeholder="04/01-" style="' + inp + '"></td>' +
+      '<td><input type="number" min="0" max="100" value="' + s.bonusPoolPct + '" onchange="svcEdit(' + i + ',\'bonusPoolPct\',this.value)" style="' + inp + ';text-align:right"></td>' +
+      '<td><input type="number" min="0" max="100" value="' + s.managerBonusPct + '" onchange="svcEdit(' + i + ',\'managerBonusPct\',this.value)" style="' + inp + ';text-align:right"></td>' +
+      '<td style="text-align:center"><input type="checkbox"' + (s.active?' checked':'') + ' onchange="svcEdit(' + i + ',\'active\',this.checked)"></td>' +
+      '<td style="text-align:center"><button class="pay-del" onclick="removeServiceRow(' + i + ')" title="Удалить">✕</button></td>' +
+    '</tr>';
   }).join('');
 }
 
-function submitNewService() {
-  toast('Услуги настраиваются в разделе Настройки → Конфиг', 'info');
-  closeModal('modal-new-service');
+function svcEdit(i, field, val) {
+  if (!App._servicesEdit || !App._servicesEdit[i]) return;
+  if (field === 'bonusPoolPct' || field === 'managerBonusPct') val = Number(val) || 0;
+  App._servicesEdit[i][field] = val;
+}
+function addServiceRow() {
+  if (!App._servicesEdit) App._servicesEdit = [];
+  App._servicesEdit.push({ code:'', name:'', icon:'🔧', active:true, contractPrefix:'', calcType:'fixed', bonusPoolPct:35, managerBonusPct:10 });
+  renderServicesEditor();
+}
+function removeServiceRow(i) {
+  if (!App._servicesEdit) return;
+  App._servicesEdit.splice(i, 1);
+  renderServicesEditor();
+}
+function saveServicesCatalogUI() {
+  var list = (App._servicesEdit || []).filter(function(s){ return String(s.name||'').trim(); });
+  if (!list.length) { toast('Добавьте хотя бы одну услугу', 'error'); return; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      if (App.config) App.config.services = resp.data.services;
+      fillServiceDropdowns();          // обновить все списки услуг
+      toast('Каталог услуг сохранён', 'success');
+      loadServices();
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .saveServicesCatalog(list);
 }
 
 /* ===== ДДС ===== */
@@ -4988,6 +5061,7 @@ function init() {
       if (data.brand) applyBrand(data.brand);
       App.config = data.config;
       App.employees = data.employees || [];
+      fillServiceDropdowns();   // списки услуг из каталога (white-label)
       if (data.config && data.config.positions) fillPositions(data.config.positions);
       if (data.config && data.config.leadSources) fillLeadSources(data.config.leadSources);
       else if (window.CONFIG_LEAD_SOURCES) fillLeadSources(window.CONFIG_LEAD_SOURCES);

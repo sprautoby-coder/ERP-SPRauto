@@ -35,7 +35,7 @@ function initApp() {
         appName: CONFIG.APP_NAME,
         version: CONFIG.VERSION,
         positions: CONFIG.POSITIONS,
-        services: CONFIG.SERVICES,
+        services: getServicesCatalog(),
         currencies: CONFIG.CURRENCIES,
         expenseCategories: CONFIG.EXPENSE_CATEGORIES,
         inventoryCategories: CONFIG.INVENTORY_CATEGORIES,

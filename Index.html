@@ -543,17 +543,27 @@
   <!-- УСЛУГИ -->
   <div class="content page" id="page-services">
     <div class="section-header">
-      <div class="section-title-big">Услуги</div>
-      <button class="btn btn-primary" onclick="openModal('modal-new-service')">+ Добавить услугу</button>
+      <div>
+        <div class="section-title-big">Услуги и нумерация договоров</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Настройте список услуг под свой центр. Префикс — серия номера договора (напр. 04/01-).</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-ghost" onclick="addServiceRow()">+ Услуга</button>
+        <button class="btn btn-primary" onclick="saveServicesCatalogUI()">💾 Сохранить</button>
+      </div>
     </div>
-    <div class="table-wrap" style="margin-top:16px">
+    <div class="table-wrap" style="margin-top:16px;max-width:1100px">
       <table class="data-table">
-        <thead><tr><th>Услуга</th><th>Тип расчёта</th><th style="text-align:right">% мастеру</th><th style="text-align:right">% менеджеру</th><th>Статус</th><th></th></tr></thead>
-        <tbody id="services-tbody">
-          <tr><td colspan="6" style="padding:16px">
-            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:8px" id="services-cards"></div>
-          </td></tr>
-        </tbody>
+        <thead><tr>
+          <th style="width:54px">Иконка</th>
+          <th>Название</th>
+          <th style="width:130px">Префикс договора</th>
+          <th style="width:90px;text-align:right">% мастеру</th>
+          <th style="width:100px;text-align:right">% менеджеру</th>
+          <th style="width:80px;text-align:center">Активна</th>
+          <th style="width:44px"></th>
+        </tr></thead>
+        <tbody id="services-tbody"></tbody>
       </table>
     </div>
   </div>
@@ -1481,40 +1491,7 @@
 </div>
 
 <!-- МОДАЛКА: НОВАЯ УСЛУГА -->
-<div class="modal-dialog-bg" id="modal-new-service" onclick="closeModalOnOverlay(event)">
-  <div class="modal" style="max-width:440px">
-    <div class="modal-header">
-      <div class="modal-title">Новая услуга</div>
-      <button class="modal-close" onclick="closeModal('modal-new-service')">&#10005;</button>
-    </div>
-    <div class="modal-body">
-      <div class="form-row"><label class="form-label">Название *</label><input class="form-input" id="svc-name" placeholder="Оклейка PPF"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-        <div class="form-row" style="margin:0">
-          <label class="form-label">% мастеру</label>
-          <input class="form-input" id="svc-master-pct" type="number" placeholder="35">
-        </div>
-        <div class="form-row" style="margin:0">
-          <label class="form-label">% менеджеру</label>
-          <input class="form-input" id="svc-mgr-pct" type="number" placeholder="10">
-        </div>
-      </div>
-      <div class="form-row" style="margin-top:12px">
-        <label class="form-label">Тип расчёта</label>
-        <select class="form-select" id="svc-calc-type">
-          <option value="area">По площади (м²)</option>
-          <option value="elements">По элементам</option>
-          <option value="fixed">Фиксированная цена</option>
-          <option value="hourly">Почасовая</option>
-        </select>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('modal-new-service')">Отмена</button>
-      <button class="btn btn-primary" onclick="submitNewService()">Сохранить</button>
-    </div>
-  </div>
-</div>
+<!-- Услуги редактируются прямо на странице «Услуги» (white-label каталог) -->
 
 <div id="toast"></div>
 
