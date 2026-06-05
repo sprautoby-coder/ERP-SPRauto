@@ -47,7 +47,7 @@ var PAGE_TITLES = {
 
 function goPage(name) {
   // Досохраняем несохранённые правки блока «Клиент и автомобиль» перед уходом
-  if (typeof cvFlush_ === 'function') cvFlush_();
+  if (typeof flushCard_ === 'function') flushCard_();
   // Закрываем все открытые модальные окна при смене страницы
   closeAllModals();
 
@@ -4271,7 +4271,7 @@ function cardSkeleton_() {
 }
 
 function openOrderCard(orderId) {
-  if (typeof cvFlush_ === 'function') cvFlush_();   // досохранить правки прошлой карточки (до смены id)
+  if (typeof flushCard_ === 'function') flushCard_();   // досохранить правки прошлой карточки (до смены id)
   App._currentOrderId = orderId;
   goPage('order-card');
   var content = document.getElementById('order-card-content');
@@ -4454,9 +4454,9 @@ function renderOrderCard(order) {
         '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">' +
             '<span style="font-weight:600">Материалы (расход плёнки)</span>' +
-            '<div style="display:flex;gap:6px">' +
+            '<div style="display:flex;gap:10px;align-items:center">' +
+              '<span id="card-mat-status" style="font-size:11px;color:var(--text3)"></span>' +
               '<button class="btn" onclick="addCardMatLine()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--bg-card2);color:var(--text);border:1px solid var(--border);border-radius:7px">+ Добавить</button>' +
-              '<button class="btn" onclick="saveCardMaterials()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:7px">💾 Сохранить</button>' +
             '</div>' +
           '</div>' +
           '<table class="data-table" style="border:none">' +
@@ -4469,9 +4469,9 @@ function renderOrderCard(order) {
         '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden">' +
           '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">' +
             '<span style="font-weight:600">Расходы (такси, арматура…)</span>' +
-            '<div style="display:flex;gap:6px">' +
+            '<div style="display:flex;gap:10px;align-items:center">' +
+              '<span id="card-exp-status" style="font-size:11px;color:var(--text3)"></span>' +
               '<button class="btn" onclick="addCardExpLine()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--bg-card2);color:var(--text);border:1px solid var(--border);border-radius:7px">+ Добавить</button>' +
-              '<button class="btn" onclick="saveCardExpenses()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:7px">💾</button>' +
             '</div>' +
           '</div>' +
           '<table class="data-table" style="border:none"><tbody id="card-exp-tbody">' + renderCardExpRows() + '</tbody></table>' +
@@ -4505,18 +4505,8 @@ function renderOrderCard(order) {
         '</div>' +
 
         // Финансовый итог
-        '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px">' +
-          '<div style="font-weight:600;margin-bottom:10px">Финансовый итог</div>' +
-          finLine_('Стоимость заказа', fmt(order['Стоимость заказа']), '') +
-          finLine_('Итого материалы', '−' + fmt(order['Итого материалы']), 'var(--text3)') +
-          finLine_('Итого расходы',   '−' + fmt(order['Итого расходы']),   'var(--text3)') +
-          (payType==='Безнал' ? finLine_('Безнал −15%', '−' + fmt(Number(order['Стоимость заказа'])*0.15), 'var(--text3)') : '') +
-          '<div style="border-top:1px solid var(--border);margin:8px 0"></div>' +
-          finLine_('Валовая прибыль', fmt(order['Валовая прибыль']), 'var(--success)') +
-          finLine_('Бонус менеджера', fmt(order['Бонус менеджера']), 'var(--accent)') +
-          finLine_('Бонус мастера',   fmt(order['Бонус оклейщика']), 'var(--accent)') +
-          '<div style="border-top:2px solid var(--border);margin:8px 0"></div>' +
-          finLine_('Маржинальная',    fmt(order['Маржинальная прибыль']), 'var(--success)', true) +
+        '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px" id="card-fin-box">' +
+          renderCardFinance_(order) +
         '</div>' +
 
       '</div>' +  // /правая колонка
@@ -4747,6 +4737,7 @@ function onCardMatEdit(i) {
   if (nm) m['Название']  = nm.value;
   if (pr) m['Цена за м²'] = Number(pr.value) || 0;
   refreshCardMats();
+  matAutoSave();
 }
 
 // Выбор материала из справочника
@@ -4765,6 +4756,7 @@ function onCardMatSelect(i) {
   var q = document.querySelector('.cardmat-qty[data-i="' + i + '"]');
   if (q) m['Кол-во'] = Number(q.value) || 0;
   refreshCardMats();
+  matAutoSave();
 }
 
 function addCardMatLine() {
@@ -4778,6 +4770,7 @@ function removeCardMatLine(i) {
   if (!App._currentOrder || !App._currentOrder.materials) return;
   App._currentOrder.materials.splice(i, 1);
   refreshCardMats();
+  matAutoSave();
 }
 
 function saveCardMaterials() {
@@ -4878,6 +4871,7 @@ function onCardExpEdit(i) {
   var a = document.querySelector('.cardexp-amount[data-i="' + i + '"]');
   if (n) e['Название'] = n.value;
   if (a) e['Сумма']    = Number(a.value) || 0;
+  matAutoSave();
 }
 
 function addCardExpLine() {
@@ -4893,6 +4887,7 @@ function removeCardExpLine(i) {
   App._currentOrder.expenses.splice(i, 1);
   var tb = document.getElementById('card-exp-tbody');
   if (tb) tb.innerHTML = renderCardExpRows();
+  matAutoSave();
 }
 
 function saveCardExpenses() {
@@ -5091,17 +5086,96 @@ function cvFlush_(cb) {
     .updateOrder(id, cvCollect_());
 }
 
+// ── Автосохранение редактора плёнки/расходов в карточке ──
+function matSetStatus_(text, color) {
+  ['card-mat-status','card-exp-status'].forEach(function(eid){
+    var el = document.getElementById(eid); if (el) { el.textContent = text; el.style.color = color || 'var(--text3)'; }
+  });
+}
+// Считать значения инпутов плёнки/расходов в модель без перерисовки (сохранить фокус)
+function syncCardEditors_() {
+  var o = App._currentOrder; if (!o) return;
+  (o.materials || []).forEach(function(m, i){
+    var q = document.querySelector('.cardmat-qty[data-i="'+i+'"]');   if (q) m['Кол-во']     = Number(q.value)||0;
+    var u = document.querySelector('.cardmat-unit[data-i="'+i+'"]');  if (u) m['Единица']    = u.value;
+    var t = document.querySelector('.cardmat-type[data-i="'+i+'"]');  if (t) m['Тип']        = t.value;
+    var nm= document.querySelector('.cardmat-name[data-i="'+i+'"]');  if (nm) m['Название']  = nm.value;
+    var pr= document.querySelector('.cardmat-price[data-i="'+i+'"]'); if (pr) m['Цена за м²']= Number(pr.value)||0;
+  });
+  (o.expenses || []).forEach(function(e, i){
+    var n = document.querySelector('.cardexp-name[data-i="'+i+'"]');   if (n) e['Название'] = n.value;
+    var a = document.querySelector('.cardexp-amount[data-i="'+i+'"]'); if (a) e['Сумма']    = Number(a.value)||0;
+  });
+}
+function matAutoSave() {
+  App._matDirty = true;
+  matSetStatus_('● не сохранено', 'var(--warning)');
+  clearTimeout(App._matTimer);
+  App._matTimer = setTimeout(function(){ matFlush_(); }, 900);
+}
+function matFlush_(cb) {
+  clearTimeout(App._matTimer);
+  if (!App._matDirty) { if (cb) cb(); return; }
+  App._matDirty = false;
+  var o = App._currentOrder; if (!o || !o['ID']) { if (cb) cb(); return; }
+  var id = o['ID'];
+  syncCardEditors_();
+  var matLines = (o.materials || []).filter(function(m){ return (m['Материал ID'] || String(m['Название']||'').trim() || Number(m['Кол-во']) > 0); })
+    .map(function(m){ return { materialId:m['Материал ID']||'', name:m['Название']||'', unit:m['Единица']||'пм', qty:Number(m['Кол-во'])||0, rollWidth:Number(m['Ширина рулона'])||1.52, pricePerSqm:Number(m['Цена за м²'])||0, type:m['Тип']==='остаток'?'остаток':'расход' }; });
+  var expLines = (o.expenses || []).filter(function(e){ return (String(e['Название']||'').trim()) || (Number(e['Сумма']) > 0); })
+    .map(function(e){ return { name:e['Название']||'', amount:Number(e['Сумма'])||0 }; });
+  matSetStatus_('сохранение…');
+  var fail = function(){ matSetStatus_('ошибка сохранения', 'var(--danger)'); if (cb) cb(); };
+  google.script.run.withSuccessHandler(function(r1){
+    if (!r1 || !r1.ok) { fail(); return; }
+    google.script.run.withSuccessHandler(function(r2){
+      if (!r2 || !r2.ok) { fail(); return; }
+      google.script.run.withSuccessHandler(function(r3){
+        if (r3 && r3.ok && r3.data) {
+          var f = r3.data.finance || {};
+          o['Итого материалы'] = r3.data.totalMat; o['Итого расходы'] = r3.data.totalExp;
+          o['Валовая прибыль'] = f.grossProfit; o['Бонус менеджера'] = f.managerBonus;
+          o['Бонус оклейщика'] = f.masterBonus; o['Маржинальная прибыль'] = f.marginalProfit;
+          var box = document.getElementById('card-fin-box'); if (box) box.innerHTML = renderCardFinance_(o);
+        }
+        App.orders = []; App._dashCache = null; if (App._cardCache) delete App._cardCache[id];
+        matSetStatus_('✓ сохранено', 'var(--success)'); if (cb) cb();
+      }).withFailureHandler(fail).recalcOrderFinance(id);
+    }).withFailureHandler(fail).saveOrderExpenses(id, expLines);
+  }).withFailureHandler(fail).saveOrderMaterials(id, matLines);
+}
+
+// Общий флаш карточки (поля авто + плёнка/расходы) — перед печатью и уходом
+function flushCard_(cb) { cvFlush_(function(){ matFlush_(cb); }); }
+
 function finLine_(label, value, color, bold) {
   return '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px' + (bold?';font-weight:700':'') + '">' +
     '<span style="color:var(--text2)">' + label + '</span>' +
     '<span style="font-weight:600;color:' + (color||'') + '">' + value + '</span></div>';
 }
 
+// Внутренности блока «Финансовый итог» (для обновления без перезагрузки карточки)
+function renderCardFinance_(order) {
+  var fmt = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+  var payType = String(order['Тип оплаты'] || '').trim();
+  return '<div style="font-weight:600;margin-bottom:10px">Финансовый итог</div>' +
+    finLine_('Стоимость заказа', fmt(order['Стоимость заказа']), '') +
+    finLine_('Итого материалы', '−' + fmt(order['Итого материалы']), 'var(--text3)') +
+    finLine_('Итого расходы',   '−' + fmt(order['Итого расходы']),   'var(--text3)') +
+    (payType==='Безнал' ? finLine_('Безнал −15%', '−' + fmt(Number(order['Стоимость заказа'])*0.15), 'var(--text3)') : '') +
+    '<div style="border-top:1px solid var(--border);margin:8px 0"></div>' +
+    finLine_('Валовая прибыль', fmt(order['Валовая прибыль']), 'var(--success)') +
+    finLine_('Бонус менеджера', fmt(order['Бонус менеджера']), 'var(--accent)') +
+    finLine_('Бонус мастера',   fmt(order['Бонус оклейщика']), 'var(--accent)') +
+    '<div style="border-top:2px solid var(--border);margin:8px 0"></div>' +
+    finLine_('Маржинальная',    fmt(order['Маржинальная прибыль']), 'var(--success)', true);
+}
+
 // Печать документа: сперва досохраняем правки (cvFlush_), затем генерируем
 function printDoc_(genFnName) {
   var id = App._currentOrderId;
   if (!id) return;
-  cvFlush_(function(){
+  flushCard_(function(){
     google.script.run
       .withSuccessHandler(function(resp) {
         if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
