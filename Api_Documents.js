@@ -156,6 +156,70 @@ function generateContractHtmlLegacy_(orderId) {
  */
 function generateOrderNaradHtml(orderId) {
   return safeCall(function() {
+    var d = getDocData_(orderId);
+    var map = buildDocPlaceholders_(d);
+    var isTint = /тонир|tint/i.test(d.order['Услуга'] || '');
+    var body = fillTemplate_(naradTemplateHtml_(isTint), map);
+    return docWrap_('Заказ-наряд ' + (map['Номер договора'] || ''), body);
+  });
+}
+
+/** Шаблон заказ-наряда (БСО). isTint=true — тонировка, иначе оклейка PPF. */
+function naradTemplateHtml_(isTint) {
+  var works = isTint
+    ? `<tr><td>1</td><td>Установка тонировочной плёнки</td><td class="center">да</td><td class="right"></td></tr>
+       <tr><td>2</td><td>Разборка на элементы, сборка автомобиля</td><td class="center"></td><td class="right"></td></tr>
+       <tr><td>3</td><td>Мойка, сушка автомобиля</td><td class="center"></td><td class="right"></td></tr>`
+    : `<tr><td>1</td><td>Оклейка антигравийной плёнкой: {{Элементы для оклейки}}</td><td class="center">да</td><td class="right"></td></tr>
+       <tr><td>2</td><td>Разборка на элементы оклейки</td><td class="center"></td><td class="right"></td></tr>
+       <tr><td>3</td><td>Сборка автомобиля</td><td class="center"></td><td class="right"></td></tr>
+       <tr><td>4</td><td>Мойка, сушка автомобиля</td><td class="center"></td><td class="right"></td></tr>
+       <tr><td>5</td><td>Полировка элементов кузова</td><td class="center"></td><td class="right"></td></tr>`;
+  return `
+  <div class="muted">{{Компания}}<br>УНП: {{УНП}} · {{Юр.адрес}}<br>(наименование и местонахождение исполнителя)</div>
+  <div class="bar" style="margin-top:6px"><span></span><span>{{Дата}}</span></div>
+  <h2>ЗАКАЗ-НАРЯД</h2>
+  <p><b>Заказчик:</b> {{ФИО}}, номер паспорта {{Паспорт}}` + (isTint ? `<br>договор № {{Номер договора}} от {{Дата}} г.` : ``) + `</p>
+
+  <h3>1. Общие сведения</h3>
+  <table>
+    <tr><th>Марка</th><th>Модель</th><th>Рег. номер</th><th>VIN / кузов</th><th>Год выпуска</th>` + (isTint ? `` : `<th>Пробег</th>`) + `</tr>
+    <tr><td>{{Марка авто}}</td><td>{{Модель}}</td><td>{{Гос.номер}}</td><td>{{VIN}}</td><td>{{Год выпуска}}</td>` + (isTint ? `` : `<td>{{Пробег}}</td>`) + `</tr>
+  </table>
+
+  <h3>2. Выполненные работы</h3>
+  <table>
+    <thead><tr><th style="width:36px">№</th><th>Наименование</th><th style="width:70px">да/нет</th><th style="width:90px">руб.</th></tr></thead>
+    <tbody>` + works + `
+      <tr><td colspan="3" class="right"><b>Итого стоимость работ</b></td><td class="right"><b>{{Работ стоимость}}</b></td></tr>
+    </tbody>
+  </table>
+
+  <h3>3. Материалы исполнителя, оплачиваемые заказчиком</h3>
+  <table>
+    <thead><tr><th>Наименование</th><th style="width:80px">Ед. изм.</th><th style="width:80px">Кол-во</th><th style="width:90px">Цена, руб.</th><th style="width:100px">Стоимость, руб.</th></tr></thead>
+    <tbody>{{Таблица материалов}}
+      <tr><td colspan="4" class="right"><b>Итого материалов</b></td><td class="right"><b>{{Материалов стоимость}}</b></td></tr>
+    </tbody>
+  </table>
+
+  <table style="margin-top:8px">
+    <tr><th style="width:33%">Стоимость работ</th><th style="width:33%">Стоимость материалов</th><th>Всего к оплате</th></tr>
+    <tr><td class="right">{{Работ стоимость}} руб.</td><td class="right">{{Материалов стоимость}} руб.</td><td class="right"><b>{{Сумма}} руб.</b> (без НДС)</td></tr>
+  </table>
+  <p>Общая стоимость прописью: <b>{{Сумма прописью}}</b> руб. 00 коп.</p>
+
+  <div class="sign" style="margin-top:14px">
+    <span>Заказ оформил: _____________ / {{Заказ оформил}}</span>
+  </div>
+  <p style="margin-top:18px;font-size:11px">С объёмом и стоимостью заказа согласен, с правилами оказания услуг ознакомлен. Претензий по качеству выполненных работ не имею, автомобиль получил.</p>
+  <div class="sign"><span>_____________ / {{Фамилия И.О.}}<br><span class="muted">(подпись заказчика)</span></span><span>{{Дата выдачи авто}}</span></div>
+  `;
+}
+
+// (старый генератор заказ-наряда — оставлен как референс, не вызывается)
+function generateOrderNaradHtmlLegacy_(orderId) {
+  return safeCall(function() {
     const resp = getOrderForDocument(orderId);
     if (!resp.ok) throw new Error(resp.error);
     const d = resp.data;
@@ -383,11 +447,19 @@ function buildDocPlaceholders_(d) {
     'Пленка':          film,
     'Светопр-ть':      o['Светопропускаемость'] || '',
     'Использовано пленки': usedFilm || '',
-    'Элементы для оклейки': o['Элементы'] || o['Услуга'] || '',
+    'Элементы для оклейки': o['Элементы'] || '',
     'Сумма':           price.toFixed(2),
     'Сумма прописью':  numToWords_(price),
     'Стоимость работ': price.toFixed(2),
     'Стоимость работ прописью': numToWords_(price),
+    // Для заказ-наряда (БСО)
+    'Заказ оформил':   o['Менеджер'] || get('order_clerk', 'Папкович И.И.'),
+    'Работ стоимость': (function(){ var net=d.materials.reduce(function(s,m){return s+(Number(m['Стоимость'])||0);},0); return Math.max(0, price-net).toFixed(2); })(),
+    'Материалов стоимость': d.materials.reduce(function(s,m){return s+(Number(m['Стоимость'])||0);},0).toFixed(2),
+    'Таблица материалов': (d.materials.map(function(m){
+        var qty=Number(m['Кол-во'])||0, pr=Number(m['Цена за м²'])||0, cost=Number(m['Стоимость'])||0;
+        return '<tr><td>'+(m['Название']||'')+'</td><td class="center">пог.м</td><td class="right">'+qty+'</td><td class="right">'+pr.toFixed(2)+'</td><td class="right">'+cost.toFixed(2)+'</td></tr>';
+      }).join('')) || '<tr><td colspan="5" class="center">—</td></tr>',
     // Реквизиты Исполнителя (white-label; дефолт — реальные данные САНПРОТЕКТ)
     'Компания':   get('company_name', 'Общество с ограниченной ответственностью «САНПРОТЕКТ»'),
     'УНП':        get('unp', '391413250'),
