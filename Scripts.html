@@ -4452,6 +4452,9 @@ function renderOrderCard(order) {
           '<div class="cardveh-grid">' +
             cvInput_('Имя / организация', 'cv-name', order['Клиент']) +
             cvInput_('Телефон', 'cv-phone', order['Телефон']) +
+            (!isLegal ? cvInput_('Паспорт (серия, номер)', 'cv-passport', order['Паспорт']) : '') +
+            (isLegal ? cvInput_('Подписант (если по доверенности)', 'cv-signatory', order['Подписант']) +
+                       cvInput_('Доверенность (№, дата)', 'cv-attorney', order['Доверенность']) : '') +
             cvInput_('Авто (марка, модель)', 'cv-car', order['Авто']) +
             cvInput_('Гос. номер', 'cv-plate', order['Госномер']) +
             cvInput_('VIN', 'cv-vin', order['VIN']) +
@@ -4460,9 +4463,6 @@ function renderOrderCard(order) {
             (/тонир|tint/i.test(order['Услуга']||'')
               ? cvInput_('Светопропуск., %', 'cv-light', order['Светопропускаемость'])
               : cvInput_('Элементы оклейки', 'cv-elements', order['Элементы'])) +
-            (!isLegal ? cvInput_('Паспорт (серия, номер)', 'cv-passport', order['Паспорт']) : '') +
-            (isLegal ? cvInput_('Подписант (если по доверенности)', 'cv-signatory', order['Подписант']) +
-                       cvInput_('Доверенность (№, дата)', 'cv-attorney', order['Доверенность']) : '') +
           '</div>' +
           (isLegal ? '<div style="font-size:11px;color:var(--text3);margin-top:4px">Заполните «Подписант» и «Доверенность» — если договор подписывает не директор, а представитель по доверенности.</div>' : '') +
           '<div style="text-align:right;margin-top:6px;font-size:11px;color:var(--text3);min-height:14px"><span id="cv-status"></span></div>') +
