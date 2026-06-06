@@ -477,12 +477,15 @@ function buildDocPlaceholders_(d) {
   var film  = (d.materials[0] || {})['Название'] || '';
   var usedFilm = d.materials.reduce(function(s, m){ return s + (Number(m['Кол-во']) || 0); }, 0);
   var get = function(k, def){ return (co[k] != null && co[k] !== '') ? co[k] : def; };
+  // Дата договора = дата начала работ; дата акта = дата окончания работ
+  var startDate = o['Дата начала работ'] || o['Дата'] || formatToday_();
+  var endDate   = o['Дата окончания работ'] || o['Дата выполнения'] || '';
   return {
     'Номер договора':  o['Номер договора'] || '',
-    'Дата':            o['Дата'] || formatToday_(),
-    'Дата прописью':   dateLong_(o['Дата']),
-    'Дата выдачи авто': o['Дата выполнения'] || '',
-    'Начало выполнения работ': o['Дата'] || formatToday_(),
+    'Дата':            startDate,
+    'Дата прописью':   dateLong_(startDate),
+    'Дата выдачи авто': endDate,
+    'Начало выполнения работ': startDate,
     'ФИО':             fio,
     'Фамилия И.О.':    surnameInitials_(fio),
     'ФИО род.':        c['ФИО род.'] || c['ФИО родительный'] || genitiveFio_(fio),

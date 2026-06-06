@@ -4463,6 +4463,8 @@ function renderOrderCard(order) {
             (/тонир|tint/i.test(order['Услуга']||'')
               ? cvInput_('Светопропуск., %', 'cv-light', order['Светопропускаемость'])
               : cvInput_('Элементы оклейки', 'cv-elements', order['Элементы'])) +
+            cvDate_('Дата начала работ (дата договора)', 'cv-work-start', order['Дата начала работ'] || order['Дата']) +
+            cvDate_('Дата окончания работ (дата акта)', 'cv-work-end', order['Дата окончания работ'] || order['Дата выполнения']) +
           '</div>' +
           (isLegal ? '<div style="font-size:11px;color:var(--text3);margin-top:4px">Заполните «Подписант» и «Доверенность» — если договор подписывает не директор, а представитель по доверенности.</div>' : '') +
           '<div style="text-align:right;margin-top:6px;font-size:11px;color:var(--text3);min-height:14px"><span id="cv-status"></span></div>') +
@@ -5079,6 +5081,12 @@ function cvInput_(label, id, value) {
   return '<div class="cardveh-field"><label>' + label + '</label>' +
     '<input id="' + id + '" value="' + v + '" oninput="cvAutoSave()"></div>';
 }
+function ddmmyyyyToIso_(s){ var m = String(s||'').match(/^(\d{2})\.(\d{2})\.(\d{4})/); return m ? m[3]+'-'+m[2]+'-'+m[1] : ''; }
+function isoToDdmmyyyy_(s){ var m = String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3]+'.'+m[2]+'.'+m[1] : ''; }
+function cvDate_(label, id, value) {
+  return '<div class="cardveh-field"><label>' + label + '</label>' +
+    '<input id="' + id + '" type="date" value="' + ddmmyyyyToIso_(value) + '" oninput="cvAutoSave()"></div>';
+}
 
 // Собрать payload из полей блока «Клиент и автомобиль»
 function cvCollect_() {
@@ -5093,6 +5101,8 @@ function cvCollect_() {
   var sig = val('cv-signatory'); if (sig !== undefined) p.signatory = sig;
   var att = val('cv-attorney');  if (att !== undefined) p.attorney = att;
   var pass = val('cv-passport'); if (pass !== undefined) p.passport = pass;
+  var ws = document.getElementById('cv-work-start'); if (ws) p.workStart = isoToDdmmyyyy_(ws.value);
+  var we = document.getElementById('cv-work-end');   if (we) p.workEnd   = isoToDdmmyyyy_(we.value);
   return p;
 }
 

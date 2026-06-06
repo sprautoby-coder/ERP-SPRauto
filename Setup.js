@@ -343,7 +343,7 @@ function addDueDateColumn() {
 function addOrderDocColumns() {
   const sheet = getTab('DATABASE', 'ORDERS');
   let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  const need = ['Год выпуска', 'Пробег', 'Светопропускаемость', 'Элементы', 'Подписант', 'Доверенность', 'Паспорт'];
+  const need = ['Год выпуска', 'Пробег', 'Светопропускаемость', 'Элементы', 'Подписант', 'Доверенность', 'Паспорт', 'Дата начала работ', 'Дата окончания работ'];
   const added = [];
   need.forEach(function(col) {
     if (headers.indexOf(col) >= 0) return;
