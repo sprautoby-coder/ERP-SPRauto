@@ -4463,8 +4463,10 @@ function renderOrderCard(order) {
             (/тонир|tint/i.test(order['Услуга']||'')
               ? cvInput_('Светопропуск., %', 'cv-light', order['Светопропускаемость'])
               : cvInput_('Элементы оклейки', 'cv-elements', order['Элементы'])) +
-            cvDate_('Дата начала работ (дата договора)', 'cv-work-start', order['Дата начала работ'] || order['Дата']) +
-            cvDate_('Дата окончания работ (дата акта)', 'cv-work-end', order['Дата окончания работ'] || order['Дата выполнения']) +
+            '<div class="cardveh-dates">' +
+              cvDate_('Дата начала (дата договора)', 'cv-work-start', order['Дата начала работ'] || order['Дата']) +
+              cvDate_('Дата окончания (дата акта)', 'cv-work-end', order['Дата окончания работ'] || order['Дата выполнения']) +
+            '</div>' +
           '</div>' +
           (isLegal ? '<div style="font-size:11px;color:var(--text3);margin-top:4px">Заполните «Подписант» и «Доверенность» — если договор подписывает не директор, а представитель по доверенности.</div>' : '') +
           '<div style="text-align:right;margin-top:6px;font-size:11px;color:var(--text3);min-height:14px"><span id="cv-status"></span></div>') +
