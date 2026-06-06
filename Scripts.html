@@ -4452,7 +4452,9 @@ function renderOrderCard(order) {
           '<div class="cardveh-grid">' +
             cvInput_('Имя / организация', 'cv-name', order['Клиент']) +
             cvInput_('Телефон', 'cv-phone', order['Телефон']) +
-            (!isLegal ? cvInput_('Паспорт (серия, номер)', 'cv-passport', order['Паспорт']) : '') +
+            (!isLegal ? cvInput_('Паспорт (серия, номер)', 'cv-passport', order['Паспорт']) +
+                        cvInput_('Паспорт кем выдан', 'cv-passport-issued', order['Паспорт выдан']) +
+                        cvInput_('Адрес заказчика', 'cv-address', order['Адрес']) : '') +
             (isLegal ? cvInput_('Подписант (если по доверенности)', 'cv-signatory', order['Подписант']) +
                        cvInput_('Доверенность (№, дата)', 'cv-attorney', order['Доверенность']) : '') +
             cvInput_('Авто (марка, модель)', 'cv-car', order['Авто']) +
@@ -4462,7 +4464,8 @@ function renderOrderCard(order) {
             cvInput_('Пробег, км', 'cv-mileage', order['Пробег']) +
             (/тонир|tint/i.test(order['Услуга']||'')
               ? cvInput_('Светопропуск., %', 'cv-light', order['Светопропускаемость'])
-              : cvInput_('Элементы оклейки', 'cv-elements', order['Элементы'])) +
+              : cvInput_('Элементы оклейки', 'cv-elements', order['Элементы']) +
+                cvInput_('Кол-во элементов', 'cv-elements-count', order['Кол-во элементов'])) +
             '<div class="cardveh-dates">' +
               cvDate_('Дата начала (дата договора)', 'cv-work-start', order['Дата начала работ'] || order['Дата']) +
               cvDate_('Дата окончания (дата акта)', 'cv-work-end', order['Дата окончания работ'] || order['Дата выполнения']) +
@@ -5103,6 +5106,9 @@ function cvCollect_() {
   var sig = val('cv-signatory'); if (sig !== undefined) p.signatory = sig;
   var att = val('cv-attorney');  if (att !== undefined) p.attorney = att;
   var pass = val('cv-passport'); if (pass !== undefined) p.passport = pass;
+  var pi = val('cv-passport-issued'); if (pi !== undefined) p.passportIssued = pi;
+  var addr = val('cv-address'); if (addr !== undefined) p.address = addr;
+  var ec = val('cv-elements-count'); if (ec !== undefined) p.elementsCount = ec;
   var ws = document.getElementById('cv-work-start'); if (ws) p.workStart = isoToDdmmyyyy_(ws.value);
   var we = document.getElementById('cv-work-end');   if (we) p.workEnd   = isoToDdmmyyyy_(we.value);
   return p;
