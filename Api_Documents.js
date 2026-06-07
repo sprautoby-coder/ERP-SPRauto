@@ -161,62 +161,84 @@ function generateOrderNaradHtml(orderId) {
     var d = getDocData_(orderId);
     var map = buildDocPlaceholders_(d);
     var isTint = /тонир|tint/i.test(d.order['Услуга'] || '');
-    var body = fillTemplate_(naradTemplateHtml_(isTint), map);
+    var price = Number(d.order['Стоимость заказа']) || 0;
+    var esc = function(s){ return String(s == null ? '' : s).replace(/"/g, '&quot;'); };
+
+    // Плёнка (расход) — редактируемые строки
+    var films = d.materials.filter(function(m){ return String(m['Тип']||'расход') === 'расход'; });
+    if (!films.length) films = [{ 'Название':'', 'Кол-во':0, 'Цена за м²':0 }];
+    var filmRows = films.map(function(m){
+      var qty = Number(m['Кол-во'])||0, pr = Number(m['Цена за м²'])||0;
+      return '<tr class="nf-film"><td>' + (m['Название']||'') + '</td><td class="center">пог. м</td>' +
+        '<td class="right"><input class="de nf-q" value="' + qty + '"></td>' +
+        '<td class="right"><input class="de nf-p" value="' + pr + '"></td>' +
+        '<td class="right nf-c">' + (Math.round(qty*pr*100)/100).toFixed(2) + '</td></tr>';
+    }).join('');
+    var rashCost = d.expenses.reduce(function(s,e){ return s + (Number(e['Сумма'])||0); }, 0);
+
+    var works = isTint
+      ? '<tr><td>1</td><td>Установка тонировочной плёнки</td><td class="center">да</td><td></td></tr>' +
+        '<tr><td>2</td><td>Разборка на элементы, сборка автомобиля</td><td></td><td></td></tr>' +
+        '<tr><td>3</td><td>Мойка, сушка автомобиля</td><td></td><td></td></tr>'
+      : '<tr><td>1</td><td>Оклейка антигравийной плёнкой: ' + (map['Элементы для оклейки']||'') + '</td><td class="center">да</td><td></td></tr>' +
+        '<tr><td>2</td><td>Разборка на элементы оклейки</td><td></td><td></td></tr>' +
+        '<tr><td>3</td><td>Сборка автомобиля</td><td></td><td></td></tr>' +
+        '<tr><td>4</td><td>Мойка, сушка автомобиля</td><td></td><td></td></tr>' +
+        '<tr><td>5</td><td>Полировка элементов кузова</td><td></td><td></td></tr>';
+
+    var body =
+      '<div class="editbar noprint">✎ Поля можно поправить прямо здесь — «Работ», «Материалов» и «Всего» пересчитаются сами. Затем нажмите «Распечатать».</div>' +
+      '<div class="muted">' + map['Компания'] + '<br>УНП: ' + map['УНП'] + ' · ' + map['Юр.адрес'] + '<br>(наименование и местонахождение исполнителя)</div>' +
+      '<div class="bar" style="margin-top:6px"><span></span><span>' + (map['Дата ru']||'') + '</span></div>' +
+      '<h2>ЗАКАЗ-НАРЯД ' + (map['Номер договора']? '№ '+map['Номер договора'] : '') + '</h2>' +
+      '<p><b>Заказчик:</b> ' + map['ФИО'] + ', паспорт ' + (map['Паспорт']||'____') + '</p>' +
+      '<h3>1. Общие сведения</h3>' +
+      '<table><tr><th>Марка</th><th>Модель</th><th>Рег. номер</th><th>VIN / кузов</th><th>Год выпуска</th>' + (isTint?'':'<th>Пробег</th>') + '</tr>' +
+      '<tr><td>' + map['Марка авто'] + '</td><td>' + map['Модель'] + '</td><td>' + map['Гос.номер'] + '</td><td>' + map['VIN'] + '</td><td>' + map['Год выпуска'] + '</td>' + (isTint?'':'<td>'+map['Пробег']+'</td>') + '</tr></table>' +
+      '<h3>2. Выполненные работы</h3>' +
+      '<table><thead><tr><th style="width:34px">№</th><th>Наименование</th><th style="width:60px">да/нет</th><th style="width:96px">руб.</th></tr></thead><tbody>' +
+        works +
+        '<tr><td colspan="3" class="right"><b>Итого стоимость работ</b></td><td class="right"><b><span id="nf-works">0</span></b></td></tr>' +
+      '</tbody></table>' +
+      '<h3>3. Материалы исполнителя, оплачиваемые заказчиком</h3>' +
+      '<table><thead><tr><th>Наименование</th><th style="width:70px">Ед. изм.</th><th style="width:74px">Кол-во</th><th style="width:80px">Цена, руб.</th><th style="width:96px">Стоимость, руб.</th></tr></thead><tbody>' +
+        filmRows +
+        '<tr><td>Расходные материалы, инструменты</td><td class="center">—</td><td></td><td></td><td class="right"><input class="de" id="nf-rash" value="' + (Math.round(rashCost*100)/100) + '"></td></tr>' +
+        '<tr><td colspan="4" class="right"><b>Итого материалов</b></td><td class="right"><b><span id="nf-mat">0</span></b></td></tr>' +
+      '</tbody></table>' +
+      '<table style="margin-top:8px"><tr><th style="width:25%">Стоимость работ</th><th style="width:25%">Материалов</th><th style="width:25%">Всего к оплате</th><th>НДС</th></tr>' +
+      '<tr><td class="right"><span id="nf-works2">0</span> р.</td><td class="right"><span id="nf-mat2">0</span> р.</td>' +
+      '<td class="right"><b><input class="de" id="nf-total" value="' + price + '"> р.</b></td><td class="center">Без НДС</td></tr></table>' +
+      '<p>Общая стоимость прописью: <b><span id="nf-words"></span></b></p>' +
+      '<div class="sign" style="margin-top:12px"><span>Заказ оформил: _____________ / ' + map['Заказ оформил'] + '</span></div>' +
+      '<p style="margin-top:14px;font-size:9.5pt">С объёмом и стоимостью заказа согласен, с правилами оказания услуг ознакомлен. Претензий по качеству выполненных работ не имею, автомобиль получил.</p>' +
+      '<div class="sign"><span>_____________ / ' + map['Фамилия И.О.'] + '<br><span class="muted">(подпись заказчика)</span></span><span>' + (map['Дата окончания кратко']||'') + '</span></div>' +
+      naradRecalcScript_();
+
     return docWrap_('Заказ-наряд ' + (map['Номер договора'] || ''), body, map['Логотип']);
   });
 }
 
-/** Шаблон заказ-наряда (БСО). isTint=true — тонировка, иначе оклейка PPF. */
-function naradTemplateHtml_(isTint) {
-  var works = isTint
-    ? `<tr><td>1</td><td>Установка тонировочной плёнки</td><td class="center">да</td><td class="right"></td></tr>
-       <tr><td>2</td><td>Разборка на элементы, сборка автомобиля</td><td class="center"></td><td class="right"></td></tr>
-       <tr><td>3</td><td>Мойка, сушка автомобиля</td><td class="center"></td><td class="right"></td></tr>`
-    : `<tr><td>1</td><td>Оклейка антигравийной плёнкой: {{Элементы для оклейки}}</td><td class="center">да</td><td class="right"></td></tr>
-       <tr><td>2</td><td>Разборка на элементы оклейки</td><td class="center"></td><td class="right"></td></tr>
-       <tr><td>3</td><td>Сборка автомобиля</td><td class="center"></td><td class="right"></td></tr>
-       <tr><td>4</td><td>Мойка, сушка автомобиля</td><td class="center"></td><td class="right"></td></tr>
-       <tr><td>5</td><td>Полировка элементов кузова</td><td class="center"></td><td class="right"></td></tr>`;
-  return `
-  <div class="muted">{{Компания}}<br>УНП: {{УНП}} · {{Юр.адрес}}<br>(наименование и местонахождение исполнителя)</div>
-  <div class="bar" style="margin-top:6px"><span></span><span>{{Дата}}</span></div>
-  <h2>ЗАКАЗ-НАРЯД</h2>
-  <p><b>Заказчик:</b> {{ФИО}}, номер паспорта {{Паспорт}}` + (isTint ? `<br>договор № {{Номер договора}} от {{Дата}} г.` : ``) + `</p>
-
-  <h3>1. Общие сведения</h3>
-  <table>
-    <tr><th>Марка</th><th>Модель</th><th>Рег. номер</th><th>VIN / кузов</th><th>Год выпуска</th>` + (isTint ? `` : `<th>Пробег</th>`) + `</tr>
-    <tr><td>{{Марка авто}}</td><td>{{Модель}}</td><td>{{Гос.номер}}</td><td>{{VIN}}</td><td>{{Год выпуска}}</td>` + (isTint ? `` : `<td>{{Пробег}}</td>`) + `</tr>
-  </table>
-
-  <h3>2. Выполненные работы</h3>
-  <table>
-    <thead><tr><th style="width:36px">№</th><th>Наименование</th><th style="width:70px">да/нет</th><th style="width:90px">руб.</th></tr></thead>
-    <tbody>` + works + `
-      <tr><td colspan="3" class="right"><b>Итого стоимость работ</b></td><td class="right"><b>{{Работ стоимость}}</b></td></tr>
-    </tbody>
-  </table>
-
-  <h3>3. Материалы исполнителя, оплачиваемые заказчиком</h3>
-  <table>
-    <thead><tr><th>Наименование</th><th style="width:80px">Ед. изм.</th><th style="width:80px">Кол-во</th><th style="width:90px">Цена, руб.</th><th style="width:100px">Стоимость, руб.</th></tr></thead>
-    <tbody>{{Таблица материалов}}
-      <tr><td colspan="4" class="right"><b>Итого материалов</b></td><td class="right"><b>{{Материалов стоимость}}</b></td></tr>
-    </tbody>
-  </table>
-
-  <table style="margin-top:8px">
-    <tr><th style="width:33%">Стоимость работ</th><th style="width:33%">Стоимость материалов</th><th>Всего к оплате</th></tr>
-    <tr><td class="right">{{Работ стоимость}} руб.</td><td class="right">{{Материалов стоимость}} руб.</td><td class="right"><b>{{Сумма}} руб.</b> (без НДС)</td></tr>
-  </table>
-  <p>Общая стоимость прописью: <b>{{Сумма прописью}}</b></p>
-
-  <div class="sign" style="margin-top:14px">
-    <span>Заказ оформил: _____________ / {{Заказ оформил}}</span>
-  </div>
-  <p style="margin-top:18px;font-size:11px">С объёмом и стоимостью заказа согласен, с правилами оказания услуг ознакомлен. Претензий по качеству выполненных работ не имею, автомобиль получил.</p>
-  <div class="sign"><span>_____________ / {{Фамилия И.О.}}<br><span class="muted">(подпись заказчика)</span></span><span>{{Дата выдачи авто}}</span></div>
-  `;
+/** Встроенный скрипт пересчёта наряда (выполняется в окне печати). Защита от минусов. */
+function naradRecalcScript_() {
+  return '<script>' +
+    'function n2w(n){n=Math.round(n);' +
+    'var o=["","один","два","три","четыре","пять","шесть","семь","восемь","девять","десять","одиннадцать","двенадцать","тринадцать","четырнадцать","пятнадцать","шестнадцать","семнадцать","восемнадцать","девятнадцать"];' +
+    'var t=["","","двадцать","тридцать","сорок","пятьдесят","шестьдесят","семьдесят","восемьдесят","девяносто"];' +
+    'var h=["","сто","двести","триста","четыреста","пятьсот","шестьсот","семьсот","восемьсот","девятьсот"];' +
+    'function tri(n,f){var s="",H=Math.floor(n/100),r=n%100,T=Math.floor(r/10),O=r%10;if(H)s+=h[H]+" ";if(r<20&&r>0){var w=o[r];if(f&&r==1)w="одна";if(f&&r==2)w="две";s+=w+" ";}else{if(T)s+=t[T]+" ";if(O){var w2=o[O];if(f&&O==1)w2="одна";if(f&&O==2)w2="две";s+=w2+" ";}}return s;}' +
+    'function pl(n,a){var x=n%10,y=n%100;if(x==1&&y!=11)return a[0];if(x>=2&&x<=4&&(y<10||y>=20))return a[1];return a[2];}' +
+    'var M=Math.floor(n/1e6),T2=Math.floor(n%1e6/1e3),R=n%1e3,w="";' +
+    'if(M)w+=tri(M,false)+pl(M,["миллион","миллиона","миллионов"])+" ";if(T2)w+=tri(T2,true)+pl(T2,["тысяча","тысячи","тысяч"])+" ";if(R||(!M&&!T2))w+=tri(R,false);' +
+    'w=(w.trim()||"ноль");var res=w+" "+pl(n,["рубль","рубля","рублей"])+" 00 копеек";return res.charAt(0).toUpperCase()+res.slice(1);}' +
+    'function nrecalc(){var tot=parseFloat((document.getElementById("nf-total")||{}).value)||0;var mat=0;' +
+    'document.querySelectorAll(".nf-film").forEach(function(r){var q=parseFloat(r.querySelector(".nf-q").value)||0;var p=parseFloat(r.querySelector(".nf-p").value)||0;var c=Math.round(q*p*100)/100;r.querySelector(".nf-c").textContent=c.toFixed(2);mat+=c;});' +
+    'mat+=parseFloat((document.getElementById("nf-rash")||{}).value)||0;' +
+    'var matShown=Math.min(mat,tot);var works=Math.max(0,tot-matShown);' +  // защита от минусов (вариант А)
+    'function set(id,v){var e=document.getElementById(id);if(e)e.textContent=v;}' +
+    'set("nf-mat",matShown.toFixed(2));set("nf-mat2",matShown.toFixed(2));set("nf-works",works.toFixed(2));set("nf-works2",works.toFixed(2));set("nf-words",n2w(tot));}' +
+    'document.addEventListener("input",nrecalc);nrecalc();' +
+    '</script>';
 }
 
 /** Карта работ мастеру (чек-лист комплексов и элементов оклейки). */
@@ -409,10 +431,12 @@ function getDocData_(orderId) {
       if (String(cs[k]['ID']) === String(order['Клиент ID'])) { client = cs[k]; break; }
     }
   }
+  var expenses = readSheetAsObjects('DATABASE', 'ORDER_EXPENSES')
+    .filter(function(r){ return String(r['Заказ ID']) === String(orderId); });
   // Реквизиты компании — позиционным чтением (ключ→значение), надёжно
   var sResp = getSettings();
   var company = (sResp && sResp.ok) ? sResp.data : {};
-  return { order: order, client: client, company: company, materials: materials };
+  return { order: order, client: client, company: company, materials: materials, expenses: expenses };
 }
 
 /** Фамилия + инициалы: «Иванов Иван Иванович» → «Иванов И.И.» */
@@ -606,6 +630,9 @@ function docWrap_(title, bodyHtml, logoUrl) {
     'table{width:100%;border-collapse:collapse;margin:4px 0}' +
     'td,th{border:1px solid #000;padding:2px 5px;font-size:9.5pt;vertical-align:top}th{background:#eee;font-weight:bold}' +
     '.blank{display:inline-block;min-width:90px;border-bottom:1px solid #000;line-height:1}' +
+    '.de{border:1px solid #9bb;border-radius:4px;padding:1px 4px;font:inherit;width:62px;text-align:right;background:#f4fbfe}' +
+    '@media print{.de{border:none;padding:0;background:transparent;-webkit-print-color-adjust:exact}}' +
+    '.editbar{background:#eef7fb;border:1px solid #bde;border-radius:8px;padding:8px 12px;margin:0 0 10px;font-size:11px;color:#235}' +
     '.right{text-align:right}.center{text-align:center}.muted{font-size:8.5pt;color:#333}' +
     '.sign{display:flex;justify-content:space-between;margin-top:12px}' +
     '.page-break{page-break-before:always}.bar{display:flex;justify-content:space-between}' +
