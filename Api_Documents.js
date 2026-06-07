@@ -47,7 +47,7 @@ function generateContractHtml(orderId) {
     var isLegal = String(d.client['Тип'] || '') === 'юр' || String(d.order['_clientType'] || '') === 'юр';
     var byProxy = isLegal && String(d.order['Подписант'] || '').trim() !== '';
     var body = fillTemplate_(contractTemplateHtml_(isLegal, byProxy), map);
-    return docWrap_('Договор ' + (map['Номер договора'] || ''), body, map['Логотип']);
+    return docWrap_('Договор ' + (map['Номер договора'] || ''), body, map['Логотип'], true);
   });
 }
 
@@ -616,14 +616,17 @@ function fillTemplate_(html, map) {
   });
 }
 
-/** Обёртка печатного документа: общий CSS + кнопка «Печать» + логотип. */
-function docWrap_(title, bodyHtml, logoUrl) {
-  var logo = logoUrl ? '<img src="' + logoUrl + '" alt="logo" style="height:64px;width:auto;display:block;margin:0 auto 6px">' : '';
+/** Обёртка печатного документа. logoUrl — логотип; asWatermark=true — лого
+ *  как бледный водяной знак на всю страницу (для договора), иначе — в шапке. */
+function docWrap_(title, bodyHtml, logoUrl, asWatermark) {
+  var logo = (logoUrl && !asWatermark) ? '<img src="' + logoUrl + '" alt="logo" style="height:64px;width:auto;display:block;margin:0 auto 6px">' : '';
+  var wm   = (logoUrl && asWatermark) ? '<img class="watermark" src="' + logoUrl + '" alt="">' : '';
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + title + '</title><style>' +
     '@page{size:A4;margin:12mm 14mm}' +
     '*{box-sizing:border-box}' +
     'body{font-family:"Times New Roman",serif;font-size:10.5pt;line-height:1.18;color:#000;margin:0}' +
-    '.doc{max-width:180mm;margin:0 auto}' +
+    '.watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:60%;max-width:150mm;opacity:.07;z-index:0;pointer-events:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
+    '.doc{max-width:180mm;margin:0 auto;position:relative;z-index:1}' +
     'h2{text-align:center;font-size:12pt;margin:2px 0;font-weight:bold}' +
     'h3{font-size:10.5pt;margin:6px 0 2px;font-weight:bold}' +
     'p{margin:2px 0;text-align:justify}' +
@@ -640,7 +643,7 @@ function docWrap_(title, bodyHtml, logoUrl) {
     '@media print{.noprint{display:none}}' +
     '</style></head><body>' +
     '<div class="noprint" style="text-align:right;margin:8px 14px"><button onclick="window.print()" style="padding:8px 20px;font-size:13px;cursor:pointer">🖨 Распечатать</button></div>' +
-    '<div class="doc">' + logo + bodyHtml + '</div></body></html>';
+    wm + '<div class="doc">' + logo + bodyHtml + '</div></body></html>';
 }
 
 /** Шаблон: ДОГОВОР + Протокол согласования цены + Акт выполненных работ (САНПРОТЕКТ).
