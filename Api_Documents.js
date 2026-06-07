@@ -193,10 +193,17 @@ function generateOrderNaradHtml(orderId) {
       '<h2>ЗАКАЗ-НАРЯД ' + (map['Номер договора']? '№ '+map['Номер договора'] : '') + '</h2>' +
       '<p><b>Заказчик:</b> ' + map['ФИО'] + ', паспорт ' + (map['Паспорт']||'____') + '</p>' +
       '<h3>1. Общие сведения</h3>' +
-      '<table><tr><th>Марка</th><th>Модель</th><th>Рег. номер</th><th>VIN / кузов</th><th>Год выпуска</th>' + (isTint?'':'<th>Пробег</th>') + '</tr>' +
-      '<tr><td>' + map['Марка авто'] + '</td><td>' + map['Модель'] + '</td><td>' + map['Гос.номер'] + '</td><td>' + map['VIN'] + '</td><td>' + map['Год выпуска'] + '</td>' + (isTint?'':'<td>'+map['Пробег']+'</td>') + '</tr></table>' +
+      '<table>' +
+        '<tr><th style="width:38%">Владелец автомобиля</th><td>' + map['ФИО'] + '</td></tr>' +
+        '<tr><th>Марка автомобиля</th><td>' + map['Марка авто'] + '</td></tr>' +
+        '<tr><th>Модель</th><td>' + map['Модель'] + '</td></tr>' +
+        '<tr><th>Регистрационный номер</th><td>' + map['Гос.номер'] + '</td></tr>' +
+        '<tr><th>VIN либо номер кузова</th><td>' + map['VIN'] + '</td></tr>' +
+        '<tr><th>Год выпуска</th><td>' + map['Год выпуска'] + '</td></tr>' +
+        (isTint ? '' : '<tr><th>Пробег</th><td>' + map['Пробег'] + '</td></tr>') +
+      '</table>' +
       '<h3>2. Выполненные работы</h3>' +
-      '<table><thead><tr><th style="width:34px">№</th><th>Наименование</th><th style="width:60px">да/нет</th><th style="width:96px">руб.</th></tr></thead><tbody>' +
+      '<table><thead><tr><th style="width:34px">№</th><th>Наименование</th><th style="width:120px">Норматив времени, ДА/НЕТ</th><th style="width:96px">руб.</th></tr></thead><tbody>' +
         works +
         '<tr><td colspan="3" class="right"><b>Итого стоимость работ</b></td><td class="right"><b><span id="nf-works">0</span></b></td></tr>' +
       '</tbody></table>' +
@@ -215,7 +222,7 @@ function generateOrderNaradHtml(orderId) {
       '<div class="sign"><span>_____________ / ' + map['Фамилия И.О.'] + '<br><span class="muted">(подпись заказчика)</span></span><span>' + (map['Дата окончания кратко']||'') + '</span></div>' +
       naradRecalcScript_();
 
-    return docWrap_('Заказ-наряд ' + (map['Номер договора'] || ''), body, map['Логотип']);
+    return docWrap_('Заказ-наряд ' + (map['Номер договора'] || ''), body, map['Логотип'], true);
   });
 }
 
