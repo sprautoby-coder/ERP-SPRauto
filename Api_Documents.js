@@ -47,7 +47,7 @@ function generateContractHtml(orderId) {
     var isLegal = String(d.client['Тип'] || '') === 'юр' || String(d.order['_clientType'] || '') === 'юр';
     var byProxy = isLegal && String(d.order['Подписант'] || '').trim() !== '';
     var body = fillTemplate_(contractTemplateHtml_(isLegal, byProxy), map);
-    return docWrap_('Договор ' + (map['Номер договора'] || ''), body);
+    return docWrap_('Договор ' + (map['Номер договора'] || ''), body, map['Логотип']);
   });
 }
 
@@ -162,7 +162,7 @@ function generateOrderNaradHtml(orderId) {
     var map = buildDocPlaceholders_(d);
     var isTint = /тонир|tint/i.test(d.order['Услуга'] || '');
     var body = fillTemplate_(naradTemplateHtml_(isTint), map);
-    return docWrap_('Заказ-наряд ' + (map['Номер договора'] || ''), body);
+    return docWrap_('Заказ-наряд ' + (map['Номер договора'] || ''), body, map['Логотип']);
   });
 }
 
@@ -226,15 +226,12 @@ function generateWorkCardHtml(orderId) {
     var map = buildDocPlaceholders_(d);
     map['Мастера'] = d.order['Оклейщики'] || d.order['Менеджер'] || '';
     var body = fillTemplate_(workCardTemplateHtml_(), map);
-    return docWrap_('Карта работ ' + (map['Номер договора'] || ''), body);
+    return docWrap_('Карта работ ' + (map['Номер договора'] || ''), body, map['Логотип']);
   });
 }
 
 function workCardTemplateHtml_() {
   var cb = function(label){ return '<div style="display:inline-block;width:48%;margin:2px 0">☐ ' + label + '</div>'; };
-  var complexes = ['Optima','Optima+','Premium','Полная оклейка'].map(cb).join('');
-  var elements = ['Капот','Передний бампер','Крылья целиком','Передняя часть крыльев','Передняя оптика','Зеркала',
-    'Стойки лобового стекла','Полоса на крыше до люка','Внутренние пороги','Зона выгрузки','Кромки дверей','Антиманикюр'].map(cb).join('');
   var extra = ['Полировка','Тонировка','Шумоизоляция','Керамическое покрытие'].map(cb).join('');
   return `
   <h2>КАРТА РАБОТ ПО ОКЛЕЙКЕ АВТОМОБИЛЯ № {{Номер договора}}</h2>
@@ -249,10 +246,9 @@ function workCardTemplateHtml_() {
     <tr><th>Имя клиента</th><td>{{ФИО}}</td><th>Телефон</th><td>{{Телефон клиента}}</td></tr>
   </table>
 
-  <h3>Выбранный комплекс</h3>
-  <div>` + complexes + `</div>
+  <h3>Выбранный комплекс: {{Комплекс}}</h3>
   <h3>Элементы для оклейки</h3>
-  <div>` + elements + `<div style="margin-top:4px">☐ Другое: <span class="blank" style="min-width:300px"></span></div></div>
+  <div style="line-height:1.7">{{Элементы чеклист}}<br>☐ Другое: <span class="blank" style="min-width:300px"></span></div>
   <h3>Дополнительные работы</h3>
   <div>` + extra + `<div style="margin-top:4px">☐ Другое: <span class="blank" style="min-width:300px"></span></div></div>
 
@@ -530,6 +526,13 @@ function buildDocPlaceholders_(d) {
                           : 'антигравийной плёнки'),
     'Использовано пленки': usedFilm || '',
     'Элементы для оклейки': String(o['Элементы'] || '').replace(/\r?\n/g, ', '),
+    'Комплекс': o['Комплекс'] || '',
+    // Для карты работ — каждый элемент с новой строки (☐ перед каждым)
+    'Элементы чеклист': (function(){
+      var arr = String(o['Элементы'] || '').split(/\r?\n/).map(function(s){ return s.trim(); }).filter(Boolean);
+      if (!arr.length) arr = ['Капот','Передний бампер','Крылья целиком','Передняя часть крыльев','Передняя оптика','Зеркала','Стойки лобового стекла','Полоса на крыше до люка','Внутренние пороги','Зона выгрузки','Кромки дверей','Антиманикюр'];
+      return arr.map(function(e){ return '☐ ' + e; }).join('<br>');
+    })(),
     // ── Поля и формулировки точно по эталону САНПРОТЕКТ ──
     'Дата ru':         dateRu_(startDate),
     'Дата начала кратко':   dateShort_(startDate),
@@ -577,6 +580,7 @@ function buildDocPlaceholders_(d) {
     'Директор род.': genitiveFio_(get('director', 'Котляров И.В.')),
     'Гарантия мес': get('warranty_months', '36'),
     'Телефон':    get('phone', '+375172525569, +375291090001'),
+    'Логотип':    co['logo_dataurl'] || '',
   };
 }
 
@@ -588,8 +592,9 @@ function fillTemplate_(html, map) {
   });
 }
 
-/** Обёртка печатного документа: общий CSS + кнопка «Печать». */
-function docWrap_(title, bodyHtml) {
+/** Обёртка печатного документа: общий CSS + кнопка «Печать» + логотип. */
+function docWrap_(title, bodyHtml, logoUrl) {
+  var logo = logoUrl ? '<img src="' + logoUrl + '" alt="logo" style="height:64px;width:auto;display:block;margin:0 auto 6px">' : '';
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + title + '</title><style>' +
     '@page{size:A4;margin:12mm 14mm}' +
     '*{box-sizing:border-box}' +
@@ -608,7 +613,7 @@ function docWrap_(title, bodyHtml) {
     '@media print{.noprint{display:none}}' +
     '</style></head><body>' +
     '<div class="noprint" style="text-align:right;margin:8px 14px"><button onclick="window.print()" style="padding:8px 20px;font-size:13px;cursor:pointer">🖨 Распечатать</button></div>' +
-    '<div class="doc">' + bodyHtml + '</div></body></html>';
+    '<div class="doc">' + logo + bodyHtml + '</div></body></html>';
 }
 
 /** Шаблон: ДОГОВОР + Протокол согласования цены + Акт выполненных работ (САНПРОТЕКТ).
