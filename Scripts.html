@@ -4464,7 +4464,8 @@ function renderOrderCard(order) {
             cvInput_('Пробег, км', 'cv-mileage', order['Пробег']) +
             (/тонир|tint/i.test(order['Услуга']||'')
               ? cvInput_('Светопропуск., %', 'cv-light', order['Светопропускаемость'])
-              : cvInput_('Элементы оклейки', 'cv-elements', order['Элементы']) +
+              : '<div class="cardveh-field"><label>Комплекс оклейки</label>' + complexSelectHtml_(order['Комплекс']) + '</div>' +
+                cvInput_('Элементы оклейки', 'cv-elements', order['Элементы']) +
                 cvInput_('Кол-во элементов', 'cv-elements-count', order['Кол-во элементов'])) +
             '<div class="cardveh-dates">' +
               cvDate_('Дата начала (дата договора)', 'cv-work-start', order['Дата начала работ'] || order['Дата']) +
@@ -5086,6 +5087,32 @@ function cvInput_(label, id, value) {
   return '<div class="cardveh-field"><label>' + label + '</label>' +
     '<input id="' + id + '" value="' + v + '" oninput="cvAutoSave()"></div>';
 }
+
+// Комплексы оклейки SPRauto (состав + ориентировочная цена)
+var OKLEYKA_COMPLEXES = {
+  'Оптима':         { price: 1300, els: ['капот полностью','крылья 1/3','передняя оптика','стойки лобового стекла','полоса на крышу','зона выгрузки','внутренние пороги','кромки дверей','антиманикюр'] },
+  'Оптима+':        { price: 1600, els: ['капот полностью','крылья полностью','передняя оптика','стойки лобового стекла','полоса на крышу','зона выгрузки','внутренние пороги','кромки дверей','антиманикюр'] },
+  'Премиум':        { price: 2350, els: ['капот полностью','крылья полностью','передний бампер','передняя оптика','стойки лобового стекла','полоса на крышу','зона выгрузки','внутренние пороги','кромки дверей','антиманикюр','боковые зеркала'] },
+  'Полная оклейка': { price: 0,    els: ['полная оклейка кузова'] }
+};
+function complexSelectHtml_(selected) {
+  var inp = 'padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--inp);color:var(--text);font-size:13px;width:100%';
+  var opts = '<option value="">— не выбран —</option>';
+  Object.keys(OKLEYKA_COMPLEXES).forEach(function(k){
+    var pr = OKLEYKA_COMPLEXES[k].price;
+    opts += '<option value="' + k + '"' + (k === selected ? ' selected' : '') + '>' + k + (pr ? ' (~' + pr + ')' : '') + '</option>';
+  });
+  return '<select id="cv-complex" onchange="onComplexSelect()" style="' + inp + '">' + opts + '</select>';
+}
+function onComplexSelect() {
+  var sel = document.getElementById('cv-complex'); if (!sel) return;
+  var c = OKLEYKA_COMPLEXES[sel.value];
+  if (c) {
+    var elsEl = document.getElementById('cv-elements'); if (elsEl) elsEl.value = c.els.join(', ');
+    var cntEl = document.getElementById('cv-elements-count'); if (cntEl) cntEl.value = c.els.length;
+  }
+  cvAutoSave();
+}
 function ddmmyyyyToIso_(s){ var m = String(s||'').match(/^(\d{2})\.(\d{2})\.(\d{4})/); return m ? m[3]+'-'+m[2]+'-'+m[1] : ''; }
 function isoToDdmmyyyy_(s){ var m = String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3]+'.'+m[2]+'.'+m[1] : ''; }
 function cvDate_(label, id, value) {
@@ -5109,6 +5136,7 @@ function cvCollect_() {
   var pi = val('cv-passport-issued'); if (pi !== undefined) p.passportIssued = pi;
   var addr = val('cv-address'); if (addr !== undefined) p.address = addr;
   var ec = val('cv-elements-count'); if (ec !== undefined) p.elementsCount = ec;
+  var cx = document.getElementById('cv-complex'); if (cx) p.complex = cx.value;
   var ws = document.getElementById('cv-work-start'); if (ws) p.workStart = isoToDdmmyyyy_(ws.value);
   var we = document.getElementById('cv-work-end');   if (we) p.workEnd   = isoToDdmmyyyy_(we.value);
   return p;
