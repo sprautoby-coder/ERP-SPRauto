@@ -4465,8 +4465,8 @@ function renderOrderCard(order) {
             (/тонир|tint/i.test(order['Услуга']||'')
               ? cvInput_('Светопропуск., %', 'cv-light', order['Светопропускаемость'])
               : '<div class="cardveh-field"><label>Комплекс оклейки</label>' + complexSelectHtml_(order['Комплекс']) + '</div>' +
-                cvInput_('Элементы оклейки', 'cv-elements', order['Элементы']) +
-                cvInput_('Кол-во элементов', 'cv-elements-count', order['Кол-во элементов'])) +
+                cvInput_('Кол-во элементов', 'cv-elements-count', order['Кол-во элементов']) +
+                cvTextarea_('Элементы оклейки (правьте вручную: удаляйте/добавляйте)', 'cv-elements', order['Элементы'])) +
             '<div class="cardveh-dates">' +
               cvDate_('Дата начала (дата договора)', 'cv-work-start', order['Дата начала работ'] || order['Дата']) +
               cvDate_('Дата окончания (дата акта)', 'cv-work-end', order['Дата окончания работ'] || order['Дата выполнения']) +
@@ -5108,10 +5108,15 @@ function onComplexSelect() {
   var sel = document.getElementById('cv-complex'); if (!sel) return;
   var c = OKLEYKA_COMPLEXES[sel.value];
   if (c) {
-    var elsEl = document.getElementById('cv-elements'); if (elsEl) elsEl.value = c.els.join(', ');
+    var elsEl = document.getElementById('cv-elements'); if (elsEl) elsEl.value = c.els.join('\n');
     var cntEl = document.getElementById('cv-elements-count'); if (cntEl) cntEl.value = c.els.length;
   }
   cvAutoSave();
+}
+function cvTextarea_(label, id, value) {
+  var v = String(value == null ? '' : value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return '<div class="cardveh-field cardveh-wide"><label>' + label + '</label>' +
+    '<textarea id="' + id + '" rows="3" oninput="cvAutoSave()">' + v + '</textarea></div>';
 }
 function ddmmyyyyToIso_(s){ var m = String(s||'').match(/^(\d{2})\.(\d{2})\.(\d{4})/); return m ? m[3]+'-'+m[2]+'-'+m[1] : ''; }
 function isoToDdmmyyyy_(s){ var m = String(s||'').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3]+'.'+m[2]+'.'+m[1] : ''; }
