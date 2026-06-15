@@ -53,7 +53,7 @@ function toggleTheme() {
 var PAGE_TITLES = {
   dashboard:'Дашборд', orders:'Заказы', clients:'Клиенты',
   'client-card':'Карточка клиента', 'order-card':'Карточка заказа',
-  finance:'Финансы', dds:'ДДС — Движение денег', expenses:'Расходы',
+  kassa:'Касса', finance:'Финансы', dds:'ДДС — Движение денег', expenses:'Расходы',
   debt:'Дебиторка', salary:'Расчёт заработной платы',
   team:'Сотрудники', services:'Услуги', inventory:'Склад',
   appointments:'Записи — календарь',
@@ -974,6 +974,7 @@ function loadCurrentPage() {
   if (App.currentPage === 'inventory') loadInventory(force);
   if (App.currentPage === 'appointments') loadAppointments(force);
   if (App.currentPage === 'settings')  loadSettings();
+  if (App.currentPage === 'kassa')     loadKassa(force);
   if (App.currentPage === 'expenses')  loadExpenses();
   if (App.currentPage === 'finance')   loadFinance();
   if (App.currentPage === 'debt')      loadDebt();
@@ -989,6 +990,229 @@ function forceRefresh() {
 }
 
 /* Дашборд — реальная реализация renderDashboard() ниже (раздел «ДАШБОРД (данные)») */
+
+/* ===== КАССА ===== */
+App._kassaDate = null; // 'YYYY-MM-DD' просматриваемый день (null = сегодня)
+
+function kassaTodayIso_() {
+  var d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+// 'YYYY-MM-DD' → 'dd.MM.yyyy' для сервера
+function kassaIsoToRu_(iso) {
+  var m = String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? (m[3] + '.' + m[2] + '.' + m[1]) : '';
+}
+
+function loadKassa(force) {
+  var inp = document.getElementById('kassa-date');
+  if (!App._kassaDate) App._kassaDate = kassaTodayIso_();
+  if (inp && !inp.value) inp.value = App._kassaDate;
+  if (inp && inp.value) App._kassaDate = inp.value;
+
+  var ops = document.getElementById('kassa-ops');
+  if (ops && force) ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</div>';
+
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { if (ops) ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">' + (resp?resp.error:'Ошибка') + '</div>'; return; }
+      App._kassa = resp.data;
+      renderKassa(resp.data);
+    })
+    .withFailureHandler(function(e){ if (ops) ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">' + e.message + '</div>'; })
+    .getKassa(kassaIsoToRu_(App._kassaDate));
+}
+
+function renderKassa(k) {
+  var set = function(id, v){ var e = document.getElementById(id); if (e) e.textContent = v; };
+  set('kassa-balance', money(k.balanceNow));
+  var sub = document.getElementById('kassa-balance-sub');
+  if (sub) sub.textContent = k.startDate ? ('учёт с ' + k.startDate) : 'начальный остаток не задан — нажмите «Пересчёт»';
+  set('kassa-opening', money(k.opening));
+  set('kassa-daynet',  (k.dayNet >= 0 ? '+' : '') + money(k.dayNet));
+  set('kassa-beznal',  money(k.dayBeznal));
+  set('kassa-closing', money(k.closing));
+
+  var ops = document.getElementById('kassa-ops');
+  if (ops) {
+    if (!k.operations || !k.operations.length) {
+      ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">Нет операций за этот день</div>';
+    } else {
+      ops.innerHTML = k.operations.map(function(op){
+        var cls = op.type === 'расход' ? 'kassa-op-out' : (op.type === 'безнал' ? 'kassa-op-bn' : 'kassa-op-in');
+        var amt = (op.type === 'расход' ? '−' : (op.type === 'безнал' ? '' : '+')) + money(op.amount);
+        var del = op.expenseId ? '<button class="kassa-op-del" title="Удалить расход" onclick="deleteKassaExpense(\'' + op.expenseId + '\')">✕</button>' : '';
+        return '<div class="kassa-op ' + cls + '">' +
+          '<span class="kassa-op-time">' + (op.time || '') + '</span>' +
+          '<span class="kassa-op-desc">' + (op.type === 'безнал' ? 'БЕЗНАЛ · ' : '') + escapeHtml_(op.desc || '') + '</span>' +
+          '<span class="kassa-op-amt">' + amt + '</span>' + del +
+        '</div>';
+      }).join('');
+    }
+  }
+  // Текст отчёта — отдельным вызовом (точный формат с сервера)
+  google.script.run.withSuccessHandler(function(r){
+    var ta = document.getElementById('kassa-report');
+    if (ta && r && r.ok) ta.value = r.data.text || '';
+  }).getKassaReportText(kassaIsoToRu_(App._kassaDate));
+}
+
+function escapeHtml_(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+
+function kassaShiftDay(delta) {
+  var base = App._kassaDate || kassaTodayIso_();
+  var p = base.split('-');
+  var d = new Date(+p[0], +p[1]-1, +p[2]);
+  d.setDate(d.getDate() + delta);
+  App._kassaDate = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  var inp = document.getElementById('kassa-date'); if (inp) inp.value = App._kassaDate;
+  loadKassa(true);
+}
+function kassaToday() {
+  App._kassaDate = kassaTodayIso_();
+  var inp = document.getElementById('kassa-date'); if (inp) inp.value = App._kassaDate;
+  loadKassa(true);
+}
+
+/* — Расход из кассы — */
+function openKassaExpense() {
+  var sel = document.getElementById('ke-employee');
+  if (sel) {
+    var emps = App.employees || [];
+    sel.innerHTML = '<option value="">— выбрать —</option>' + emps.map(function(e){
+      return '<option value="' + (e['ID']||'') + '">' + escapeHtml_(e['ФИО'] || e['Имя'] || e['ID'] || '') + '</option>';
+    }).join('');
+  }
+  var k = document.getElementById('ke-kind'); if (k) k.value = 'Прочее';
+  var a = document.getElementById('ke-amount'); if (a) a.value = '';
+  var c = document.getElementById('ke-comment'); if (c) c.value = '';
+  var dt = document.getElementById('ke-date'); if (dt) dt.value = App._kassaDate || kassaTodayIso_();
+  kassaExpenseKindChange();
+  openModal('modal-kassa-expense');
+}
+function kassaExpenseKindChange() {
+  var kind = (document.getElementById('ke-kind')||{}).value;
+  var row = document.getElementById('ke-emp-row');
+  if (row) row.style.display = (kind === 'Аванс') ? '' : 'none';
+}
+function submitKassaExpense() {
+  var kind = (document.getElementById('ke-kind')||{}).value || 'Прочее';
+  var amount = parseFloat((document.getElementById('ke-amount')||{}).value);
+  if (!amount || amount <= 0) { toast('Укажите сумму', 'error'); return; }
+  var empSel = document.getElementById('ke-employee');
+  var payload = {
+    kind: kind,
+    amount: amount,
+    comment: (document.getElementById('ke-comment')||{}).value || '',
+    date: kassaIsoToRu_((document.getElementById('ke-date')||{}).value),
+    employeeId: kind === 'Аванс' && empSel ? empSel.value : '',
+    employeeName: kind === 'Аванс' && empSel ? (empSel.options[empSel.selectedIndex]||{}).text : '',
+  };
+  var btn = document.getElementById('ke-submit'); if (btn) { btn.disabled = true; btn.textContent = 'Сохранение...'; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Списать из кассы'; }
+      if (!resp || !resp.ok) { toast(resp?resp.error:'Ошибка', 'error'); return; }
+      closeModal('modal-kassa-expense');
+      toast('Расход списан из кассы', 'success');
+      App._dashCache = null; // касса влияет на дашборд
+      loadKassa(true);
+    })
+    .withFailureHandler(function(e){ if (btn) { btn.disabled = false; btn.textContent = 'Списать из кассы'; } toast(e.message, 'error'); })
+    .addKassaExpense(payload);
+}
+function deleteKassaExpense(id) {
+  uiConfirm('Удалить этот расход из кассы?', function(){
+    google.script.run
+      .withSuccessHandler(function(resp){
+        if (!resp || !resp.ok) { toast(resp?resp.error:'Ошибка', 'error'); return; }
+        toast('Расход удалён', 'success');
+        App._dashCache = null;
+        loadKassa(true);
+      })
+      .withFailureHandler(function(e){ toast(e.message, 'error'); })
+      .deleteExpense(id);
+  });
+}
+
+/* — Пересчёт кассы — */
+function openKassaReconcile() {
+  var k = App._kassa || {};
+  var c = document.getElementById('krec-computed'); if (c) c.textContent = money(k.balanceNow || 0);
+  var a = document.getElementById('krec-actual'); if (a) a.value = '';
+  var d = document.getElementById('krec-delta'); if (d) d.textContent = '';
+  openModal('modal-kassa-reconcile');
+}
+function kassaReconcilePreview() {
+  var k = App._kassa || {};
+  var actual = parseFloat((document.getElementById('krec-actual')||{}).value);
+  var d = document.getElementById('krec-delta');
+  if (!d) return;
+  if (isNaN(actual)) { d.textContent = ''; return; }
+  var delta = Math.round((actual - (k.balanceNow||0)) * 100) / 100;
+  if (delta === 0) { d.style.color = 'var(--success)'; d.textContent = '✓ Касса сходится'; }
+  else if (delta < 0) { d.style.color = 'var(--danger)'; d.textContent = 'Недостача: ' + money(Math.abs(delta)); }
+  else { d.style.color = '#f59e0b'; d.textContent = 'Излишек: ' + money(delta); }
+}
+function submitKassaReconcile() {
+  var actual = parseFloat((document.getElementById('krec-actual')||{}).value);
+  if (isNaN(actual)) { toast('Укажите фактическую сумму', 'error'); return; }
+  var btn = document.getElementById('krec-submit'); if (btn) { btn.disabled = true; btn.textContent = 'Сохранение...'; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Зафиксировать'; }
+      if (!resp || !resp.ok) { toast(resp?resp.error:'Ошибка', 'error'); return; }
+      closeModal('modal-kassa-reconcile');
+      var dl = resp.data.delta;
+      toast(dl === 0 ? 'Касса сходится' : ('Корректировка ' + (dl>0?'+':'') + money(dl)), 'success');
+      App._dashCache = null;
+      loadKassa(true);
+    })
+    .withFailureHandler(function(e){ if (btn) { btn.disabled = false; btn.textContent = 'Зафиксировать'; } toast(e.message, 'error'); })
+    .reconcileKassa(actual);
+}
+
+/* — Начальный остаток — */
+function openKassaStart() {
+  var a = document.getElementById('kstart-amount'); if (a) a.value = (App._kassa && App._kassa.startBalance) || '';
+  var d = document.getElementById('kstart-date'); if (d) d.value = App._kassaDate || kassaTodayIso_();
+  openModal('modal-kassa-start');
+}
+function submitKassaStart() {
+  var amount = parseFloat((document.getElementById('kstart-amount')||{}).value) || 0;
+  var date = kassaIsoToRu_((document.getElementById('kstart-date')||{}).value);
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast(resp?resp.error:'Ошибка', 'error'); return; }
+      closeModal('modal-kassa-start');
+      toast('Начальный остаток сохранён', 'success');
+      App._dashCache = null;
+      loadKassa(true);
+    })
+    .withFailureHandler(function(e){ toast(e.message, 'error'); })
+    .setKassaStart(amount, date);
+}
+
+/* — Отчёт — */
+function copyKassaReport() {
+  var ta = document.getElementById('kassa-report');
+  if (!ta || !ta.value) { toast('Нет данных для отчёта', 'error'); return; }
+  ta.select();
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(ta.value);
+    else document.execCommand('copy');
+    toast('Отчёт скопирован', 'success');
+  } catch (e) { document.execCommand('copy'); toast('Отчёт скопирован', 'success'); }
+}
+function sendKassaToTelegram() {
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast(resp?resp.error:'Ошибка', 'error'); return; }
+      toast('Отчёт отправлен в Telegram', 'success');
+    })
+    .withFailureHandler(function(e){ toast(e.message, 'error'); })
+    .sendKassaReport(kassaIsoToRu_(App._kassaDate));
+}
 
 /* ===== КЛИЕНТЫ: ЗАГРУЗКА ===== */
 function loadClients(force) {

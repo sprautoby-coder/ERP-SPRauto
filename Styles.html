@@ -685,4 +685,33 @@ body {
 @media (max-width: 880px) {
   .apt-week { grid-template-columns: repeat(7, 150px); overflow-x: auto; }
 }
+
+/* ===== КАССА ===== */
+.kassa-datenav { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.kassa-datenav .form-input { width: auto; padding: 6px 10px; }
+.kassa-balance-card { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000)); border-radius: 16px; padding: 22px 26px; color: #fff; margin-bottom: 16px; box-shadow: var(--shadow); }
+.kassa-balance-label { font-size: 13px; opacity: .85; letter-spacing: .3px; }
+.kassa-balance-val { font-size: 40px; font-weight: 800; line-height: 1.1; margin-top: 4px; }
+.kassa-balance-sub { font-size: 12px; opacity: .8; margin-top: 4px; }
+.kassa-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
+.kassa-panel { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+.kassa-panel-title { font-weight: 700; font-size: 14px; color: var(--text); margin-bottom: 10px; }
+.kassa-report { width: 100%; min-height: 240px; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.5; resize: vertical; }
+.kassa-op { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--border); margin-bottom: 6px; background: var(--bg-card2); }
+.kassa-op-time { font-size: 12px; color: var(--text3); width: 42px; flex-shrink: 0; }
+.kassa-op-desc { flex: 1; font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kassa-op-amt { font-weight: 700; font-size: 14px; flex-shrink: 0; }
+.kassa-op-in  { border-left: 3px solid var(--success); }
+.kassa-op-in  .kassa-op-amt { color: var(--success); }
+.kassa-op-out { border-left: 3px solid var(--danger); }
+.kassa-op-out .kassa-op-amt { color: var(--danger); }
+.kassa-op-bn  { border-left: 3px solid #6366f1; }
+.kassa-op-bn  .kassa-op-amt { color: #6366f1; }
+.kassa-op-del { border: none; background: transparent; color: var(--text3); cursor: pointer; font-size: 12px; padding: 2px 4px; opacity: 0; transition: opacity .15s; }
+.kassa-op:hover .kassa-op-del { opacity: 1; }
+.kassa-op-del:hover { color: var(--danger); }
+@media (max-width: 880px) {
+  .kassa-grid { grid-template-columns: 1fr; }
+  .kassa-balance-val { font-size: 32px; }
+}
 </style>

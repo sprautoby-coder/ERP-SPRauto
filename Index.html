@@ -30,6 +30,7 @@
     <a class="nav-item" data-page="clients" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg><span>Клиенты</span></a>
     <a class="nav-item" data-page="materials" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M20 6h-2.18c.07-.44.18-.86.18-1a3 3 0 0 0-6 0c0 .14.11.56.18 1H10C8.9 6 8 6.9 8 8v12c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-7-1a1 1 0 1 1 2 0c0 .14-.05.27-.09.4L14.9 5h-1.81l-.09-.41A1 1 0 0 1 13 5zm7 15H10V8h2v2h6V8h2v12z"/></svg><span>Материалы</span></a>
     <div class="nav-label">Финансы</div>
+    <a class="nav-item" data-page="kassa" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M21 7H3c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h18c.55 0 1-.45 1-1V8c0-.55-.45-1-1-1zm-1 9H4v-2h16v2zm0-5H4V9h16v2zM20 4H4c-.55 0-1 .45-1 1s.45 1 1 1h16c.55 0 1-.45 1-1s-.45-1-1-1z"/></svg><span>Касса</span></a>
     <a class="nav-item" data-page="finance" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z"/></svg><span>Финансы</span></a>
     <a class="nav-item" data-page="dds" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg><span>ДДС</span></a>
     <a class="nav-item" data-page="expenses" href="#"><svg class="nav-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M19 7h-3V6a4 4 0 0 0-8 0v1H5a1 1 0 0 0-1 1v11a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V8a1 1 0 0 0-1-1zm-7 8a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm3-8h-6V6a3 3 0 0 1 6 0v1z"/></svg><span>Расходы</span></a>
@@ -391,6 +392,52 @@
     </div>
   </div>
   <!-- ФИНАНСЫ -->
+  <!-- КАССА -->
+  <div class="content page" id="page-kassa">
+    <div class="section-header">
+      <div>
+        <div class="section-title-big">Касса <span style="font-weight:400;font-size:13px;color:var(--text3)">· наличные</span></div>
+        <div class="kassa-datenav">
+          <button class="btn btn-ghost btn-sm" onclick="kassaShiftDay(-1)" title="Предыдущий день">‹</button>
+          <input class="form-input" id="kassa-date" type="date" onchange="loadKassa(true)">
+          <button class="btn btn-ghost btn-sm" onclick="kassaToday()">Сегодня</button>
+          <button class="btn btn-ghost btn-sm" onclick="kassaShiftDay(1)" title="Следующий день">›</button>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="openKassaExpense()">− Расход из кассы</button>
+        <button class="btn btn-ghost" onclick="openKassaReconcile()">🧮 Пересчёт</button>
+        <button class="btn btn-ghost" onclick="copyKassaReport()">📋 Отчёт</button>
+        <button class="btn btn-primary" onclick="sendKassaToTelegram()">📤 В Telegram</button>
+      </div>
+    </div>
+
+    <div class="kassa-balance-card">
+      <div class="kassa-balance-label">Деньги в кассе сейчас</div>
+      <div class="kassa-balance-val" id="kassa-balance">—</div>
+      <div class="kassa-balance-sub" id="kassa-balance-sub" style="cursor:pointer;text-decoration:underline dotted" onclick="openKassaStart()" title="Задать начальный остаток и дату начала учёта"></div>
+    </div>
+
+    <div class="clients-kpi-row" style="margin-bottom:16px">
+      <div class="clients-kpi-card"><div class="clients-kpi-label">Было на начало дня</div><div class="clients-kpi-val" id="kassa-opening">—</div></div>
+      <div class="clients-kpi-card" style="border-color:rgba(16,185,129,.3)"><div class="clients-kpi-label" style="color:var(--success)">Касса за день</div><div class="clients-kpi-val" id="kassa-daynet">—</div></div>
+      <div class="clients-kpi-card"><div class="clients-kpi-label">Безнал за день</div><div class="clients-kpi-val" id="kassa-beznal">—</div></div>
+      <div class="clients-kpi-card"><div class="clients-kpi-label">Итого на конец дня</div><div class="clients-kpi-val" id="kassa-closing">—</div></div>
+    </div>
+
+    <div class="kassa-grid">
+      <div class="kassa-panel">
+        <div class="kassa-panel-title">Операции за день</div>
+        <div id="kassa-ops"><div style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</div></div>
+      </div>
+      <div class="kassa-panel">
+        <div class="kassa-panel-title">Отчёт для Telegram</div>
+        <textarea id="kassa-report" class="form-input kassa-report" readonly></textarea>
+        <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="copyKassaReport()">📋 Скопировать текст</button>
+      </div>
+    </div>
+  </div>
+
   <div class="content page" id="page-finance">
     <div class="section-header">
       <div class="section-title-big">Финансы</div>
@@ -1556,6 +1603,101 @@
 
 <!-- МОДАЛКА: НОВАЯ УСЛУГА -->
 <!-- Услуги редактируются прямо на странице «Услуги» (white-label каталог) -->
+
+<!-- МОДАЛКА: РАСХОД ИЗ КАССЫ -->
+<div class="modal-dialog-bg" id="modal-kassa-expense" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">Расход из кассы</div>
+      <button class="modal-close" onclick="closeModal('modal-kassa-expense')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row" style="margin:0">
+        <label class="form-label">Тип расхода</label>
+        <select class="form-select" id="ke-kind" onchange="kassaExpenseKindChange()">
+          <option value="Прочее">Мелкий расход (камера, такси…)</option>
+          <option value="Аванс">Аванс в счёт ЗП</option>
+          <option value="Изъятие">Изъятие директора</option>
+        </select>
+      </div>
+      <div class="form-row" id="ke-emp-row" style="display:none">
+        <label class="form-label">Сотрудник</label>
+        <select class="form-select" id="ke-employee"><option value="">— выбрать —</option></select>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Сумма, <span class="cur">Br</span> *</label>
+          <input class="form-input" id="ke-amount" type="number" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Дата</label>
+          <input class="form-input" id="ke-date" type="date">
+        </div>
+      </div>
+      <div class="form-row">
+        <label class="form-label">Комментарий</label>
+        <input class="form-input" id="ke-comment" placeholder="За что / кому…">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-kassa-expense')">Отмена</button>
+      <button class="btn btn-primary" id="ke-submit" onclick="submitKassaExpense()">Списать из кассы</button>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: ПЕРЕСЧЁТ КАССЫ -->
+<div class="modal-dialog-bg" id="modal-kassa-reconcile" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">Пересчёт кассы</div>
+      <button class="modal-close" onclick="closeModal('modal-kassa-reconcile')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:var(--text3);margin-bottom:12px">Пересчитайте наличные физически и введите фактическую сумму. Расхождение зафиксируется как корректировка.</div>
+      <div class="clients-kpi-card" style="margin-bottom:12px">
+        <div class="clients-kpi-label">Расчётный остаток</div>
+        <div class="clients-kpi-val" id="krec-computed">—</div>
+      </div>
+      <div class="form-row" style="margin:0">
+        <label class="form-label">Фактически в кассе, <span class="cur">Br</span> *</label>
+        <input class="form-input" id="krec-actual" type="number" step="0.01" placeholder="0.00" oninput="kassaReconcilePreview()">
+      </div>
+      <div id="krec-delta" style="margin-top:10px;font-size:14px;font-weight:600"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-kassa-reconcile')">Отмена</button>
+      <button class="btn btn-primary" id="krec-submit" onclick="submitKassaReconcile()">Зафиксировать</button>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: НАЧАЛЬНЫЙ ОСТАТОК КАССЫ -->
+<div class="modal-dialog-bg" id="modal-kassa-start" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <div class="modal-title">Начальный остаток кассы</div>
+      <button class="modal-close" onclick="closeModal('modal-kassa-start')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:var(--text3);margin-bottom:12px">Задайте сумму в кассе на дату начала учёта. Платежи и расходы до этой даты в кассу не считаются.</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Остаток, <span class="cur">Br</span> *</label>
+          <input class="form-input" id="kstart-amount" type="number" step="0.01" placeholder="0.00">
+        </div>
+        <div class="form-row" style="margin:0">
+          <label class="form-label">Дата начала учёта</label>
+          <input class="form-input" id="kstart-date" type="date">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-kassa-start')">Отмена</button>
+      <button class="btn btn-primary" onclick="submitKassaStart()">Сохранить</button>
+    </div>
+  </div>
+</div>
 
 <div id="toast"></div>
 
