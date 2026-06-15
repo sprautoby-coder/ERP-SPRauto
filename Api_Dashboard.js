@@ -50,7 +50,8 @@ function getDashboardData(period) {
     }
 
     const filtered = orders.filter(function(o) {
-      return o['ID'] && inPeriod(o['Дата']);
+      if (!o['ID'] || String(o['Удалён'] || '') === 'Да') return false;   // мягко удалённые не учитываем
+      return inPeriod(o['Дата']);
     });
 
     // KPI

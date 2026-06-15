@@ -255,7 +255,7 @@ function generateWorkCardHtml(orderId) {
     var map = buildDocPlaceholders_(d);
     map['Мастера'] = d.order['Оклейщики'] || d.order['Менеджер'] || '';
     var body = fillTemplate_(workCardTemplateHtml_(), map);
-    return docWrap_('Карта работ ' + (map['Номер договора'] || ''), body, map['Логотип']);
+    return docWrap_('Карта работ ' + (map['Номер договора'] || ''), body, map['Логотип'], true);
   });
 }
 

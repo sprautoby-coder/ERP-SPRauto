@@ -128,6 +128,10 @@ function getOrders(filter) {
 
     return all.filter(function(o) {
       if (!o['ID']) return false;
+      // Мягко удалённые: по умолчанию скрыты везде; в «Корзине» (filter.deleted) — наоборот, только они
+      var isDeleted = String(o['Удалён'] || '') === 'Да';
+      if (filter.deleted) { if (!isDeleted) return false; }
+      else if (isDeleted) return false;
       if (filter.status  && o['Статус']  !== filter.status)  return false;
       if (filter.service && o['Услуга']  !== filter.service) return false;
       if (filter.clientId && String(o['Клиент ID']) !== String(filter.clientId)) return false;
@@ -252,6 +256,9 @@ function createOrder(payload) {
       'Госномер':              payload.plate || '',
       'VIN':                   payload.vin   || '',
       'Услуга':                serviceName,
+      'Комплекс':              payload.complex       || '',
+      'Элементы':              payload.elements      || '',
+      'Кол-во элементов':      payload.elementsCount || '',
       'Стоимость заказа':      payload.price,
       'Тип оплаты':            payType,
       'Статус оплаты':         'Не оплачен',   // факт оплаты узнаём позже, при платеже
@@ -496,6 +503,93 @@ function updateOrderStatus(id, status) {
       }
     }
     throw new Error('Заказ не найден: ' + id);
+  });
+}
+
+// ─── УДАЛЕНИЕ ЗАКАЗОВ (гибрид: мягкое скрытие + полное удаление из «Корзины») ───
+
+// Гарантирует наличие колонки в листе Заказы; возвращает её 0-based индекс
+function ensureOrderColumn_(sheet, name) {
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var idx = headers.indexOf(name);
+  if (idx >= 0) return idx;
+  var lastCol = sheet.getLastColumn();
+  sheet.insertColumnAfter(lastCol);
+  sheet.getRange(1, lastCol + 1).setValue(name)
+    .setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff');
+  return lastCol;   // индекс новой колонки (0-based) = старое число столбцов
+}
+
+// Найти строку заказа по ID; возвращает { rowNum, headers, data } или null
+function findOrderRow_(sheet, id) {
+  var data    = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var idIdx   = headers.indexOf('ID');
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][idIdx]) === String(id)) return { rowNum: i + 1, headers: headers, row: data[i] };
+  }
+  return null;
+}
+
+/** Мягкое удаление: заказ помечается «Удалён»=Да и пропадает со всех досок/списков (обратимо). */
+function softDeleteOrder(id) {
+  return safeCall(function() {
+    bumpDataVersion_();
+    if (!id) throw new Error('Не указан заказ');
+    var sheet = getTab('DATABASE', 'ORDERS');
+    var delIdx = ensureOrderColumn_(sheet, 'Удалён');
+    var found = findOrderRow_(sheet, id);
+    if (!found) throw new Error('Заказ не найден: ' + id);
+    sheet.getRange(found.rowNum, delIdx + 1).setValue('Да');
+    logActivity('Заказ удалён (скрыт)', 'Заказ', id, '', '');
+    return { id: id, deleted: true };
+  });
+}
+
+/** Восстановить мягко удалённый заказ (снять флаг «Удалён»). */
+function restoreOrder(id) {
+  return safeCall(function() {
+    bumpDataVersion_();
+    if (!id) throw new Error('Не указан заказ');
+    var sheet = getTab('DATABASE', 'ORDERS');
+    var delIdx = ensureOrderColumn_(sheet, 'Удалён');
+    var found = findOrderRow_(sheet, id);
+    if (!found) throw new Error('Заказ не найден: ' + id);
+    sheet.getRange(found.rowNum, delIdx + 1).setValue('');
+    logActivity('Заказ восстановлен', 'Заказ', id, '', '');
+    return { id: id, deleted: false };
+  });
+}
+
+// Удалить все строки листа, где колонка colName == value (снизу вверх)
+function deleteRowsByValue_(tabKey, colName, value) {
+  var sheet = getTab('DATABASE', tabKey);
+  var data  = sheet.getDataRange().getValues();
+  if (data.length < 2) return 0;
+  var idx = data[0].indexOf(colName);
+  if (idx < 0) return 0;
+  var removed = 0;
+  for (var i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][idx]) === String(value)) { sheet.deleteRow(i + 1); removed++; }
+  }
+  return removed;
+}
+
+/** Полное удаление: строка заказа + связанные платежи и график рассрочки. Необратимо. */
+function hardDeleteOrder(id) {
+  return safeCall(function() {
+    bumpDataVersion_();
+    if (!id) throw new Error('Не указан заказ');
+    var sheet = getTab('DATABASE', 'ORDERS');
+    var found = findOrderRow_(sheet, id);
+    if (!found) throw new Error('Заказ не найден: ' + id);
+    // Каскад: удаляем платежи и график этого заказа (защищённо — листов может не быть)
+    var pays = 0, sched = 0;
+    try { pays  = deleteRowsByValue_('PAYMENTS', 'Заказ ID', id); } catch (e) {}
+    try { sched = deleteRowsByValue_('SCHEDULE', 'Заказ ID', id); } catch (e) {}
+    sheet.deleteRow(found.rowNum);
+    logActivity('Заказ удалён НАВСЕГДА (платежей: ' + pays + ', взносов: ' + sched + ')', 'Заказ', id, '', '');
+    return { id: id, payments: pays, schedule: sched };
   });
 }
 

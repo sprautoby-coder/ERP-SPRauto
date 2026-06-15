@@ -66,8 +66,16 @@
 #orders-table tbody tr.row-legal td:first-child  { box-shadow: inset 4px 0 0 var(--purple); }
 #orders-table tbody tr.row-debt  td:first-child  { box-shadow: inset 4px 0 0 var(--danger); }
 #orders-table tbody tr.row-paid  td:first-child  { box-shadow: inset 4px 0 0 var(--success); }
-/* Проверенный заказ — слой затемнения поверх любого тона строки (~2 тона темнее) */
-#orders-table tbody tr.row-verified td { background-image: linear-gradient(rgba(0,0,0,.13), rgba(0,0,0,.13)); }
+/* Проверенный заказ — зеленоватый слой поверх любого тона строки + зелёная метка справа.
+   Работает на обеих таблицах (Заказы и Дашборд) и в светлой/тёмной теме (тон-оверлей не зависит от фона). */
+#orders-table tbody tr.row-verified td,
+#dash-orders-table tbody tr.row-verified td {
+  background-image: linear-gradient(rgba(16,185,129,.16), rgba(16,185,129,.16)) !important;
+}
+#orders-table tbody tr.row-verified td:last-child,
+#dash-orders-table tbody tr.row-verified td:last-child {
+  box-shadow: inset -4px 0 0 var(--success);
+}
 
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
 html { scroll-behavior:smooth; }
@@ -580,7 +588,8 @@ body {
 .view-toggle-lg { padding: 3px; height: 38px; box-shadow: 0 0 0 1px var(--accent) inset; }
 .view-toggle-lg button { padding: 7px 16px; font-size: 13.5px; }
 
-.kanban-board { display: flex; gap: 12px; overflow-x: auto; padding: 4px 2px 14px; align-items: flex-start; }
+/* align-items: stretch + min-height — колонки на всю высоту, дроп ловится по всей площади (а не только по верхней карточке) */
+.kanban-board { display: flex; gap: 12px; overflow-x: auto; padding: 4px 2px 14px; align-items: stretch; min-height: calc(100vh - 280px); }
 .kanban-col {
   flex: 1 1 0; min-width: 248px; max-width: 360px;
   background: var(--bg-card2); border: 1px solid var(--border);
@@ -599,12 +608,25 @@ body {
 .kanban-empty { text-align: center; color: var(--text3); font-size: 12px; padding: 18px 6px; }
 
 .kanban-card {
+  position: relative;
   background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--text3);
   border-radius: 10px; padding: 10px 11px; cursor: grab; transition: var(--t);
 }
 .kanban-card:hover { border-color: var(--accent); box-shadow: var(--shadow); transform: translateY(-1px); }
+/* Кнопка удаления — появляется при наведении на карточку */
+.kanban-del {
+  position: absolute; top: 5px; right: 5px; width: 20px; height: 20px; padding: 0;
+  border: none; border-radius: 5px; background: var(--red-soft); color: var(--danger);
+  font-size: 12px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity .15s;
+}
+.kanban-card:hover .kanban-del { opacity: 1; }
+.kanban-del:hover { background: var(--danger); color: #fff; }
 .kanban-card:active { cursor: grabbing; }
 .kanban-card.dragging { opacity: .45; }
+/* Индикатор места вставки при перетаскивании (куда именно встанет карточка) */
+.kanban-card.kb-drop-before { box-shadow: 0 -3px 0 -1px var(--accent); }
+.kanban-card.kb-drop-after  { box-shadow: 0 3px 0 -1px var(--accent); }
+.kanban-col-body.kb-drop-empty { outline: 2px dashed var(--accent); outline-offset: -4px; border-radius: 8px; }
 .kanban-card-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 4px; }
 .kanban-card-num { font-size: 11.5px; font-weight: 700; color: var(--text2); }
 .kanban-card-sum { font-size: 13px; font-weight: 700; color: var(--text); white-space: nowrap; }

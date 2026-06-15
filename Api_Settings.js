@@ -76,6 +76,87 @@ function saveServicesCatalog(list) {
   });
 }
 
+/**
+ * Эффективный каталог комплексов оклейки (white-label): берёт переопределение из
+ * настройки COMPLEXES_JSON, иначе — дефолт CONFIG.COMPLEXES. Используется в карточке
+ * заказа (селектор комплекса) и при печати документов.
+ */
+function getComplexesCatalog() {
+  try {
+    var sheet = getTab('DATABASE', 'SETTINGS');
+    var lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (var i = 0; i < data.length; i++) {
+        if (data[i][0] === 'COMPLEXES_JSON' && data[i][1]) {
+          var arr = JSON.parse(data[i][1]);
+          if (Array.isArray(arr) && arr.length) return arr;
+        }
+      }
+    }
+  } catch (e) { /* битый JSON или нет настройки — дефолт */ }
+  return CONFIG.COMPLEXES;
+}
+
+/** Сохранить пользовательский каталог комплексов оклейки (white-label). */
+function saveComplexesCatalog(list) {
+  return safeCall(function() {
+    if (!Array.isArray(list)) throw new Error('Неверный формат каталога комплексов');
+    var clean = list.filter(function(x){ return x && String(x.name || '').trim(); }).map(function(x){
+      var els = Array.isArray(x.els)
+        ? x.els
+        : String(x.els || '').split('\n');
+      els = els.map(function(s){ return String(s).trim(); }).filter(function(s){ return s; });
+      return {
+        name:  String(x.name).trim(),
+        price: Number(x.price) || 0,
+        els:   els,
+      };
+    });
+    if (!clean.length) throw new Error('Каталог комплексов не может быть пустым');
+    saveSetting('COMPLEXES_JSON', JSON.stringify(clean), 'Комплексы оклейки (white-label)', 'Услуги');
+    bumpDataVersion_();
+    return { count: clean.length, complexes: clean };
+  });
+}
+
+/**
+ * Ручной порядок карточек на канбан-доске заказов.
+ * Хранится как { "<Статус>": ["orderId1","orderId2",...], ... } в настройке KANBAN_ORDER_JSON.
+ * Используется для сортировки колонок (drag&drop расстановка пользователя).
+ */
+function getKanbanOrder() {
+  try {
+    var sheet = getTab('DATABASE', 'SETTINGS');
+    var lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (var i = 0; i < data.length; i++) {
+        if (data[i][0] === 'KANBAN_ORDER_JSON' && data[i][1]) {
+          var obj = JSON.parse(data[i][1]);
+          if (obj && typeof obj === 'object') return obj;
+        }
+      }
+    }
+  } catch (e) { /* битый JSON или нет настройки — пустой порядок */ }
+  return {};
+}
+
+/** Сохранить ручной порядок карточек канбана. map = { статус: [orderId,...] }. */
+function saveKanbanOrder(map) {
+  return safeCall(function() {
+    if (!map || typeof map !== 'object' || Array.isArray(map)) throw new Error('Неверный формат порядка');
+    var clean = {};
+    Object.keys(map).forEach(function(status){
+      var arr = map[status];
+      if (Array.isArray(arr)) clean[status] = arr.map(function(x){ return String(x); }).filter(Boolean);
+    });
+    saveSetting('KANBAN_ORDER_JSON', JSON.stringify(clean), 'Порядок карточек канбана', 'Заказы');
+    // НЕ зовём bumpDataVersion_ — это только UI-порядок, не влияет на финансовые чтения из кэша
+    return { ok: true };
+  });
+}
+
 function saveSettings(settings) {
   return safeCall(function() {
     var keys = Object.keys(settings);

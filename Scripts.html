@@ -958,9 +958,9 @@ function loadCurrentPage() {
   if (App.currentPage === 'expenses')  loadExpenses();
   if (App.currentPage === 'finance')   loadFinance();
   if (App.currentPage === 'debt')      loadDebt();
-  if (App.currentPage === 'services')  loadServices();
+  if (App.currentPage === 'services')  { loadServices(); loadComplexes(); }
   if (App.currentPage === 'dds')       loadDDS();
-  if (App.currentPage === 'salary')    {} // ручной запуск
+  if (App.currentPage === 'salary')    { fillSalaryEmployees(); ensureSalDates_(); } // расчёт — вручную кнопкой
 }
 
 // Принудительное обновление (кнопка «Обновить» в шапке)
@@ -2467,6 +2467,17 @@ function renderOrdersKanban(orders) {
   Object.keys(byStatus).forEach(function(status){
     if (KANBAN_COLUMNS.indexOf(status) < 0 && byStatus[status].length === 0) return;
     var list  = byStatus[status];
+    // Ручной порядок: карточки сортируются по сохранённому списку ID; новые (ещё не расставленные) — наверх
+    var ord = (App._kanbanOrder && App._kanbanOrder[status]) || [];
+    if (ord.length) {
+      list = list.slice().sort(function(a, b){
+        var ia = ord.indexOf(a['ID']), ib = ord.indexOf(b['ID']);
+        if (ia === -1 && ib === -1) return 0;
+        if (ia === -1) return -1;
+        if (ib === -1) return 1;
+        return ia - ib;
+      });
+    }
     var color = ORDER_STATUS_COLORS[status] || 'var(--text2)';
     var sum   = list.reduce(function(a, o){ return a + (Number(o['Стоимость заказа']) || 0); }, 0);
 
@@ -2474,9 +2485,10 @@ function renderOrdersKanban(orders) {
       var oid    = o['ID'] || '';
       var price  = Number(o['Стоимость заказа']) || 0;
       var isLegal = o._clientType === 'юр';
-      return '<div class="kanban-card" draggable="true" style="border-left-color:' + color + '"' +
+      return '<div class="kanban-card" draggable="true" data-id="' + oid + '" style="border-left-color:' + color + '"' +
         ' ondragstart="kanbanDragStart(event,\'' + oid + '\')" ondragend="kanbanDragEnd(event)"' +
         ' onclick="openOrderCard(\'' + oid + '\')">' +
+        '<button class="kanban-del" title="Удалить заказ" onclick="event.stopPropagation();deleteOrderFromKanban(\'' + oid + '\')">✕</button>' +
         '<div class="kanban-card-top">' +
           '<span class="kanban-card-num">' + (o['Номер договора'] || oid) + '</span>' +
           '<span class="kanban-card-sum">' + price.toLocaleString('ru') + ' ' + CUR + '</span>' +
@@ -2518,54 +2530,210 @@ function kanbanDragEnd(ev) {
   if (ev.currentTarget) ev.currentTarget.classList.remove('dragging');
   _kanbanDragId = null;
   document.querySelectorAll('.kanban-col.drop-hover').forEach(function(c){ c.classList.remove('drop-hover'); });
+  kanbanClearIndicator_(null);   // снять линии-индикаторы во всех колонках
 }
 function kanbanDragOver(ev, col) {
   ev.preventDefault();                       // разрешаем drop
   try { ev.dataTransfer.dropEffect = 'move'; } catch(e){}
-  if (col) col.classList.add('drop-hover');
+  if (col) {
+    col.classList.add('drop-hover');
+    kanbanShowIndicator_(col.querySelector('.kanban-col-body'), ev.clientY);   // линия в точке вставки
+  }
 }
 function kanbanDragLeave(ev, col) {
   // снимаем подсветку только когда курсор реально покинул колонку
-  if (col && !col.contains(ev.relatedTarget)) col.classList.remove('drop-hover');
+  if (col && !col.contains(ev.relatedTarget)) {
+    col.classList.remove('drop-hover');
+    kanbanClearIndicator_(col.querySelector('.kanban-col-body'));
+  }
 }
 function kanbanDrop(ev, col) {
   ev.preventDefault();
   if (col) col.classList.remove('drop-hover');
+  var body   = col ? col.querySelector('.kanban-col-body') : null;
+  var index  = kanbanInsertIndex_(body, ev.clientY);     // позиция вставки ДО подсчёта учитывает все карточки кроме перетаскиваемой
+  if (body) kanbanClearIndicator_(body);
   var status = col ? col.getAttribute('data-status') : '';
   var oid = _kanbanDragId;
   try { if (!oid) oid = ev.dataTransfer.getData('text/plain'); } catch(e){}
   _kanbanDragId = null;
-  if (oid && status) moveOrderToStatus(oid, status);
+  if (oid && status) moveOrderToStatusAt(oid, status, index, body);
 }
 
-// Перемещение карточки в новый статус — оптимистично, с откатом при ошибке
-function moveOrderToStatus(orderId, newStatus) {
+// Индекс вставки в колонке по координате курсора (исключая перетаскиваемую карточку)
+function kanbanInsertIndex_(body, clientY) {
+  if (!body) return 0;
+  var cards = Array.prototype.slice.call(body.querySelectorAll('.kanban-card:not(.dragging)'));
+  for (var i = 0; i < cards.length; i++) {
+    var r = cards[i].getBoundingClientRect();
+    if (clientY < r.top + r.height / 2) return i;   // курсор выше середины карточки → вставить перед ней
+  }
+  return cards.length;                               // ниже всех → в конец
+}
+
+// Показать линию-индикатор места вставки
+function kanbanShowIndicator_(body, clientY) {
+  if (!body) return;
+  kanbanClearIndicator_(body);
+  var cards = Array.prototype.slice.call(body.querySelectorAll('.kanban-card:not(.dragging)'));
+  var idx = kanbanInsertIndex_(body, clientY);
+  if (idx < cards.length) cards[idx].classList.add('kb-drop-before');
+  else if (cards.length) cards[cards.length - 1].classList.add('kb-drop-after');
+  else body.classList.add('kb-drop-empty');
+}
+function kanbanClearIndicator_(body) {
+  var scope = body || document;
+  scope.querySelectorAll('.kb-drop-before, .kb-drop-after').forEach(function(c){ c.classList.remove('kb-drop-before','kb-drop-after'); });
+  (body ? [body] : Array.prototype.slice.call(document.querySelectorAll('.kanban-col-body'))).forEach(function(b){ b.classList.remove('kb-drop-empty'); });
+}
+
+// Сохранение порядка на сервер — с задержкой (накапливаем быстрые перетаскивания)
+function kanbanScheduleSave_() {
+  clearTimeout(App._kanbanSaveTimer);
+  App._kanbanSaveTimer = setTimeout(function(){
+    google.script.run
+      .withSuccessHandler(function(){})
+      .withFailureHandler(function(){})   // порядок — некритичная вещь, тихо
+      .saveKanbanOrder(App._kanbanOrder || {});
+  }, 700);
+}
+
+// Перемещение карточки в статус И в конкретную позицию — оптимистично, с откатом при ошибке
+function moveOrderToStatusAt(orderId, newStatus, index, body) {
   var order = null;
   for (var i = 0; i < App.orders.length; i++) {
     if (App.orders[i]['ID'] === orderId) { order = App.orders[i]; break; }
   }
   if (!order) return;
   var prevStatus = order['Статус'];
-  if (prevStatus === newStatus) return;       // ничего не изменилось
+  var statusChanged = (prevStatus !== newStatus);
+
+  // Авторитетный порядок целевой колонки — берём из ТЕКУЩЕГО показа (DOM), исключая перетаскиваемую
+  if (!App._kanbanOrder) App._kanbanOrder = {};
+  var ids = [];
+  if (body) {
+    ids = Array.prototype.slice.call(body.querySelectorAll('.kanban-card'))
+      .map(function(c){ return c.getAttribute('data-id'); })
+      .filter(function(id){ return id && id !== orderId; });
+  } else {
+    ids = (App._kanbanOrder[newStatus] || []).filter(function(id){ return id !== orderId; });
+  }
+  if (index == null || index < 0 || index > ids.length) index = ids.length;
+  ids.splice(index, 0, orderId);
+  App._kanbanOrder[newStatus] = ids;
+  // убрать ID из старой колонки, чтобы не задваивался при смене статуса
+  if (statusChanged && App._kanbanOrder[prevStatus]) {
+    App._kanbanOrder[prevStatus] = App._kanbanOrder[prevStatus].filter(function(id){ return id !== orderId; });
+  }
 
   order['Статус'] = newStatus;                // оптимистично
-  filterOrders();                             // мгновенная перерисовка доски
+  filterOrders();                             // мгновенная перерисовка доски в новом порядке
 
+  if (statusChanged) {
+    google.script.run
+      .withSuccessHandler(function(resp){
+        if (!resp || !resp.ok) {
+          order['Статус'] = prevStatus; filterOrders();
+          toast('Ошибка: ' + (resp ? resp.error : ''), 'error');
+          return;
+        }
+        App._dashCache = null;                // статус влияет на «в работе» на дашборде
+        kanbanScheduleSave_();                // порядок сохраняем после успешной смены статуса
+        toast('→ ' + newStatus, 'success');
+      })
+      .withFailureHandler(function(e){
+        order['Статус'] = prevStatus; filterOrders();
+        toast('Ошибка: ' + e.message, 'error');
+      })
+      .updateOrderStatus(orderId, newStatus);
+  } else {
+    kanbanScheduleSave_();                     // только переупорядочивание внутри колонки
+  }
+}
+
+// Удаление заказа с канбана — мягкое (в Корзину), обратимо
+function deleteOrderFromKanban(oid) {
+  var order = null;
+  for (var i = 0; i < App.orders.length; i++) { if (App.orders[i]['ID'] === oid) { order = App.orders[i]; break; } }
+  var num = order ? (order['Номер договора'] || oid) : oid;
+  var sum = order ? (Number(order['Стоимость заказа']) || 0) : 0;
+  uiConfirm('Удалить заказ ' + num + (sum ? (' на ' + sum.toLocaleString('ru') + ' ' + CUR) : '') + '?\n\nЗаказ скроется со всех досок и списков. Его можно вернуть из «Корзины».',
+    function() {
+      google.script.run
+        .withSuccessHandler(function(resp){
+          if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+          App.orders = App.orders.filter(function(o){ return o['ID'] !== oid; });
+          if (App._kanbanOrder) Object.keys(App._kanbanOrder).forEach(function(s){
+            App._kanbanOrder[s] = (App._kanbanOrder[s] || []).filter(function(id){ return id !== oid; });
+          });
+          App._dashCache = null; App._cardCache = {};
+          filterOrders();
+          toast('Заказ удалён (в Корзине)', 'success');
+        })
+        .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+        .softDeleteOrder(oid);
+    },
+    { title: 'Удалить заказ', okText: 'Удалить', danger: true });
+}
+
+// Корзина: открыть и показать удалённые заказы
+function openTrash() {
+  openModal('modal-trash');
+  var box = document.getElementById('trash-list');
+  if (box) box.innerHTML = '<div style="text-align:center;padding:28px;color:var(--text3)">Загрузка…</div>';
   google.script.run
     .withSuccessHandler(function(resp){
-      if (!resp || !resp.ok) {
-        order['Статус'] = prevStatus; filterOrders();
-        toast('Ошибка: ' + (resp ? resp.error : ''), 'error');
-        return;
-      }
-      App._dashCache = null;                  // статус влияет на «в работе» на дашборде
-      toast('→ ' + newStatus, 'success');
+      if (!resp || !resp.ok) { if (box) box.innerHTML = '<div style="color:var(--danger);padding:16px">Ошибка: ' + (resp ? resp.error : '') + '</div>'; return; }
+      renderTrash(resp.data || []);
     })
-    .withFailureHandler(function(e){
-      order['Статус'] = prevStatus; filterOrders();
-      toast('Ошибка: ' + e.message, 'error');
+    .withFailureHandler(function(e){ if (box) box.innerHTML = '<div style="color:var(--danger);padding:16px">Ошибка: ' + e.message + '</div>'; })
+    .getOrders({ deleted: true });
+}
+
+function renderTrash(list) {
+  var box = document.getElementById('trash-list'); if (!box) return;
+  if (!list.length) { box.innerHTML = '<div style="text-align:center;padding:28px;color:var(--text3)">Корзина пуста</div>'; return; }
+  box.innerHTML = list.map(function(o){
+    var num = o['Номер договора'] || o['ID'];
+    var price = Number(o['Стоимость заказа']) || 0;
+    return '<div style="display:flex;align-items:center;gap:8px;padding:9px 10px;border:1px solid var(--border);border-radius:9px;margin-bottom:7px">' +
+      '<div style="flex:1;min-width:0">' +
+        '<div style="font-weight:600;font-size:13px">' + num + ' · ' + (o['Клиент'] || '—') + '</div>' +
+        '<div style="font-size:12px;color:var(--text3)">' + (o['Дата'] || '') + ' · ' + (o['Авто'] || '—') + ' · ' + (o['Услуга'] || '') + ' · ' + price.toLocaleString('ru') + ' ' + CUR + '</div>' +
+      '</div>' +
+      '<button class="btn btn-ghost" style="white-space:nowrap" onclick="restoreOrderFromTrash(\'' + o['ID'] + '\')">↩ Вернуть</button>' +
+      '<button class="btn btn-ghost" style="white-space:nowrap;color:var(--danger)" onclick="hardDeleteFromTrash(\'' + o['ID'] + '\')">✕ Навсегда</button>' +
+    '</div>';
+  }).join('');
+}
+
+function restoreOrderFromTrash(id) {
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+      App.orders = []; App._dashCache = null; App._cardCache = {};
+      toast('Заказ восстановлен', 'success');
+      openTrash();
+      if (App.currentPage === 'orders') loadOrders(true);
     })
-    .updateOrderStatus(orderId, newStatus);
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .restoreOrder(id);
+}
+
+function hardDeleteFromTrash(id) {
+  uiConfirm('Удалить заказ НАВСЕГДА вместе с его платежами и графиком рассрочки?\n\nЭто действие необратимо.',
+    function() {
+      google.script.run
+        .withSuccessHandler(function(resp){
+          if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+          App._dashCache = null;
+          toast('Удалено навсегда' + (resp.data && resp.data.payments ? ' (платежей: ' + resp.data.payments + ')' : ''), 'success');
+          openTrash();
+        })
+        .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+        .hardDeleteOrder(id);
+    },
+    { title: 'Удалить навсегда', okText: 'Удалить навсегда', danger: true });
 }
 
 function changeOrderStatus(orderId, selectEl) {
@@ -2607,6 +2775,13 @@ function initOrderForm() {
   if (lbl) lbl.textContent = '— выбрать —';
   document.querySelectorAll('#ord-masters-wrap input[type=checkbox]').forEach(function(cb){ cb.checked = false; });
   var hid = document.getElementById('ord-masters'); if (hid) hid.value = '';
+
+  // Комплекс оклейки: заполняем список, сбрасываем поля, показываем/прячем по услуге
+  fillOrdComplexOptions();
+  var oc = document.getElementById('ord-complex'); if (oc) oc.value = '';
+  var oe = document.getElementById('ord-elements'); if (oe) oe.value = '';
+  var oec = document.getElementById('ord-elements-count'); if (oec) oec.value = '';
+  onOrdServiceChange();
 
   // Загружаем справочник материалов
   if (App._materials.length === 0) {
@@ -2854,6 +3029,39 @@ function recalcOrderPreview() {
   var p = document.getElementById('ord-finance-preview'); if(p) p.style.display = 'block';
 }
 
+// Заполнить выпадающий список комплексов в форме заказа (из white-label каталога)
+function fillOrdComplexOptions() {
+  var sel = document.getElementById('ord-complex');
+  if (!sel) return;
+  var opts = '<option value="">— не выбран —</option>';
+  Object.keys(OKLEYKA_COMPLEXES).forEach(function(k){
+    var pr = OKLEYKA_COMPLEXES[k].price;
+    opts += '<option value="' + k + '">' + k + (pr ? ' (~' + pr + ')' : '') + '</option>';
+  });
+  sel.innerHTML = opts;
+}
+
+// Показать блок комплекса только для оклейки (не тонировка), как в карточке заказа
+function onOrdServiceChange() {
+  var svc = document.getElementById('ord-service');
+  var block = document.getElementById('ord-complex-block');
+  if (!svc || !block) return;
+  var txt = (svc.options[svc.selectedIndex] || {}).textContent || '';
+  var isTint = /тонир|tint/i.test(txt) || /tint/i.test(svc.value);
+  var isOkl  = svc.value && !isTint;   // оклейка = выбрана услуга и это не тонировка
+  block.style.display = isOkl ? 'block' : 'none';
+}
+
+// Выбор комплекса в форме — авто-заполнить элементы и их количество
+function onOrdComplexSelect() {
+  var sel = document.getElementById('ord-complex'); if (!sel) return;
+  var c = OKLEYKA_COMPLEXES[sel.value];
+  if (c) {
+    var elsEl = document.getElementById('ord-elements'); if (elsEl) elsEl.value = c.els.join('\n');
+    var cntEl = document.getElementById('ord-elements-count'); if (cntEl) cntEl.value = c.els.length;
+  }
+}
+
 function submitNewOrder() {
   var service = (document.getElementById('ord-service') || {}).value;
   var name    = ((document.getElementById('ord-client-name') || {}).value || '').trim();
@@ -2901,6 +3109,9 @@ function submitNewOrderProceed() {
     manager:     (document.getElementById('ord-manager') || {}).value || '',
     masters:     ((document.getElementById('ord-masters') || {}).value || '').trim(),
     notes:       ((document.getElementById('ord-notes')   || {}).value || '').trim(),
+    complex:       (document.getElementById('ord-complex')        || {}).value || '',
+    elements:      ((document.getElementById('ord-elements')      || {}).value || '').trim(),
+    elementsCount: (document.getElementById('ord-elements-count') || {}).value || '',
     materials:   App._orderMaterials.filter(function(m){ return m && m.materialId; }),
     expenses:    App._orderExpenses.filter(function(e){ return e && e.name && e.amount > 0; }),
   };
@@ -2912,7 +3123,8 @@ function submitNewOrderProceed() {
   var finalizeNewOrder = function() {
     closeModal('modal-new-order');
     ['ord-service','ord-client-phone','ord-client-name','ord-client-id',
-     'ord-car','ord-plate','ord-price','ord-masters','ord-notes','ord-prepay'].forEach(function(id){
+     'ord-car','ord-plate','ord-price','ord-masters','ord-notes','ord-prepay',
+     'ord-complex','ord-elements','ord-elements-count'].forEach(function(id){
       var el = document.getElementById(id); if (el) el.value = '';
     });
     var found = document.getElementById('ord-client-found'); if (found) found.style.display = 'none';
@@ -3372,7 +3584,7 @@ function renderRecentOrders(orders, totalCount) {
     var verCell = o.verified
       ? '<button class="ver-btn ver-on" onclick="event.stopPropagation();toggleOrderVerDash(\'' + o.id + '\',this)" title="Проверено — нажмите, чтобы снять">✓</button>'
       : '<button class="ver-btn ver-off" onclick="event.stopPropagation();toggleOrderVerDash(\'' + o.id + '\',this)" title="Отметить проверенным">проверено</button>';
-    return '<tr style="cursor:pointer" onclick="openOrderCard(\'' + o.id + '\')">' +
+    return '<tr class="' + (o.verified ? 'row-verified' : '') + '" style="cursor:pointer" onclick="openOrderCard(\'' + o.id + '\')">' +
       '<td style="font-size:12px;font-weight:600;white-space:nowrap"><button class="film-toggle" onclick="event.stopPropagation();toggleOrderFilms(\'' + o.id + '\',this)" title="Показать расход плёнки">▸</button>' + (o.contract || o.id) + '</td>' +
       '<td style="font-size:12px;color:var(--text3);white-space:nowrap">' + (o.date || '') + '</td>' +
       '<td><div style="font-size:13px">' + carLine + '</div></td>' +
@@ -3402,12 +3614,15 @@ function toggleOrderVerDash(id, btn) {
   var willOn = !prev;
   if (o) o.verified = willOn;
   if (btn) { btn.className = 'ver-btn ' + (willOn ? 'ver-on' : 'ver-off'); btn.textContent = willOn ? '✓' : 'проверено'; }
+  var trDash = btn ? btn.closest('tr') : null;
+  if (trDash) trDash.classList.toggle('row-verified', willOn);   // подсветка строки сразу
   App.orders = []; App._cardCache = {};  // список заказов пересоберётся с новым статусом проверки
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) {
         if (o) o.verified = prev;
         if (btn) { btn.className = 'ver-btn ' + (prev ? 'ver-on' : 'ver-off'); btn.textContent = prev ? '✓' : 'проверено'; }
+        if (trDash) trDash.classList.toggle('row-verified', prev);
         toast('Ошибка: ' + (resp ? resp.error : ''), 'error');
       } else {
         toast(resp.data.verified ? 'Отмечено как проверенное' : 'Проверка снята', 'success');
@@ -3416,6 +3631,7 @@ function toggleOrderVerDash(id, btn) {
     .withFailureHandler(function(e){
       if (o) o.verified = prev;
       if (btn) { btn.className = 'ver-btn ' + (prev ? 'ver-on' : 'ver-off'); btn.textContent = prev ? '✓' : 'проверено'; }
+      if (trDash) trDash.classList.toggle('row-verified', prev);
       toast('Ошибка: ' + e.message, 'error');
     })
     .toggleOrderVerification(id);
@@ -3513,7 +3729,28 @@ function _onPeriodChange(prefix, loadFn) {
 
 function onFinPeriodChange() { _onPeriodChange('fin', loadFinance); }
 function onDdsPeriodChange() { _onPeriodChange('dds', loadDDS); }
-function onSalPeriodChange() { _onPeriodChange('sal', function(){}); } // ЗП запускается вручную
+// ЗП: пресет периода заполняет поля дат «с — по» (которые всегда видны и редактируются вручную)
+function onSalPeriodChange() {
+  var p = (document.getElementById('sal-period') || {}).value;
+  if (p === 'custom') return;   // даты задаёт пользователь вручную
+  var n = new Date(), y = n.getFullYear(), m = n.getMonth();
+  var from, to;
+  if (p === 'prev_month')   { from = new Date(y,m-1,1); to = new Date(y,m,0); }
+  else if (p === 'h1')      { from = new Date(y,m,1);   to = new Date(y,m,15); }
+  else if (p === 'h2')      { from = new Date(y,m,16);  to = new Date(y,m+1,0); }
+  else                      { from = new Date(y,m,1);   to = new Date(y,m+1,0); } // month
+  var setd = function(id, d){
+    var el = document.getElementById(id);
+    if (el && d) el.value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  };
+  setd('sal-from', from); setd('sal-to', to);
+}
+
+// Ручная правка даты → переключаем пресет на «Произвольный»
+function onSalDateEdit() {
+  var sel = document.getElementById('sal-period');
+  if (sel) sel.value = 'custom';
+}
 
 /* ===== РАСХОДЫ ===== */
 
@@ -3980,6 +4217,69 @@ function saveServicesCatalogUI() {
     .saveServicesCatalog(list);
 }
 
+/* ===== КОМПЛЕКСЫ ОКЛЕЙКИ (white-label) ===== */
+
+App._complexesEdit = null;   // рабочая копия каталога комплексов для редактирования
+
+function loadComplexes() {
+  // рабочая копия из конфига (white-label каталог), els как строки через перенос
+  App._complexesEdit = ((App.config && App.config.complexes) || []).map(function(c){
+    return {
+      name:  c.name || '',
+      price: (c.price != null ? c.price : 0),
+      els:   (Array.isArray(c.els) ? c.els : []).join('\n'),
+    };
+  });
+  renderComplexesEditor();
+}
+
+function renderComplexesEditor() {
+  var tb = document.getElementById('complexes-tbody');
+  if (!tb) return;
+  var list = App._complexesEdit || [];
+  var inp = 'padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--inp);color:var(--text);font-size:13px;width:100%';
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:16px">Нет комплексов — нажмите «+ Комплекс»</td></tr>'; return; }
+  tb.innerHTML = list.map(function(c, i){
+    var els = String(c.els||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return '<tr>' +
+      '<td><input value="' + (c.name||'').replace(/"/g,'&quot;') + '" onchange="cxEdit(' + i + ',\'name\',this.value)" placeholder="Название" style="' + inp + '"></td>' +
+      '<td><input type="number" min="0" step="0.01" value="' + c.price + '" onchange="cxEdit(' + i + ',\'price\',this.value)" style="' + inp + ';text-align:right"></td>' +
+      '<td><textarea rows="3" onchange="cxEdit(' + i + ',\'els\',this.value)" placeholder="По одному элементу в строке" style="' + inp + ';resize:vertical">' + els + '</textarea></td>' +
+      '<td style="text-align:center;vertical-align:top"><button class="pay-del" onclick="removeComplexRow(' + i + ')" title="Удалить">✕</button></td>' +
+    '</tr>';
+  }).join('');
+}
+
+function cxEdit(i, field, val) {
+  if (!App._complexesEdit || !App._complexesEdit[i]) return;
+  if (field === 'price') val = Number(val) || 0;
+  App._complexesEdit[i][field] = val;
+}
+function addComplexRow() {
+  if (!App._complexesEdit) App._complexesEdit = [];
+  App._complexesEdit.push({ name:'', price:0, els:'' });
+  renderComplexesEditor();
+}
+function removeComplexRow(i) {
+  if (!App._complexesEdit) return;
+  App._complexesEdit.splice(i, 1);
+  renderComplexesEditor();
+}
+function saveComplexesCatalogUI() {
+  var list = (App._complexesEdit || []).filter(function(c){ return String(c.name||'').trim(); });
+  if (!list.length) { toast('Добавьте хотя бы один комплекс', 'error'); return; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      if (App.config) App.config.complexes = resp.data.complexes;
+      rebuildComplexesMap_();          // обновить карту для селектора в карточке
+      toast('Каталог комплексов сохранён', 'success');
+      loadComplexes();
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .saveComplexesCatalog(list);
+}
+
 /* ===== ДДС ===== */
 
 function loadDDS() {
@@ -4193,8 +4493,38 @@ function printDDS() {
 
 App._salaryData = null;
 
+// Заполнить выпадающий список сотрудников (работающие); вызывается при заходе на страницу
+function fillSalaryEmployees() {
+  var sel = document.getElementById('sal-employee');
+  if (!sel) return;
+  var cur = sel.value;
+  var emps = (App.employees || []).filter(function(e){ return (e['Статус'] || '') === 'Работает'; });
+  sel.innerHTML = '<option value="">Все сотрудники</option>' + emps.map(function(e){
+    var n = (e['ФИО'] || e['Имя'] || '').replace(/"/g,'&quot;');
+    return '<option value="' + n + '">' + n + '</option>';
+  }).join('');
+  if (cur) sel.value = cur;
+}
+
+// Заполнить даты по умолчанию (текущий месяц), если ещё пусто
+function ensureSalDates_() {
+  var f = document.getElementById('sal-from');
+  if (f && !f.value) onSalPeriodChange();   // пресет 'month' стоит по умолчанию
+}
+
+// Диапазон для расчёта ЗП = то, что в полях «с — по» (единый источник истины)
+function getSalaryRange() {
+  var f = (document.getElementById('sal-from') || {}).value;
+  var t = (document.getElementById('sal-to')   || {}).value;
+  return {
+    from:  f ? new Date(f).toISOString() : null,
+    to:    t ? new Date(t + 'T23:59:59').toISOString() : null,
+    label: (f ? isoToDdmmyyyy_(f) : '…') + ' — ' + (t ? isoToDdmmyyyy_(t) : '…'),
+  };
+}
+
 function calcSalary() {
-  var range = getPeriodRangeFromUI('sal');
+  var range = getSalaryRange();
   var res    = document.getElementById('salary-result');
   if (res) res.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3)">Считаем...</div>';
 
@@ -4202,16 +4532,34 @@ function calcSalary() {
     .withSuccessHandler(function(resp) {
       if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
       App._salaryData = resp.data;
-      renderSalary(resp.data);
+      App._salaryLabel = range.label || '';
+      renderSalaryFiltered();
     })
     .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
     .calcSalaryForPeriod(range.from||null, range.to||null);
 }
 
-function renderSalary(data) {
+// Применить фильтр по выбранному сотруднику и перерисовать (без обращения к серверу)
+function renderSalaryFiltered() {
+  if (!App._salaryData) return;
+  var sel = (document.getElementById('sal-employee') || {}).value || '';
+  var emps = App._salaryData.employees || [];
+  var filtered = sel ? emps.filter(function(e){ return e.name === sel; }) : emps;
+  var grand = filtered.reduce(function(s, r){ return s + (Number(r.total)||0); }, 0);
+  renderSalary({ employees: filtered, grandTotal: grand }, App._salaryLabel);
+}
+
+function renderSalary(data, periodLabel) {
   var res = document.getElementById('salary-result');
   if (!res) return;
   var fmt = function(n){ return (Number(n)||0).toLocaleString('ru') + ' ' + CUR; };
+
+  if (!data.employees.length) {
+    res.innerHTML = '<div style="text-align:center;padding:48px;color:var(--text3)">' +
+      '<div style="font-size:36px;margin-bottom:12px">🔍</div>' +
+      '<div>Нет данных за выбранный период' + (periodLabel ? ' (' + periodLabel + ')' : '') + '</div></div>';
+    return;
+  }
 
   var cards = data.employees.map(function(e) {
     var ini = e.name.split(' ').slice(0,2).map(function(s){ return s[0]||''; }).join('');
@@ -4239,17 +4587,24 @@ function renderSalary(data) {
 
   res.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding:12px 16px;background:var(--bg-card);border-radius:10px;border:1px solid var(--border)">' +
-      '<span style="font-size:13px;color:var(--text2)">Итого к выплате за период</span>' +
+      '<span style="font-size:13px;color:var(--text2)">Итого к выплате' +
+        (periodLabel ? ' · <b style="color:var(--text)">' + periodLabel + '</b>' : '') +
+        ' · ' + data.employees.length + ' чел.</span>' +
       '<span style="font-size:20px;font-weight:700;color:var(--success)">' + fmt(data.grandTotal) + '</span>' +
     '</div>' +
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">' + cards + '</div>';
 }
 
 function printSalary() {
-  var d = App._salaryData;
-  if (!d) { toast('Сначала рассчитайте ЗП','error'); return; }
+  if (!App._salaryData) { toast('Сначала рассчитайте ЗП','error'); return; }
+  // печатаем то же, что показано: с учётом фильтра по сотруднику
+  var selName = (document.getElementById('sal-employee') || {}).value || '';
+  var all = App._salaryData.employees || [];
+  var emps = selName ? all.filter(function(e){ return e.name === selName; }) : all;
+  var grand = emps.reduce(function(s, r){ return s + (Number(r.total)||0); }, 0);
+  var lbl = App._salaryLabel || '';
   var fmt = function(n){ return (Number(n)||0).toFixed(2); };
-  var rows = d.employees.map(function(e){
+  var rows = emps.map(function(e){
     return '<tr><td>' + e.name + '</td><td>' + e.position + '</td><td>' + e.orderCount + '</td>' +
       '<td style="text-align:right">' + fmt(e.baseSalary) + '</td>' +
       '<td style="text-align:right">' + fmt(e.managerBonus) + '</td>' +
@@ -4257,15 +4612,17 @@ function printSalary() {
       '<td style="text-align:right;font-weight:bold">' + fmt(e.total) + '</td></tr>';
   }).join('');
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Расчёт ЗП</title>' +
-    '<style>body{font-family:Arial;font-size:11px;margin:15mm}h2{text-align:center;font-size:13px}' +
+    '<style>body{font-family:Arial;font-size:11px;margin:15mm}h2{text-align:center;font-size:13px;margin-bottom:2px}' +
+    '.period{text-align:center;color:#555;font-size:11px;margin-bottom:10px}' +
     'table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccc;padding:3px 5px}th{background:#f0f0f0}' +
     '@media print{.no-print{display:none}}</style></head><body>' +
     '<div class="no-print"><button onclick="window.print()">Печать</button></div>' +
     '<h2>РАСЧЁТ ЗАРАБОТНОЙ ПЛАТЫ</h2>' +
+    (lbl ? '<div class="period">Период: ' + lbl + '</div>' : '') +
     '<table><thead><tr><th>Сотрудник</th><th>Должность</th><th>Заказов</th><th>Ставка</th><th>Бонус (мен.)</th><th>Бонус (мастер)</th><th>ИТОГО</th></tr></thead>' +
     '<tbody>' + rows + '</tbody>' +
     '<tfoot><tr><td colspan="6" style="text-align:right;font-weight:bold">Итого к выплате:</td>' +
-    '<td style="font-weight:bold;text-align:right">' + fmt(d.grandTotal) + ' ' + CUR + '</td></tr></tfoot>' +
+    '<td style="font-weight:bold;text-align:right">' + fmt(grand) + ' ' + CUR + '</td></tr></tfoot>' +
     '</table></body></html>';
   var w = window.open('','_blank'); if(w){ w.document.write(html); w.document.close(); }
 }
@@ -5088,13 +5445,16 @@ function cvInput_(label, id, value) {
     '<input id="' + id + '" value="' + v + '" oninput="cvAutoSave()"></div>';
 }
 
-// Комплексы оклейки SPRauto (состав + ориентировочная цена)
-var OKLEYKA_COMPLEXES = {
-  'Оптима':         { price: 1300, els: ['капот полностью','крылья 1/3','передняя оптика','стойки лобового стекла','полоса на крышу','зона выгрузки','внутренние пороги','кромки дверей','антиманикюр'] },
-  'Оптима+':        { price: 1600, els: ['капот полностью','крылья полностью','передняя оптика','стойки лобового стекла','полоса на крышу','зона выгрузки','внутренние пороги','кромки дверей','антиманикюр'] },
-  'Премиум':        { price: 2350, els: ['капот полностью','крылья полностью','передний бампер','передняя оптика','стойки лобового стекла','полоса на крышу','зона выгрузки','внутренние пороги','кромки дверей','антиманикюр','боковые зеркала'] },
-  'Полная оклейка': { price: 0,    els: ['полная оклейка кузова'] }
-};
+// Комплексы оклейки (white-label): карта name -> {price, els}, строится из App.config.complexes.
+// Заполняется rebuildComplexesMap_() при старте и после сохранения каталога в Настройках.
+var OKLEYKA_COMPLEXES = {};
+function rebuildComplexesMap_() {
+  OKLEYKA_COMPLEXES = {};
+  var list = (App.config && App.config.complexes) || [];
+  list.forEach(function(c){
+    if (c && c.name) OKLEYKA_COMPLEXES[c.name] = { price: Number(c.price) || 0, els: Array.isArray(c.els) ? c.els : [] };
+  });
+}
 function complexSelectHtml_(selected) {
   var inp = 'padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--inp);color:var(--text);font-size:13px;width:100%';
   var opts = '<option value="">— не выбран —</option>';
@@ -5305,6 +5665,8 @@ function init() {
       App.config = data.config;
       App.employees = data.employees || [];
       fillServiceDropdowns();   // списки услуг из каталога (white-label)
+      rebuildComplexesMap_();   // комплексы оклейки из каталога (white-label)
+      App._kanbanOrder = (data.config && data.config.kanbanOrder) || {};   // ручной порядок канбана
       if (data.config && data.config.positions) fillPositions(data.config.positions);
       if (data.config && data.config.leadSources) fillLeadSources(data.config.leadSources);
       else if (window.CONFIG_LEAD_SOURCES) fillLeadSources(window.CONFIG_LEAD_SOURCES);

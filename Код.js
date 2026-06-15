@@ -36,6 +36,8 @@ function initApp() {
         version: CONFIG.VERSION,
         positions: CONFIG.POSITIONS,
         services: getServicesCatalog(),
+        complexes: getComplexesCatalog(),
+        kanbanOrder: getKanbanOrder(),
         currencies: CONFIG.CURRENCIES,
         expenseCategories: CONFIG.EXPENSE_CATEGORIES,
         inventoryCategories: CONFIG.INVENTORY_CATEGORIES,
