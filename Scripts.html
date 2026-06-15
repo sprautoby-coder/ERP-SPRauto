@@ -25,6 +25,21 @@ console.log('App object created:', App);
 document.body.setAttribute('data-theme', App._theme);
 console.log('Theme set:', App._theme);
 
+/* ===== СВЕЖЕСТЬ КЛИЕНТСКОГО КЭША (анти-лишний-round-trip) =====
+   Каждый google.script.run = HTTPS round-trip к Apps Script (~0.3–2с). Раньше
+   кэш-загрузчики рисовали из памяти мгновенно, НО всё равно дёргали сервер в фоне
+   на КАЖДУЮ навигацию. Мутации уже сбрасывают кэш (App.orders=[]/App.clients=[]…),
+   значит непустой кэш = локально данные не менялись. Гейтим фоновую дозагрузку по
+   времени: пока кэш «свежий», сервер не трогаем; кнопка «Обновить» (force) и любая
+   мутация (опустошает кэш) гарантируют актуальность. TTL — страховка от правок с
+   другого устройства. */
+var CACHE_TTL_MS = 90000; // 90с — внутри одной сессии работы навигация без перезапросов
+App._loadedAt = {};
+function cacheFresh_(key) {
+  return App._loadedAt[key] && (Date.now() - App._loadedAt[key]) < CACHE_TTL_MS;
+}
+function markLoaded_(key) { App._loadedAt[key] = Date.now(); }
+
 /* ===== ТЕМА ===== */
 function toggleTheme() {
   App._theme = App._theme === 'dark' ? 'light' : 'dark';
@@ -326,7 +341,10 @@ function loadInventory(force) {
   var tbody = document.getElementById('stock-tbody');
   if (!tbody) return;
   var hasCache = App._stock && App._stock.length;
-  if (hasCache && !force) { renderStock(); }
+  if (hasCache && !force) {
+    renderStock();
+    if (cacheFresh_('stock')) return;   // свежий кэш — фоновую дозагрузку пропускаем
+  }
   else if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="ct-loading"><div class="kpi-skeleton" style="min-height:40px;margin:4px 0"></div></td></tr>';
 
   google.script.run
@@ -336,6 +354,7 @@ function loadInventory(force) {
         return;
       }
       App._stock = resp.data.items || [];
+      markLoaded_('stock');
       var k = function(id, v){ var e = document.getElementById(id); if (e) e.textContent = v; };
       k('stock-kpi-count', resp.data.count);
       k('stock-kpi-low',   resp.data.lowCount);
@@ -947,7 +966,7 @@ function loadCurrentPage() {
   // рисуют из кэша мгновенно и обновляются в фоне
   var force = !!App._forceReload;
   App._forceReload = false;
-  if (App.currentPage === 'dashboard') renderDashboard();
+  if (App.currentPage === 'dashboard') renderDashboard(force);
   if (App.currentPage === 'team')      loadTeam(force);
   if (App.currentPage === 'clients')   loadClients(force);
   if (App.currentPage === 'orders')    loadOrders(force);
@@ -981,6 +1000,7 @@ function loadClients(force) {
   var hasCache = App.clients && App.clients.length;
   if (hasCache && !force) {
     renderClients(App.clients);
+    if (cacheFresh_('clients')) return;   // свежий кэш — фоновую дозагрузку пропускаем
   } else {
     tbody.innerHTML = '<tr><td colspan="8" class="ct-loading">' +
       '<div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>'.repeat(4) +
@@ -998,6 +1018,7 @@ function loadClients(force) {
       }
       App.clients = resp.data || [];
       App._vehicleMap = {};
+      markLoaded_('clients');
       renderClients(App.clients);
     })
     .withFailureHandler(function(e){
@@ -1531,6 +1552,7 @@ function loadTeam(force) {
   var hasCache = App._teamList && App._teamList.length;
   if (hasCache && !force) {
     renderTeam(App._teamList);
+    if (cacheFresh_('team')) return;   // свежий кэш — фоновую дозагрузку пропускаем
   } else {
     grid.innerHTML = '<div class="kpi-skeleton" style="min-height:200px;grid-column:1/-1;"></div>';
   }
@@ -1546,6 +1568,7 @@ function loadTeam(force) {
       }
       App._teamList = resp.data || [];
       App.employees = App._teamList; // обновляем общий список тоже
+      markLoaded_('team');
       renderTeam(App._teamList);
     })
     .withFailureHandler(function(e){
@@ -1883,6 +1906,7 @@ function loadOrders(force) {
   if (hasCache && !force) {
     filterOrders();      // учитывает текущий фильтр/поиск
     loadOrdersKpi();
+    if (cacheFresh_('orders')) return;   // свежий кэш — фоновую дозагрузку пропускаем
   } else {
     tbody.innerHTML = '<tr><td colspan="11" class="ct-loading"><div class="kpi-skeleton" style="min-height:48px;margin:4px 0"></div><div class="kpi-skeleton" style="min-height:48px;margin:4px 0"></div></td></tr>';
   }
@@ -1894,6 +1918,7 @@ function loadOrders(force) {
         return;
       }
       App.orders = resp.data || [];
+      markLoaded_('orders');
       filterOrders();
       loadOrdersKpi();
     })
@@ -3198,6 +3223,7 @@ function loadMaterials(force) {
   var hasCache = App._materials && App._materials.length;
   if (hasCache && !force) {
     filterMaterials();
+    if (cacheFresh_('materials')) return;   // свежий кэш — фоновую дозагрузку пропускаем
   } else if (tbody) {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</td></tr>';
   }
@@ -3209,6 +3235,7 @@ function loadMaterials(force) {
         return;
       }
       App._materials = resp.data || [];
+      markLoaded_('materials');
       filterMaterials();
     })
     .withFailureHandler(function(e) {
@@ -3479,7 +3506,7 @@ function renderDashData_(d) {
   renderRecentOrders(d.recentOrders || [], k.ordersCount || 0);
 }
 
-function renderDashboard() {
+function renderDashboard(force) {
   var range = getDashRange();
   var key   = (range.from || '') + '_' + (range.to || '');
   var kpi   = document.getElementById('dash-kpi');
@@ -3488,6 +3515,9 @@ function renderDashboard() {
   var cached = (App._dashCache && App._dashCache.key === key) ? App._dashCache.data : null;
   if (cached) {
     renderDashData_(cached);
+    if (App._debtCache) renderDebtAlert_(App._debtCache);
+    // Свежий кэш того же периода — фоновую дозагрузку пропускаем (мутации обнуляют _dashCache)
+    if (!force && cacheFresh_('dash_' + key)) return;
   } else if (kpi) {
     kpi.innerHTML = '<div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div><div class="kpi-skeleton"></div>';
   }
@@ -3498,7 +3528,7 @@ function renderDashboard() {
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) return;
       var b = resp.data || {};
-      if (b.dash) { App._dashCache = { key: key, data: b.dash }; renderDashData_(b.dash); }
+      if (b.dash) { App._dashCache = { key: key, data: b.dash }; markLoaded_('dash_' + key); renderDashData_(b.dash); }
       App._debtCache = b.debt || [];
       renderDebtAlert_(App._debtCache);
     })
