@@ -205,7 +205,8 @@ function createOrder(payload) {
   return safeCall(function() {
     bumpDataVersion_();
     if (!payload)         throw new Error('Нет данных');
-    if (!payload.price)   throw new Error('Укажите стоимость заказа');
+    // Цена 0 допустима (напр. заказ из записи — сумму впишут в воронке позже)
+    if (payload.price === undefined || payload.price === null || payload.price === '') throw new Error('Укажите стоимость заказа');
     if (!payload.service) throw new Error('Укажите услугу');
 
     // Авто-привязка клиента: если ID не передан — ищем по телефону/имени, иначе создаём карточку.
@@ -243,12 +244,14 @@ function createOrder(payload) {
     const serviceName   = getServiceName_(payload.service);
     const headers       = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
+    const defaultStatus = getDefaultStatusName_();
+
     const data = {
       'ID':                    id,
       'Номер договора':        contractNum,
       'Дата':                  todayStr,
       'Дата выполнения':       payload.dueDate || '',
-      'Статус':                'Новый',
+      'Статус':                defaultStatus,
       'Клиент ID':             payload.clientId   || '',
       'Клиент':                payload.clientName  || '',
       'Телефон':               payload.clientPhone || '',
@@ -286,7 +289,7 @@ function createOrder(payload) {
 
     logActivity('Создал', 'Заказ', id, '', contractNum + ' — ' + (payload.clientName || ''));
 
-    return { id: id, contractNumber: contractNum, status: 'Новый', finance: finance };
+    return { id: id, contractNumber: contractNum, status: defaultStatus, finance: finance };
   });
 }
 
@@ -476,13 +479,12 @@ function toggleOrderVerification(id) {
 }
 
 /**
- * Изменить статус заказа.
- * Допустимые: Новый / В работе / Готов / Выдан / Отменён
+ * Изменить статус заказа. Допустимые статусы берутся из настраиваемых воронок.
  */
 function updateOrderStatus(id, status) {
   return safeCall(function() {
     bumpDataVersion_();
-    var allowed = ['Новый', 'В работе', 'Готов', 'Выдан', 'Отменён'];
+    var allowed = getOrderStatuses().map(function(s){ return s.name; });
     if (allowed.indexOf(status) < 0) throw new Error('Недопустимый статус: ' + status);
 
     var sheet   = getTab('DATABASE', 'ORDERS');
@@ -615,14 +617,16 @@ function getOrdersStats() {
     var inWork       = 0;
     var debtCount    = 0;
     var debtSum      = 0;
+    var cancelledSet = getCancelledStatusSet_();
+    var doneSet = getDoneStatusSet_();
 
     all.forEach(function(o) {
       if (!o['ID']) return;
       totalCount++;
       var price = Number(o['Стоимость заказа']) || 0;
       totalRevenue += price;
-      if (o['Статус'] === 'В работе' || o['Статус'] === 'Новый') inWork++;
-      if (o['Статус'] === 'Отменён') return;
+      if (!cancelledSet[o['Статус']] && !doneSet[o['Статус']]) inWork++;
+      if (cancelledSet[o['Статус']]) return;
 
       // Статус оплаты с откатом на legacy «Безнал»
       var st = String(o['Статус оплаты'] || '').trim();
@@ -656,6 +660,17 @@ function getServiceName_(code) {
     if (catalog[i].code === code) return catalog[i].name;
   }
   return code;
+}
+
+/** Найти код услуги по её названию (для переноса записи в заказ). '' если не найдено. */
+function getServiceCodeByName_(name) {
+  var catalog = getServicesCatalog();
+  var n = String(name || '').trim().toLowerCase();
+  if (!n) return '';
+  for (var i = 0; i < catalog.length; i++) {
+    if (String(catalog[i].name || '').trim().toLowerCase() === n) return catalog[i].code;
+  }
+  return '';
 }
 
 function parseDate_(val) {
@@ -694,8 +709,17 @@ function ensureClientForOrder_(payload) {
         return clients[j]['ID'];
       }
     }
-    // 3) создаём новую карточку (физлицо по умолчанию)
-    var res = createClient({ type: 'физ', name: name, phone: phone });
+    // 3) создаём новую карточку (тип и реквизиты — из формы заказа)
+    var type = (String(payload.clientType || '') === 'юр') ? 'юр' : 'физ';
+    var newClient = { type: type, name: name, phone: phone };
+    if (type === 'юр') {
+      newClient.unp          = payload.unp || '';
+      newClient.director     = payload.director || '';
+      newClient.legalAddress = payload.legalAddress || '';
+      newClient.postalAddress= payload.postalAddress || '';
+      newClient.bankDetails  = payload.bankDetails || '';
+    }
+    var res = createClient(newClient);
     return (res && res.ok && res.data && res.data['ID']) ? res.data['ID'] : '';
   } catch (e) {
     Logger.log('ensureClientForOrder_ ошибка: ' + e.message);

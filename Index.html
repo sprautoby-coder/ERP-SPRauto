@@ -11,8 +11,11 @@
 
 <!-- FAB убран — кнопка действия в шапке страницы -->
 
+<!-- Затемнение под выезжающим меню (моб.) -->
+<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
 <!-- SIDEBAR -->
-<aside class="sidebar">
+<aside class="sidebar" id="app-sidebar">
   <div class="sidebar-logo" onclick="goPage('dashboard')" title="На дашборд" style="cursor:pointer">
     <div class="logo-icon-placeholder" id="brand-logo-wrap">
       <span class="logo-icon-text">SPR</span>
@@ -55,15 +58,22 @@
 <main class="main">
   <header class="topbar">
     <div class="topbar-left">
+      <button class="topbar-burger" onclick="toggleSidebar()" title="Меню" aria-label="Меню">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M3 6h18v2H3V6zm0 5h18v2H3v-2zm0 5h18v2H3v-2z"/></svg>
+      </button>
       <div class="page-title" id="topbar-title">Дашборд</div>
       <div class="topbar-sync"><div class="sync-dot"></div><span id="sync-time"></span></div>
     </div>
     <div class="topbar-right">
+      <button class="topbar-icon-btn" onclick="toggleTheme()" title="Сменить тему (светлая/тёмная)" aria-label="Тема">
+        <svg class="theme-ic-dark" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3a9 9 0 1 0 9 9c0-.46-.04-.92-.1-1.36a5.39 5.39 0 0 1-4.4 2.26 5.4 5.4 0 0 1-5.4-5.4c0-1.81.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
+        <svg class="theme-ic-light" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zm0-5v2m0 16v2M4 12H2m20 0h-2M5.6 5.6 4.2 4.2m15.6 1.4 1.4-1.4M5.6 18.4l-1.4 1.4m15.6-1.4 1.4 1.4" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+      </button>
       <button class="btn btn-ghost" onclick="forceRefresh()" title="Обновить данные с сервера">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.65 6.35A7.958 7.958 0 0012 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0112 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/></svg>
         Обновить
       </button>
-      <button class="btn btn-ghost" onclick="openModal('modal-new-order')" title="Новый заказ" style="margin-right:4px">
+      <button class="btn btn-ghost hide-mobile" onclick="openModal('modal-new-order')" title="Новый заказ" style="margin-right:4px">
         + Заказ
       </button>
       <button class="btn btn-primary" id="topbar-action-btn" style="display:none">+ Действие</button>
@@ -336,13 +346,8 @@
         <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
         <input class="search-input" id="orders-search" type="text" placeholder="Клиент, авто, госномер..." oninput="filterOrders()">
       </div>
-      <div class="filter-tabs" id="orders-status-tabs">
-        <button class="filter-tab active" data-status="all"     onclick="setOrderStatusFilter('all', this)">Все <span class="tab-cnt" data-cnt="all">0</span></button>
-        <button class="filter-tab"        data-status="Новый"   onclick="setOrderStatusFilter('Новый', this)">Новые <span class="tab-cnt" data-cnt="Новый">0</span></button>
-        <button class="filter-tab"        data-status="В работе" onclick="setOrderStatusFilter('В работе', this)">В работе <span class="tab-cnt" data-cnt="В работе">0</span></button>
-        <button class="filter-tab"        data-status="Готов"   onclick="setOrderStatusFilter('Готов', this)">Готов <span class="tab-cnt" data-cnt="Готов">0</span></button>
-        <button class="filter-tab"        data-status="Выдан"   onclick="setOrderStatusFilter('Выдан', this)">Выданы <span class="tab-cnt" data-cnt="Выдан">0</span></button>
-      </div>
+      <!-- Вкладки-фильтры по статусам генерируются из настраиваемых воронок -->
+      <div class="filter-tabs" id="orders-status-tabs"></div>
       <select class="form-select" id="orders-service-filter" onchange="filterOrders()" style="width:180px;flex:0 0 180px;height:38px;font-size:13px;">
         <option value="">Все услуги</option>
         <option value="Оклейка PPF">Оклейка PPF</option>
@@ -353,9 +358,21 @@
         <option value="Шумоизоляция">Шумоизоляция</option>
       </select>
       <button class="btn btn-ghost" onclick="openTrash()" title="Удалённые заказы" style="height:38px;white-space:nowrap">🗑 Корзина</button>
+      <button class="btn btn-ghost" onclick="openStatusesEditor()" title="Настроить воронки (статусы)" style="height:38px;white-space:nowrap">⚙ Воронки</button>
+      <div style="position:relative">
+        <button class="btn btn-ghost" onclick="toggleColsMenu(event)" title="Показать/скрыть столбцы таблицы" style="height:38px;white-space:nowrap">▦ Столбцы</button>
+        <div id="orders-cols-menu" style="display:none;position:absolute;right:0;top:44px;z-index:60;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:8px;min-width:180px"></div>
+      </div>
     </div>
 
     <div id="orders-error" class="alert alert-red" style="display:none"><span>!</span><span id="orders-error-text"></span></div>
+
+    <!-- Панель действий над выбранными заказами (появляется при выделении чекбоксами) -->
+    <div id="orders-bulkbar" style="display:none;align-items:center;gap:12px;margin-bottom:10px;padding:8px 14px;background:var(--accent-soft);border:1px solid var(--border-h);border-radius:10px">
+      <span id="orders-bulk-count" style="font-weight:600;font-size:13px"></span>
+      <button class="btn" onclick="bulkDeleteSelectedOrders()" style="padding:6px 14px;font-size:13px;font-weight:600;background:var(--red-soft);color:var(--danger);border:1px solid rgba(217,83,79,.3);border-radius:8px">🗑 Удалить выбранные</button>
+      <button class="btn btn-ghost" onclick="clearOrderSel()" style="padding:6px 12px;font-size:13px">Снять выделение</button>
+    </div>
 
     <!-- Канбан-доска заказов -->
     <div id="orders-kanban" class="kanban-board" style="display:none"></div>
@@ -365,6 +382,7 @@
       <table class="clients-table resizable-table" id="orders-table">
         <thead>
           <tr>
+            <th class="col-sel" style="width:34px;text-align:center"><input type="checkbox" id="orders-sel-all" onclick="toggleAllOrderSel(this)" title="Выбрать все"></th>
             <th style="width:96px"></th>
             <th style="min-width:110px">Договор</th>
             <th style="min-width:80px">Дата</th>
@@ -381,7 +399,7 @@
           </tr>
         </thead>
         <tbody id="orders-tbody">
-          <tr><td colspan="13" class="ct-loading">
+          <tr><td colspan="14" class="ct-loading">
             <div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>
             <div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>
             <div class="kpi-skeleton" style="min-height:48px;margin:4px 0;"></div>
@@ -599,9 +617,10 @@
     <div class="section-header">
       <div>
         <div class="section-title-big">Услуги и нумерация договоров</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px">Настройте список услуг под свой центр. Префикс — серия номера договора (напр. 04/01-).</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Настройте список услуг под свой центр. Префикс — серия номера договора (напр. 04/01-). Изменения сохраняются автоматически.</div>
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="services-saved-hint" style="font-size:12px;color:var(--success);opacity:0;transition:opacity .3s"></span>
         <button class="btn btn-ghost" onclick="addServiceRow()">+ Услуга</button>
         <button class="btn btn-primary" onclick="saveServicesCatalogUI()">💾 Сохранить</button>
       </div>
@@ -610,6 +629,7 @@
       <table class="data-table">
         <thead><tr>
           <th style="width:54px">Иконка</th>
+          <th style="width:50px">Цвет</th>
           <th>Название</th>
           <th style="width:130px">Префикс договора</th>
           <th style="width:90px;text-align:right">% мастеру</th>
@@ -624,9 +644,10 @@
     <div class="section-header" style="margin-top:32px">
       <div>
         <div class="section-title-big">Комплексы оклейки PPF</div>
-        <div style="font-size:12px;color:var(--text3);margin-top:2px">Готовые пакеты оклейки. В карточке заказа комплекс авто-заполняет элементы. Цена — ориентир (~), стоимость заказа ставится вручную.</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">Готовые пакеты оклейки. В карточке заказа комплекс авто-заполняет элементы. Цена — ориентир (~), стоимость заказа ставится вручную. Изменения сохраняются автоматически.</div>
       </div>
-      <div style="display:flex;gap:8px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <span id="complexes-saved-hint" style="font-size:12px;color:var(--success);opacity:0;transition:opacity .3s"></span>
         <button class="btn btn-ghost" onclick="addComplexRow()">+ Комплекс</button>
         <button class="btn btn-primary" onclick="saveComplexesCatalogUI()">💾 Сохранить</button>
       </div>
@@ -887,6 +908,7 @@
         <div class="view-toggle" id="apt-view-toggle">
           <button class="active" id="apt-view-day" onclick="setAptView('day')" title="День">День</button>
           <button id="apt-view-week" onclick="setAptView('week')" title="Неделя">Неделя</button>
+          <button id="apt-view-month" onclick="setAptView('month')" title="Месяц">Месяц</button>
         </div>
         <button class="btn btn-ghost" onclick="loadAppointments(true)">⟲ Обновить</button>
         <button class="btn btn-primary" onclick="openNewAppointment()">+ Новая запись</button>
@@ -902,24 +924,20 @@
 
     <div id="apt-masters-load"></div>
 
-    <!-- Недельный вид -->
-    <div id="apt-week" class="apt-week" style="display:none"></div>
-
-    <!-- Дневной вид -->
-    <div class="clients-table-wrap" id="apt-day-wrap">
-      <table class="clients-table" id="apt-table">
-        <thead><tr>
-          <th style="min-width:90px">Время</th>
-          <th style="min-width:160px">Клиент</th>
-          <th style="min-width:140px">Авто</th>
-          <th style="min-width:150px">Услуга</th>
-          <th style="min-width:130px">Мастер</th>
-          <th style="min-width:120px;text-align:center">Статус</th>
-          <th style="min-width:170px;text-align:center">Действия</th>
-        </tr></thead>
-        <tbody id="apt-tbody"></tbody>
-      </table>
-      <div class="ct-footer" id="apt-footer"></div>
+    <!-- Календарь: слева легенда услуг (цвета), справа виды -->
+    <div class="apt-layout">
+      <aside class="apt-legend" id="apt-legend"></aside>
+      <div class="apt-views">
+        <!-- Недельный вид -->
+        <div id="apt-week" class="apt-week" style="display:none"></div>
+        <!-- Месячный вид -->
+        <div id="apt-month" class="apt-month" style="display:none"></div>
+        <!-- Дневной вид — календарь (сетка по времени) -->
+        <div id="apt-day-wrap">
+          <div id="apt-cal" class="apt-cal"></div>
+          <div class="ct-footer" id="apt-footer" style="padding:8px 4px"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -935,9 +953,12 @@
     <div class="modal-body">
       <input type="hidden" id="apt-id">
       <div style="display:flex;gap:10px">
-        <div class="form-row" style="flex:1"><label class="form-label">Дата *</label><input class="form-input" id="apt-f-date" type="date"></div>
-        <div class="form-row" style="width:120px"><label class="form-label">Время *</label><input class="form-input" id="apt-f-time" type="time"></div>
-        <div class="form-row" style="width:120px"><label class="form-label">Длит., мин</label><input class="form-input" id="apt-f-duration" type="number" min="0" step="15" value="60"></div>
+        <div class="form-row" style="flex:1"><label class="form-label">Начало — дата *</label><input class="form-input" id="apt-f-date" type="date" onchange="aptSyncEndDefaults_()"></div>
+        <div class="form-row" style="width:120px"><label class="form-label">Время *</label><input class="form-input" id="apt-f-time" type="time" step="900" onchange="aptSyncEndDefaults_()"></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <div class="form-row" style="flex:1"><label class="form-label">Окончание — дата</label><input class="form-input" id="apt-f-enddate" type="date"></div>
+        <div class="form-row" style="width:120px"><label class="form-label">Время</label><input class="form-input" id="apt-f-endtime" type="time" step="900"></div>
       </div>
       <div class="form-row">
         <label class="form-label">Клиент *</label>
@@ -961,6 +982,7 @@
       </div>
       <div class="form-row"><label class="form-label">Комментарий</label><input class="form-input" id="apt-f-comment" placeholder="необязательно"></div>
       <button class="btn btn-primary" style="width:100%;margin-top:6px" id="apt-f-submit" onclick="submitAppointment()">Создать запись</button>
+      <div id="apt-edit-actions" style="display:none;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)"></div>
     </div>
   </div>
 </div>
@@ -997,6 +1019,7 @@
         <div class="form-row"><label class="form-label">Директор</label><input class="form-input" id="cl-director" placeholder="Иванов И.И."></div>
         <div class="form-row"><label class="form-label">Контактное лицо</label><input class="form-input" id="cl-contact" placeholder="Петров П.П."></div>
         <div class="form-row"><label class="form-label">Юр. адрес</label><input class="form-input" id="cl-address" placeholder="г. Минск, ул. ..."></div>
+        <div class="form-row"><label class="form-label">Почтовый адрес</label><input class="form-input" id="cl-postal" placeholder="Индекс, город, улица (если отличается от юр.)"></div>
         <div class="form-row"><label class="form-label">Банк. реквизиты</label><input class="form-input" id="cl-bank" placeholder="BY00 XXXX 0000 0000 0000 0000 0000"></div>
       </div>
       <!-- Общие поля -->
@@ -1044,6 +1067,7 @@
         <div class="form-row"><label class="form-label">Директор</label><input class="form-input" id="edit-cl-director"></div>
         <div class="form-row"><label class="form-label">Контактное лицо</label><input class="form-input" id="edit-cl-contact"></div>
         <div class="form-row"><label class="form-label">Юр. адрес</label><input class="form-input" id="edit-cl-address"></div>
+        <div class="form-row"><label class="form-label">Почтовый адрес</label><input class="form-input" id="edit-cl-postal"></div>
         <div class="form-row"><label class="form-label">Банк. реквизиты</label><input class="form-input" id="edit-cl-bank"></div>
       </div>
       <div class="form-row"><label class="form-label">Источник лида</label>
@@ -1143,6 +1167,15 @@
         </select>
       </div>
 
+      <!-- Тип заказчика -->
+      <div class="form-row">
+        <label class="form-label">Тип заказчика</label>
+        <div style="display:flex;gap:8px">
+          <button class="ctype-btn active" id="ord-ctype-phys" onclick="setOrderClientType('физ',this)">👤 Физ. лицо</button>
+          <button class="ctype-btn" id="ord-ctype-legal" onclick="setOrderClientType('юр',this)">🏢 Юр. лицо</button>
+        </div>
+      </div>
+
       <!-- Клиент -->
       <div class="form-row">
         <label class="form-label">Телефон клиента</label>
@@ -1153,9 +1186,22 @@
         <div id="ord-client-found" style="display:none;margin-top:6px;padding:8px 10px;background:var(--bg-card);border-radius:8px;font-size:13px;"></div>
       </div>
       <div class="form-row">
-        <label class="form-label">Имя клиента *</label>
-        <input class="form-input" id="ord-client-name" placeholder="ФИО или название организации">
+        <label class="form-label" id="ord-client-name-label">Имя клиента *</label>
+        <input class="form-input" id="ord-client-name" placeholder="ФИО или название организации" list="ord-client-namelist" autocomplete="off" oninput="orderClientNameInput()">
+        <datalist id="ord-client-namelist"></datalist>
         <input type="hidden" id="ord-client-id">
+      </div>
+
+      <!-- Реквизиты юрлица (только для Юр. лица) -->
+      <div id="ord-legal-fields" style="display:none">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-row" style="margin:0"><label class="form-label">УНП</label><input class="form-input" id="ord-cl-unp" placeholder="123456789"></div>
+          <div class="form-row" style="margin:0"><label class="form-label">Директор</label><input class="form-input" id="ord-cl-director" placeholder="Иванов И.И."></div>
+        </div>
+        <div class="form-row" style="margin-top:12px"><label class="form-label">Юр. адрес</label><input class="form-input" id="ord-cl-address" placeholder="г. Минск, ул. ..."></div>
+        <div class="form-row"><label class="form-label">Почтовый адрес</label><input class="form-input" id="ord-cl-postal" placeholder="Если отличается от юр."></div>
+        <div class="form-row"><label class="form-label">Банк. реквизиты</label><input class="form-input" id="ord-cl-bank" placeholder="BY00 XXXX 0000 ..."></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">Реквизиты сохранятся в карточке клиента и подставятся в договор/акт как для юрлица.</div>
       </div>
 
       <!-- Автомобиль -->
@@ -1204,10 +1250,13 @@
       <div style="margin-top:14px">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
           <label class="form-label" style="margin:0">Материалы</label>
-          <button class="btn btn-ghost" style="padding:3px 10px;font-size:12px" onclick="addMaterialLine()">+ Добавить</button>
+          <div style="display:flex;gap:6px">
+            <button class="btn btn-ghost" style="padding:3px 10px;font-size:12px" onclick="addMaterialLine()">+ Расход</button>
+            <button class="btn btn-ghost" style="padding:3px 10px;font-size:12px;color:var(--danger)" onclick="addMaterialLine(true)" title="Неизрасходованный остаток — вычитается из расхода">+ Остаток</button>
+          </div>
         </div>
         <div id="ord-materials-list"></div>
-        <div id="ord-materials-empty" style="color:var(--text3);font-size:12px;padding:4px 0;text-align:center">Материалы не добавлены — нажмите «+ Добавить»</div>
+        <div id="ord-materials-empty" style="color:var(--text3);font-size:12px;padding:4px 0;text-align:center">Материалы не добавлены — «+ Расход». Если остался излишек — «+ Остаток» (вычтется).</div>
       </div>
 
       <!-- РАСХОДЫ — динамические строки -->
@@ -1306,6 +1355,29 @@
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-new-order')">Отмена</button>
       <button class="btn btn-primary" id="ord-submit-btn" onclick="submitNewOrder()">Создать заказ</button>
+    </div>
+  </div>
+</div>
+
+<!-- МОДАЛКА: НАСТРОЙКА ВОРОНОК (СТАТУСОВ ЗАКАЗОВ) -->
+<div class="modal-dialog-bg" id="modal-statuses" onclick="closeModalOnOverlay(event)">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <div class="modal-title">Воронки заказов</div>
+      <button class="modal-close" onclick="closeModal('modal-statuses')">&#10005;</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px">
+        Колонки канбана и статусы заказов. Перетаскивание карточек по колонкам меняет статус.
+        Стрелками ↑↓ меняйте порядок. «Не в выручке» — стадия отмены (не считается в выручке/ДДС/ЗП).
+        «Завершена» — стадия «выдан» (не считается «в работе»).
+      </div>
+      <div id="statuses-list"></div>
+      <button class="btn btn-ghost" style="margin-top:8px" onclick="statusAddRow()">+ Добавить воронку</button>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-statuses')">Отмена</button>
+      <button class="btn btn-primary" id="statuses-save-btn" onclick="saveStatusesEditor()">Сохранить</button>
     </div>
   </div>
 </div>

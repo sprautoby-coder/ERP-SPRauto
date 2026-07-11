@@ -111,14 +111,14 @@ const CONFIG = {
   // Каталог услуг по умолчанию. Переопределяется per-tenant через настройку
   // SERVICES_JSON (white-label). contractPrefix — префикс нумерации договоров услуги.
   SERVICES: [
-    { code: 'PPF',     name: 'Оклейка PPF',   icon: '🛡️', active: true,  calcType: 'area',     bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '04/01-' },
-    { code: 'TINT',    name: 'Тонировка',     icon: '🎨', active: true,  calcType: 'elements', bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '12/01-' },
-    { code: 'POLISH',  name: 'Полировка',     icon: '✨', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '05/01-' },
-    { code: 'CERAMIC', name: 'Керамика',      icon: '💎', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '06/01-' },
-    { code: 'ANTICHR', name: 'Антихром',      icon: '⬛', active: false, calcType: 'elements', bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '07/01-' },
-    { code: 'SOUND',   name: 'Шумоизоляция',  icon: '🔇', active: false, calcType: 'hourly',   bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '08/01-' },
-    { code: 'CHEMIE',  name: 'Химчистка',     icon: '🧹', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '09/01-' },
-    { code: 'ANTICOR', name: 'Антикор',       icon: '🛢️', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '10/01-' },
+    { code: 'PPF',     name: 'Оклейка PPF',   icon: '🛡️', active: true,  calcType: 'area',     bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '04/01-', color: '#4da6ff' },
+    { code: 'TINT',    name: 'Тонировка',     icon: '🎨', active: true,  calcType: 'elements', bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '12/01-', color: '#9b59b6' },
+    { code: 'POLISH',  name: 'Полировка',     icon: '✨', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '05/01-', color: '#f0a500' },
+    { code: 'CERAMIC', name: 'Керамика',      icon: '💎', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '06/01-', color: '#1abc9c' },
+    { code: 'ANTICHR', name: 'Антихром',      icon: '⬛', active: false, calcType: 'elements', bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '07/01-', color: '#34495e' },
+    { code: 'SOUND',   name: 'Шумоизоляция',  icon: '🔇', active: false, calcType: 'hourly',   bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '08/01-', color: '#e67e22' },
+    { code: 'CHEMIE',  name: 'Химчистка',     icon: '🧹', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '09/01-', color: '#5cb85c' },
+    { code: 'ANTICOR', name: 'Антикор',       icon: '🛢️', active: false, calcType: 'fixed',    bonusPoolPct: 35, managerBonusPct: 5, contractPrefix: '10/01-', color: '#d9534f' },
   ],
 
   // Комплексы оклейки PPF по умолчанию. Переопределяются per-tenant через
@@ -129,6 +129,18 @@ const CONFIG = {
     { name: 'Оптима+',        price: 1600, els: ['капот полностью','крылья полностью','передняя оптика','стойки лобового стекла','полоса на крышу','зона выгрузки','внутренние пороги','кромки дверей','антиманикюр'] },
     { name: 'Премиум',        price: 2350, els: ['капот полностью','крылья полностью','передний бампер','передняя оптика','стойки лобового стекла','полоса на крышу','зона выгрузки','внутренние пороги','кромки дверей','антиманикюр','боковые зеркала'] },
     { name: 'Полная оклейка', price: 0,    els: ['полная оклейка кузова'] },
+  ],
+
+  // Статусы заказов = «воронки» канбана (white-label, переопределяются настройкой
+  // ORDER_STATUSES_JSON). id — стабильный ключ для распознавания переименований.
+  // cancelled:true — стадия «отменён»: такие заказы НЕ учитываются в выручке/ДДС/ЗП.
+  // done:true — завершённая стадия (напр. «Выдан»): не считается «в работе».
+  ORDER_STATUSES: [
+    { id: 'new',       name: 'Новый',    color: '#6c8ebf' },
+    { id: 'work',      name: 'В работе', color: '#f0a500' },
+    { id: 'done',      name: 'Готов',    color: '#4da6ff' },
+    { id: 'delivered', name: 'Выдан',    color: '#5cb85c', done: true },
+    { id: 'cancelled', name: 'Отменён',  color: '#d9534f', cancelled: true },
   ],
 
   // Источники лидов (откуда пришёл клиент)

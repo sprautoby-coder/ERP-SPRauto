@@ -217,6 +217,8 @@ function saveOrderMaterials(orderId, lines) {
           'Цена за м²':    price,
           'Тип':           type,
           'Стоимость':     cost,
+          'Зона':          line.zone  || '',   // тонировка: стекло/зона
+          'Светопропускаемость': line.light || '',  // тонировка: % плёнки
           'Создан':        now,
         };
         return map[h] !== undefined ? map[h] : '';

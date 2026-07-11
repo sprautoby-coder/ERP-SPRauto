@@ -11,12 +11,45 @@
 function getAppointments(dateStr) {
   return safeCall(function() {
     dateStr = String(dateStr || '').trim();
+    var day = parseDmy_(dateStr);
     var list = readSheetAsObjects('DATABASE', 'APPOINTMENTS')
-      .filter(function(a) { return a['ID'] && String(a['Дата']) === dateStr; })
+      .filter(function(a) {
+        if (!a['ID']) return false;
+        if (String(a['Дата']) === dateStr) return true;
+        // многодневная запись — показываем в каждый день диапазона
+        var s = parseDmy_(a['Дата']), e = parseDmy_(a['Дата окончания'] || a['Дата']);
+        return day && s && e && e > s && day >= s && day <= e;
+      })
       .map(appointmentToClient_);
     list.sort(function(a, b){ return (a.time || '').localeCompare(b.time || ''); });
-    return list;
+    return enrichAppointments_(list);
   });
+}
+
+/**
+ * Обогатить записи состоянием связанного заказа:
+ *  workState = 'none' (нет заказа) | 'inwork' (в работе) | 'done' (заказ оплачен).
+ *  orderStatus — воронка заказа. Нужно для «в работе / выполнено» в календаре.
+ */
+function enrichAppointments_(list) {
+  var linked = list.filter(function(a){ return a.orderId; });
+  if (!linked.length) { list.forEach(function(a){ a.workState = 'none'; }); return list; }
+  var orders = readSheetAsObjects('DATABASE', 'ORDERS');
+  var map = {};
+  orders.forEach(function(o){ if (o['ID']) map[String(o['ID'])] = o; });
+  list.forEach(function(a){
+    if (!a.orderId) { a.workState = 'none'; return; }
+    var o = map[String(a.orderId)];
+    if (!o) { a.workState = 'inwork'; a.orderStatus = ''; return; }
+    a.orderStatus = o['Статус'] || '';
+    var pay = String(o['Статус оплаты'] || '').trim();
+    if (!pay) {
+      var bz = String(o['Безнал'] || '').trim();
+      pay = (bz === 'Да' || bz === 'Нет') ? 'Оплачен' : (bz === 'Частично' ? 'Частично' : 'Не оплачен');
+    }
+    a.workState = (pay === 'Оплачен') ? 'done' : 'inwork';
+  });
+  return list;
 }
 
 /** Записи за диапазон дат включительно (для будущего недельного вида). */
@@ -26,15 +59,17 @@ function getAppointmentsRange(fromStr, toStr) {
     var list = readSheetAsObjects('DATABASE', 'APPOINTMENTS')
       .filter(function(a) {
         if (!a['ID']) return false;
-        var d = parseDmy_(a['Дата']);
-        return d && (!from || d >= from) && (!to || d <= to);
+        var s = parseDmy_(a['Дата']); if (!s) return false;
+        var e = parseDmy_(a['Дата окончания'] || a['Дата']) || s;
+        // запись пересекает период (учитывает многодневные)
+        return (!to || s <= to) && (!from || e >= from);
       })
       .map(appointmentToClient_);
     list.sort(function(a, b){
       return (a.date || '').split('.').reverse().join('').localeCompare((b.date || '').split('.').reverse().join('')) ||
              (a.time || '').localeCompare(b.time || '');
     });
-    return list;
+    return enrichAppointments_(list);
   });
 }
 
@@ -51,12 +86,20 @@ function createAppointment(payload) {
     if (!time) throw new Error('Не указано время');
     if (!String(payload.client || '').trim()) throw new Error('Не указан клиент');
 
+    var endDate = String(payload.endDate || '').trim() || date;
+    var endTime = String(payload.endTime || '').trim();
+    var duration = Number(payload.duration) || 0;
+    if (!duration) duration = computeAptDuration_(date, time, endDate, endTime);
+    if (!endTime)  endTime  = addMinutesToTime_(time, duration || 60);
+
     var rec = {
-      'ID':           getNextId('DATABASE', 'APPOINTMENTS', 'APT'),
-      'Дата':         date,
-      'Время':        time,
-      'Длительность': Number(payload.duration) || 60,
-      'Клиент':       String(payload.client || '').trim(),
+      'ID':              getNextId('DATABASE', 'APPOINTMENTS', 'APT'),
+      'Дата':            date,
+      'Время':           time,
+      'Дата окончания':  endDate,
+      'Время окончания': endTime,
+      'Длительность':    duration || 60,
+      'Клиент':          String(payload.client || '').trim(),
       'Телефон':      String(payload.phone || '').trim(),
       'Авто':         String(payload.car || '').trim(),
       'Услуга':       String(payload.service || '').trim(),
@@ -78,7 +121,8 @@ function updateAppointment(id, fields) {
     bumpDataVersion_();
     fields = fields || {};
     var map = {
-      date: 'Дата', time: 'Время', duration: 'Длительность', client: 'Клиент',
+      date: 'Дата', time: 'Время', endDate: 'Дата окончания', endTime: 'Время окончания',
+      duration: 'Длительность', client: 'Клиент',
       phone: 'Телефон', car: 'Авто', service: 'Услуга', master: 'Мастер', comment: 'Комментарий',
     };
     var patch = {};
@@ -120,13 +164,77 @@ function linkAppointmentOrder(id, orderId) {
   });
 }
 
+/**
+ * Перенести запись в воронку канбана: создаёт заказ (цена 0 — заполнят позже)
+ * в выбранной воронке statusName и привязывает к нему запись. Запись после этого
+ * показывается «в работе», а когда заказ будет оплачен — «выполнено».
+ */
+function createOrderFromAppointment(aptId, statusName) {
+  return safeCall(function() {
+    bumpDataVersion_();
+    aptId = String(aptId || '');
+    var apts = readSheetAsObjects('DATABASE', 'APPOINTMENTS');
+    var apt = null;
+    for (var i = 0; i < apts.length; i++) { if (String(apts[i]['ID']) === aptId) { apt = apts[i]; break; } }
+    if (!apt) throw new Error('Запись не найдена');
+    if (apt['Заказ ID']) throw new Error('Запись уже перенесена в заказ ' + apt['Заказ ID']);
+
+    var code = getServiceCodeByName_(apt['Услуга']) || apt['Услуга'] || '';
+    var res = createOrder({
+      service:     code,
+      clientName:  apt['Клиент'] || '',
+      clientPhone: apt['Телефон'] || '',
+      car:         apt['Авто'] || '',
+      price:       0,                      // сумму впишут в карточке заказа
+      masters:     apt['Мастер'] || '',
+      notes:       'Из записи ' + aptId + (apt['Комментарий'] ? ' · ' + apt['Комментарий'] : ''),
+    });
+    if (!res || !res.ok) throw new Error((res && res.error) || 'Не удалось создать заказ');
+    var orderId = res.data.id;
+
+    // ставим выбранную воронку (если задана и допустима)
+    if (statusName) { try { updateOrderStatus(orderId, statusName); } catch (e) {} }
+    // привязываем запись → она станет «в работе»
+    updateAppointmentRow_(aptId, { 'Заказ ID': orderId, 'Статус': 'Пришёл' });
+
+    return { orderId: orderId, contractNumber: res.data.contractNumber, status: statusName || '' };
+  });
+}
+
 // ─── ВСПОМОГАТЕЛЬНЫЕ ─────────────────────────────────────────────────────────
+
+/** Нормализовать дату из ячейки Sheets (Date/строка) → 'dd.MM.yyyy'. */
+function normDate_(v) {
+  if (v == null || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return ('0'+v.getDate()).slice(-2) + '.' + ('0'+(v.getMonth()+1)).slice(-2) + '.' + v.getFullYear();
+  }
+  return String(v).trim();
+}
+/** Нормализовать время из ячейки Sheets (Date/доля суток/строка) → 'HH:mm'. */
+function normTime_(v) {
+  if (v == null || v === '') return '';
+  if (Object.prototype.toString.call(v) === '[object Date]') {
+    return ('0'+v.getHours()).slice(-2) + ':' + ('0'+v.getMinutes()).slice(-2);
+  }
+  var s = String(v).trim();
+  var m = s.match(/(\d{1,2}):(\d{2})/);
+  if (m) return ('0'+m[1]).slice(-2) + ':' + m[2];
+  var n = Number(s);
+  if (!isNaN(n) && n > 0 && n < 1) {   // доля суток (Sheets time as number)
+    var mins = Math.round(n * 24 * 60);
+    return ('0'+Math.floor(mins/60)).slice(-2) + ':' + ('0'+(mins%60)).slice(-2);
+  }
+  return s;
+}
 
 function appointmentToClient_(a) {
   return {
     id:       a['ID'],
-    date:     a['Дата'] || '',
-    time:     a['Время'] || '',
+    date:     normDate_(a['Дата']),
+    time:     normTime_(a['Время']),
+    endDate:  normDate_(a['Дата окончания'] || a['Дата']),
+    endTime:  normTime_(a['Время окончания']),
     duration: Number(a['Длительность']) || 60,
     client:   a['Клиент'] || '',
     phone:    a['Телефон'] || '',
@@ -158,6 +266,25 @@ function updateAppointmentRow_(id, patch) {
     }
   }
   throw new Error('Запись не найдена: ' + id);
+}
+
+/** Длительность в минутах для однодневной записи (иначе 60 как заглушка). */
+function computeAptDuration_(date, time, endDate, endTime) {
+  if (!time || !endTime || String(date) !== String(endDate)) return 60;
+  var sm = timeToMin_(time), em = timeToMin_(endTime);
+  if (sm == null || em == null) return 60;
+  return Math.max(15, em - sm);
+}
+/** 'HH:mm' → минуты. */
+function timeToMin_(t) {
+  var m = String(t || '').match(/^(\d{1,2}):(\d{2})/);
+  return m ? (+m[1]) * 60 + (+m[2]) : null;
+}
+/** Прибавить минуты к 'HH:mm' в пределах суток. */
+function addMinutesToTime_(time, mins) {
+  var sm = timeToMin_(time); if (sm == null) return time;
+  var v = Math.min(23 * 60 + 59, sm + (Number(mins) || 0));
+  return ('0' + Math.floor(v / 60)).slice(-2) + ':' + ('0' + (v % 60)).slice(-2);
 }
 
 /** Разбор dd.MM.yyyy → Date (00:00). */

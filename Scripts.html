@@ -60,10 +60,17 @@ var PAGE_TITLES = {
   materials:'Справочник материалов', settings:'Настройки'
 };
 
+// Мобильное выезжающее меню
+function toggleSidebar() { document.body.classList.toggle('sidebar-open'); }
+function closeSidebar()  { document.body.classList.remove('sidebar-open'); }
+
 function goPage(name) {
+  closeSidebar();   // на мобильном закрываем меню при выборе пункта
   // Досохраняем несохранённые правки карточки и инлайн-редакторов перед уходом
   if (typeof flushCard_ === 'function') flushCard_();
   if (typeof flushAllInline_ === 'function') flushAllInline_();
+  if (typeof flushServicesSave_ === 'function') flushServicesSave_();
+  if (typeof flushComplexesSave_ === 'function') flushComplexesSave_();
   // Закрываем все открытые модальные окна при смене страницы
   closeAllModals();
 
@@ -458,7 +465,7 @@ function submitStockOp() {
 /* ===== КАЛЕНДАРЬ ЗАПИСЕЙ ===== */
 App._apts = [];
 App._aptDate = null;   // Date — выбранный день
-App._aptView = 'day';  // 'day' | 'week'
+App._aptView = (function(){ try { return localStorage.getItem('aptView') || 'day'; } catch(e){ return 'day'; } })();  // 'day' | 'week' | 'month' (запоминается)
 App._aptPendingLink = null; // id записи, которую привязать к создаваемому заказу
 
 var APT_WEEKDAYS = ['воскресенье','понедельник','вторник','среда','четверг','пятница','суббота'];
@@ -481,21 +488,37 @@ function aptWeekRange(d) {
   return { mon: mon, sun: sun };
 }
 
+// Границы месячной сетки (недели Пн–Вс, покрывающие месяц даты d)
+function aptMonthGrid(d) {
+  var first = new Date(d.getFullYear(), d.getMonth(), 1);
+  var startDow = (first.getDay() + 6) % 7;            // 0 = понедельник
+  var gridStart = new Date(first.getFullYear(), first.getMonth(), 1 - startDow);
+  var gridEnd = new Date(gridStart.getFullYear(), gridStart.getMonth(), gridStart.getDate() + 41); // 6 недель
+  return { start: gridStart, end: gridEnd, month: d.getMonth() };
+}
+var APT_MONTHS = ['января','февраля','марта','апреля','мая','июня','июля','августа','сентября','октября','ноября','декабря'];
+
 function loadAppointments(force) {
   if (!App._aptDate) App._aptDate = new Date();
   // переключаем контейнеры по виду
   var dayWrap  = document.getElementById('apt-day-wrap');
   var weekWrap = document.getElementById('apt-week');
-  var isWeek = App._aptView === 'week';
-  if (dayWrap)  dayWrap.style.display  = isWeek ? 'none' : '';
-  if (weekWrap) weekWrap.style.display = isWeek ? '' : 'none';
+  var monWrap  = document.getElementById('apt-month');
+  var view = App._aptView || 'day';
+  if (dayWrap)  dayWrap.style.display  = view === 'day'   ? '' : 'none';
+  if (weekWrap) weekWrap.style.display = view === 'week'  ? 'block' : 'none';
+  if (monWrap)  monWrap.style.display  = view === 'month' ? 'block' : 'none';
+  // активная кнопка переключателя (вид мог восстановиться из памяти)
+  ['day','week','month'].forEach(function(v){ var b = document.getElementById('apt-view-' + v); if (b) b.classList.toggle('active', v === view); });
+  renderAptLegend();
 
   // синхронизируем поле даты и заголовок периода
   var dateInput = document.getElementById('apt-date');
   if (dateInput) dateInput.value = aptFmtIso(App._aptDate);
   var dt = document.getElementById('apt-daytitle');
   if (dt) {
-    if (isWeek) { var r = aptWeekRange(App._aptDate); dt.textContent = aptFmtDmy(r.mon).slice(0,5) + ' – ' + aptFmtDmy(r.sun); }
+    if (view === 'week') { var r = aptWeekRange(App._aptDate); dt.textContent = aptFmtDmy(r.mon).slice(0,5) + ' – ' + aptFmtDmy(r.sun); }
+    else if (view === 'month') dt.textContent = APT_MONTHS[App._aptDate.getMonth()] + ' ' + App._aptDate.getFullYear();
     else dt.textContent = APT_WEEKDAYS[App._aptDate.getDay()];
   }
 
@@ -506,7 +529,7 @@ function loadAppointments(force) {
     }).getEmployees(true);
   }
 
-  if (isWeek) {
+  if (view === 'week') {
     var rng = aptWeekRange(App._aptDate);
     if (weekWrap) weekWrap.innerHTML = '<div class="kpi-skeleton" style="min-height:120px"></div>';
     google.script.run
@@ -520,77 +543,328 @@ function loadAppointments(force) {
     return;
   }
 
-  var tbody = document.getElementById('apt-tbody');
-  if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="7" class="ct-loading"><div class="kpi-skeleton" style="min-height:40px;margin:4px 0"></div></td></tr>';
+  if (view === 'month') {
+    var mg = aptMonthGrid(App._aptDate);
+    if (monWrap) monWrap.innerHTML = '<div class="kpi-skeleton" style="min-height:200px"></div>';
+    google.script.run
+      .withSuccessHandler(function(resp){
+        if (!resp || !resp.ok) { if (monWrap) monWrap.innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">' + (resp ? resp.error : 'Ошибка') + '</div>'; return; }
+        App._apts = resp.data || [];
+        renderAptMonth(mg);
+      })
+      .withFailureHandler(function(e){ if (monWrap) monWrap.innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">' + e.message + '</div>'; })
+      .getAppointmentsRange(aptFmtDmy(mg.start), aptFmtDmy(mg.end));
+    return;
+  }
+
+  var cal = document.getElementById('apt-cal');
+  if (!cal) return;
+  cal.innerHTML = '<div class="kpi-skeleton" style="min-height:200px"></div>';
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--danger)">' + (resp ? resp.error : 'Ошибка') + '</td></tr>';
+        cal.innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">' + (resp ? resp.error : 'Ошибка') + '</div>';
         return;
       }
       App._apts = resp.data || [];
-      renderAppointments();
+      renderAptDayCalendar();
     })
     .withFailureHandler(function(e){
-      tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:24px;color:var(--danger)">' + e.message + '</td></tr>';
+      cal.innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">' + e.message + '</div>';
     })
     .getAppointments(aptFmtDmy(App._aptDate));
 }
 
 function setAptView(view) {
-  if (App._aptView === view) return;
   App._aptView = view;
+  try { localStorage.setItem('aptView', view); } catch(e){}   // запоминаем выбор
   var db = document.getElementById('apt-view-day');
   var wb = document.getElementById('apt-view-week');
+  var mb = document.getElementById('apt-view-month');
   if (db) db.classList.toggle('active', view === 'day');
   if (wb) wb.classList.toggle('active', view === 'week');
+  if (mb) mb.classList.toggle('active', view === 'month');
   loadAppointments(true);
 }
 
+// Рендер месяца: сетка 6 недель × 7 дней, в каждом дне — чипы записей
+function renderAptMonth(mg) {
+  var wrap = document.getElementById('apt-month');
+  if (!wrap) return;
+  var list = aptUniq_(App._apts);
+  renderAptKpis_(list);
+  var WD = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+  var todayDmy = aptFmtDmy(new Date());
+
+  var byDay = {};
+  list.forEach(function(a){ (byDay[a.date] = byDay[a.date] || []).push(a); });
+
+  var heads = WD.map(function(w){ return '<div class="apt-mon-wd">' + w + '</div>'; }).join('');
+  var cells = '';
+  for (var i = 0; i < 42; i++) {
+    var day = new Date(mg.start.getFullYear(), mg.start.getMonth(), mg.start.getDate() + i);
+    var dmy = aptFmtDmy(day);
+    var other = day.getMonth() !== mg.month;
+    var isToday = dmy === todayDmy;
+    var appts = (byDay[dmy] || []).slice().sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
+    var chips = appts.slice(0, 4).map(function(a){
+      var color = serviceColor(a.service);
+      var cls = a.workState === 'inwork' ? ' apt-block-inwork' : a.workState === 'done' ? ' apt-block-done' : '';
+      if (a.status === 'Отменена') cls += ' apt-chip-cancel';
+      return '<div class="apt-mon-chip' + cls + '" style="background:' + hexToRgba_(color, 0.16) + ';border-left:3px solid ' + color + '" ' +
+        'onclick="event.stopPropagation();openEditAppointment(\'' + a.id + '\')" title="' + (a.service||'') + '">' +
+        '<b>' + (a.time||'') + '</b> ' + (a.client||'—') + '</div>';
+    }).join('');
+    var more = appts.length > 4 ? '<div class="apt-mon-more" onclick="event.stopPropagation();aptOpenDay(\'' + aptFmtIso(day) + '\')">ещё ' + (appts.length - 4) + '…</div>' : '';
+    cells += '<div class="apt-mon-cell' + (other ? ' apt-mon-other' : '') + (isToday ? ' apt-mon-today' : '') + '" ondblclick="aptOpenDay(\'' + aptFmtIso(day) + '\')" title="Двойной клик — открыть день">' +
+      '<div class="apt-mon-daynum" onclick="aptAddOnDay(\'' + aptFmtIso(day) + '\')" title="Добавить запись">' + day.getDate() + '</div>' +
+      '<div class="apt-mon-chips">' + chips + more + '</div>' +
+    '</div>';
+  }
+  wrap.innerHTML = '<div class="apt-mon-head">' + heads + '</div><div class="apt-mon-grid">' + cells + '</div>';
+}
+
 // Рендер недели: 7 колонок Пн–Вс, в каждой — чипы записей по времени
+// Раскладка пересекающихся записей по колонкам (проставляет _col/_cols). items отсортированы по _s.
+function aptLayoutLanes_(items) {
+  var cluster = [], clEnd = -1;
+  var layout = function(cl){
+    var lanes = [];
+    cl.forEach(function(a){
+      var placed = false;
+      for (var i = 0; i < lanes.length; i++) { if (a._s >= lanes[i]) { a._col = i; lanes[i] = a._e; placed = true; break; } }
+      if (!placed) { a._col = lanes.length; lanes.push(a._e); }
+    });
+    cl.forEach(function(a){ a._cols = lanes.length; });
+  };
+  items.forEach(function(a){
+    if (cluster.length && a._s >= clEnd) { layout(cluster); cluster = []; clEnd = -1; }
+    cluster.push(a); clEnd = Math.max(clEnd, a._e);
+  });
+  if (cluster.length) layout(cluster);
+}
+
+// Компактный блок записи в недельной сетке
+function aptWkBlockHtml_(a, gridStart, HH) {
+  var color = serviceColor(a.service);
+  var cancelled = a.status === 'Отменена';
+  var top = (a._s - gridStart) / 60 * HH;
+  var height = Math.max(17, (a._e - a._s) / 60 * HH - 2);
+  var wPct = 100 / (a._cols || 1), leftPct = (a._col || 0) * wPct;
+  var stateCls = a.workState === 'inwork' ? ' apt-block-inwork' : a.workState === 'done' ? ' apt-block-done' : '';
+  if (cancelled) stateCls += ' apt-block-cancel';
+  return '<div class="apt-wk-block' + stateCls + '" data-id="' + a.id + '" style="top:' + top + 'px;height:' + height + 'px;left:calc(' + leftPct + '% + 1px);width:calc(' + wPct + '% - 2px);' +
+      'background:' + hexToRgba_(color, 0.18) + ';border-left:3px solid ' + color + ';cursor:grab"' +
+      ' title="' + (a.time||'') + ' ' + String(a.client||'').replace(/"/g,'') + ' · ' + String(a.service||'').replace(/"/g,'') + ' (тяните — перенос, за низ — длительность)">' +
+      '<button class="apt-block-del" title="Удалить" onclick="event.stopPropagation();aptDelete(\'' + a.id + '\')">✕</button>' +
+      '<div class="apt-wk-block-t">' + (a.time || '') + ' ' + (a.client || '—') + '</div>' +
+      '<div class="apt-block-resize" title="Растянуть по длительности"></div>' +
+    '</div>';
+}
+// Перетаскивание (перенос по времени и между днями) + растягивание в недельной сетке.
+// Блок следует за курсором в РЕАЛЬНОМ ВРЕМЕНИ. Единый обработчик с гарантированной очисткой:
+// одновременно тащится РОВНО один блок (защита от залипших mousemove-слушателей).
+function aptWkMouseDown_(e) {
+  if (e.button !== 0) return;
+  var block = e.target.closest('.apt-wk-block');
+  if (!block) return;
+  if (e.target.classList.contains('apt-block-del')) return;
+  var cal = App._aptWkCal; if (!cal) return;
+  var track = block.closest('.apt-wkcal-track'); if (!track) return;
+  if (App._aptDragCleanup) App._aptDragCleanup();   // добить залипший предыдущий drag
+
+  var id = block.getAttribute('data-id');
+  var isResize = e.target.classList.contains('apt-block-resize') && block.offsetHeight > 34;
+  e.preventDefault();
+  var HH = cal.HH, moved = false, ghost = null;
+  var trackRect = track.getBoundingClientRect();
+  var blockRect = block.getBoundingClientRect();
+  var offX = e.clientX - blockRect.left, offY = e.clientY - blockRect.top, w = blockRect.width, h0 = blockRect.height;
+  var origH = parseFloat(block.style.height) || 18;
+  var startX = e.clientX, startY = e.clientY;
+
+  var onMove = function(ev) {
+    if (!moved && (Math.abs(ev.clientX - startX) > 3 || Math.abs(ev.clientY - startY) > 3)) moved = true;
+    if (!moved) return;
+    if (isResize) {   // растягивание меняет высоту САМОГО блока (один блок)
+      block.style.zIndex = 20;
+      block.style.height = Math.max(HH * 0.25, origH + (ev.clientY - startY)) + 'px';
+    } else {          // перенос — тащим ПРИЗРАК-клон, реальные записи не трогаем
+      if (!ghost) {
+        ghost = block.cloneNode(true);
+        ghost.classList.add('apt-dragging');
+        ghost.style.position = 'fixed'; ghost.style.left = '0'; ghost.style.top = '0';
+        ghost.style.width = w + 'px'; ghost.style.height = h0 + 'px';
+        ghost.style.margin = '0'; ghost.style.pointerEvents = 'none'; ghost.style.zIndex = '9999';
+        document.body.appendChild(ghost);
+        block.style.opacity = '0.35';
+      }
+      ghost.style.transform = 'translate(' + (ev.clientX - offX) + 'px,' + (ev.clientY - offY) + 'px)';
+    }
+  };
+  var cleanup = function() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    if (ghost) { ghost.remove(); ghost = null; }
+    block.style.opacity = '';
+    App._aptDragCleanup = null;
+  };
+  var onUp = function(ev) {
+    cleanup();
+    if (!moved) { openEditAppointment(id); return; }
+    App._aptSuppressClick = true; setTimeout(function(){ App._aptSuppressClick = false; }, 0);
+    if (isResize) {
+      var hh = parseFloat(block.style.height);
+      aptWkCommit_(id, null, null, Math.max(15, Math.round((hh / HH * 60) / 15) * 15));
+    } else {
+      var topRel = (ev.clientY - offY) - trackRect.top;   // верх призрака относительно дорожки
+      var mins = cal.gridStart + Math.round((topRel / HH * 60) / 15) * 15;
+      mins = Math.max(0, Math.min(23 * 60 + 45, mins));
+      var di = Math.floor((ev.clientX - trackRect.left) / (trackRect.width / 7));
+      di = Math.max(0, Math.min(6, di));
+      var newDmy = (cal.trackDays || [])[di] || null;
+      aptWkCommit_(id, newDmy, aptPad_(Math.floor(mins / 60)) + ':' + aptPad_(mins % 60), null);
+    }
+  };
+  App._aptDragCleanup = cleanup;
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// Сохранить новые дату/время/длительность записи из недельной сетки
+function aptWkCommit_(id, newDate, newTime, newDur) {
+  var a = (App._apts || []).find(function(x){ return String(x.id) === String(id); });
+  if (!a) return;
+  if (newDate != null) a.date = newDate;
+  if (newTime != null) a.time = newTime;
+  if (newDur  != null) a.duration = newDur;
+  var dur = Number(a.duration) || 60;
+  a.endDate = a.date;
+  a.endTime = aptAddMin_(a.time, dur);
+  var patch = { date: a.date, time: a.time, duration: dur, endDate: a.endDate, endTime: a.endTime };
+  renderAptWeek(aptWeekRange(App._aptDate));
+  // Сохраняем в фоне; при ошибке НЕ откатываем позицию (никаких «возвратов назад»), только предупреждаем
+  google.script.run
+    .withSuccessHandler(function(resp){ if (!resp || !resp.ok) toast('Не сохранилось: ' + (resp ? resp.error : ''), 'error'); })
+    .withFailureHandler(function(e){ toast('Не сохранилось: ' + e.message, 'error'); })
+    .updateAppointment(id, patch);
+}
+
+// Клик по пустому месту в колонке дня (неделя) → новая запись на это время
+function aptWkColClick(e, col) {
+  if (App._aptSuppressClick) return;              // не создаём после перетаскивания
+  if (e.target.closest('.apt-wk-block')) return;
+  var cal = App._aptWkCal; if (!cal) return;
+  var rect = col.getBoundingClientRect();
+  var mins = cal.gridStart + Math.round(((e.clientY - rect.top) / cal.HH * 60) / 15) * 15;
+  mins = Math.max(0, Math.min(23 * 60 + 45, mins));
+  var d = aptParseIso(col.getAttribute('data-date')); if (d) App._aptDate = d;
+  aptCreateAt_(aptPad_(Math.floor(mins / 60)) + ':' + aptPad_(mins % 60));
+}
+
+// Убрать дубли записей по id (защита от рассинхрона App._apts)
+function aptUniq_(arr) {
+  var seen = {}, out = [];
+  (arr || []).forEach(function(a){
+    if (a && a.id) { if (seen[a.id]) return; seen[a.id] = 1; }
+    out.push(a);
+  });
+  return out;
+}
+
+// Недельный вид — сетка по времени: 7 дней × часы (как Google Calendar)
 function renderAptWeek(rng) {
   var wrap = document.getElementById('apt-week');
   if (!wrap) return;
-  var list = App._apts || [];
+  var list = aptUniq_(App._apts);
   var WD = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
-  var today = aptFmtDmy(new Date());
+  var todayDmy = aptFmtDmy(new Date());
+  renderAptKpis_(list);
 
-  // KPI (по всей неделе)
-  var k = function(id, v){ var e = document.getElementById(id); if (e) e.textContent = v; };
-  var active = list.filter(function(a){ return a.status !== 'Отменена'; });
-  k('apt-kpi-count', list.length);
-  k('apt-kpi-planned', list.filter(function(a){ return a.status === 'Запланирована'; }).length);
-  k('apt-kpi-came', list.filter(function(a){ return a.status === 'Пришёл'; }).length);
-  var mins = {}; active.forEach(function(a){ var m=a.master||'—'; mins[m]=(mins[m]||0)+(Number(a.duration)||0); });
-  var mk = Object.keys(mins);
-  k('apt-kpi-masters', mk.length ? mk.map(function(m){ return m+' · '+Math.round(mins[m]/60*10)/10+'ч'; }).join(', ') : '—');
+  var mon0 = new Date(rng.mon.getFullYear(), rng.mon.getMonth(), rng.mon.getDate());
+  var dmyToDate = function(s){ var p = String(s||'').split('.'); return p.length===3 ? new Date(+p[2], +p[1]-1, +p[0]) : null; };
+  var isMulti = function(a){ return a.endDate && a.endDate !== a.date; };
+  var multi  = list.filter(isMulti);
+  var single = list.filter(function(a){ return !isMulti(a); });
+  var endMin = function(a){ var s = aptMinutes_(a.time); if (a.endTime && a.endDate === a.date) { var em = aptMinutes_(a.endTime); if (em != null && em > s) return em; } return s + (Number(a.duration) || 60); };
 
-  var html = '';
+  // диапазон часов
+  var HH = 42, minStart = 8 * 60, maxEnd = 20 * 60;
+  single.forEach(function(a){ var s = aptMinutes_(a.time); if (s == null) return; minStart = Math.min(minStart, s); maxEnd = Math.max(maxEnd, endMin(a)); });
+  var startH = Math.max(6, Math.floor(minStart / 60)), endH = Math.min(23, Math.ceil(maxEnd / 60));
+  var gridStart = startH * 60, totalH = (endH - startH) * HH;
+  var trackDays = [];
+  for (var td = 0; td < 7; td++) trackDays.push(aptFmtDmy(new Date(mon0.getFullYear(), mon0.getMonth(), mon0.getDate() + td)));
+  App._aptWkCal = { gridStart: gridStart, HH: HH, trackDays: trackDays };
+
+  // шапки дней
+  var heads = '';
   for (var i = 0; i < 7; i++) {
-    var day = new Date(rng.mon.getFullYear(), rng.mon.getMonth(), rng.mon.getDate() + i);
+    var day = new Date(mon0.getFullYear(), mon0.getMonth(), mon0.getDate() + i);
     var dmy = aptFmtDmy(day);
-    var dayApts = list.filter(function(a){ return a.date === dmy; })
-                      .sort(function(a,b){ return (a.time||'').localeCompare(b.time||''); });
-    var isToday = dmy === today;
-    var chips = dayApts.map(function(a){
-      var meta = APT_STATUS_META[a.status] || APT_STATUS_META['Запланирована'];
-      var cancelled = a.status === 'Отменена';
-      return '<div class="apt-chip ' + meta.cls + (cancelled ? ' apt-chip-cancel' : '') + '" onclick="openEditAppointment(\'' + a.id + '\')" title="' + (a.service||'') + ' · ' + (a.master||'') + '">' +
-        '<b>' + (a.time||'') + '</b> ' + (a.client||'—') +
-        (a.master ? '<div class="apt-chip-sub">' + a.master + '</div>' : '') +
-      '</div>';
-    }).join('');
-    html += '<div class="apt-week-day' + (isToday ? ' apt-week-today' : '') + '">' +
-      '<div class="apt-week-head" onclick="aptOpenDay(\'' + aptFmtIso(day) + '\')" title="Открыть день">' +
-        '<span>' + WD[i] + ' ' + dmy.slice(0,5) + '</span>' +
-        (dayApts.length ? '<span class="apt-week-cnt">' + dayApts.length + '</span>' : '') +
-      '</div>' +
-      '<div class="apt-week-body">' + (chips || '<div class="apt-week-empty">—</div>') + '</div>' +
-      '<button class="apt-week-add" onclick="aptAddOnDay(\'' + aptFmtIso(day) + '\')">+ запись</button>' +
-    '</div>';
+    var cnt = single.filter(function(a){ return a.date === dmy; }).length;
+    heads += '<div class="apt-wkcal-dh' + (dmy === todayDmy ? ' today' : '') + '" onclick="aptOpenDay(\'' + aptFmtIso(day) + '\')" title="Открыть день">' +
+      WD[i] + ' ' + dmy.slice(0,5) + (cnt ? ' <span class="apt-week-cnt">' + cnt + '</span>' : '') + '</div>';
   }
-  wrap.innerHTML = html;
+
+  // верхняя строка: многодневные (полосой) + записи без времени (чипом в своём дне)
+  var untimedAll = single.filter(function(a){ return aptMinutes_(a.time) == null; });
+  var spans = multi.map(function(a){
+    var s = dmyToDate(a.date), e = dmyToDate(a.endDate); if (!s || !e) return '';
+    var si = Math.max(0, Math.round((s - mon0) / 86400000)), ei = Math.min(6, Math.round((e - mon0) / 86400000));
+    if (ei < 0 || si > 6 || ei < si) return '';
+    var color = serviceColor(a.service);
+    var st = a.workState === 'inwork' ? ' <span class="apt-state apt-state-work">в работе</span>'
+           : a.workState === 'done'   ? ' <span class="apt-state apt-state-done">выполнено</span>' : '';
+    return '<div class="apt-wk-span" style="grid-column:' + (si+1) + ' / ' + (ei+2) + ';background:' + hexToRgba_(color, 0.18) + ';border-left:3px solid ' + color + '" ' +
+      'onclick="openEditAppointment(\'' + a.id + '\')" title="' + (a.service||'') + '"><b>' + (a.client||'—') + '</b> · ' + (a.service||'') + st + '</div>';
+  }).join('') +
+  untimedAll.map(function(a){
+    var s = dmyToDate(a.date); if (!s) return '';
+    var di = Math.round((s - mon0) / 86400000); if (di < 0 || di > 6) return '';
+    var color = serviceColor(a.service);
+    return '<div class="apt-wk-span" style="grid-column:' + (di+1) + ' / ' + (di+2) + ';background:' + hexToRgba_(color, 0.18) + ';border-left:3px solid ' + color + '" ' +
+      'onclick="openEditAppointment(\'' + a.id + '\')" title="Без времени — откройте и задайте время">⏱ <b>' + (a.client||'—') + '</b></div>';
+  }).join('');
+  var allDayRow = (multi.length || untimedAll.length)
+    ? '<div class="apt-wkcal-alldayrow"><div class="apt-wkcal-corner apt-wkcal-corner-label">без<br>времени</div><div class="apt-wkcal-spans">' + spans + '</div></div>'
+    : '';
+
+  // шкала времени + линии
+  var gutter = '', lines = '';
+  for (var h = startH; h <= endH; h++) {
+    var top = (h - startH) * HH;
+    gutter += '<div class="apt-hour-label" style="top:' + top + 'px">' + aptPad_(h) + ':00</div>';
+    if (h < endH) lines += '<div class="apt-hour-line" style="top:' + top + 'px"></div>';
+  }
+
+  // колонки дней с блоками
+  var cols = '';
+  for (var d = 0; d < 7; d++) {
+    var dday = new Date(mon0.getFullYear(), mon0.getMonth(), mon0.getDate() + d);
+    var ddmy = aptFmtDmy(dday);
+    var appts = single.filter(function(a){ return a.date === ddmy && aptMinutes_(a.time) != null; });
+    appts.forEach(function(a){ a._s = aptMinutes_(a.time); a._e = Math.max(a._s + 15, endMin(a)); });
+    appts.sort(function(a,b){ return a._s - b._s || a._e - b._e; });
+    aptLayoutLanes_(appts);
+    var blocks = appts.map(function(a){ return aptWkBlockHtml_(a, gridStart, HH); }).join('');
+    var nowLine = '';
+    if (ddmy === todayDmy) { var nm = new Date().getHours()*60 + new Date().getMinutes(); if (nm >= gridStart && nm <= endH*60) nowLine = '<div class="apt-now-line" style="top:' + ((nm-gridStart)/60*HH) + 'px"></div>'; }
+    cols += '<div class="apt-wkcal-col" data-date="' + aptFmtIso(dday) + '" style="left:' + (d*100/7) + '%;width:' + (100/7) + '%" onclick="aptWkColClick(event, this)">' + nowLine + blocks + '</div>';
+  }
+
+  wrap.innerHTML =
+    '<div class="apt-wkcal">' +
+      '<div class="apt-wkcal-headrow"><div class="apt-wkcal-corner"></div><div class="apt-wkcal-heads">' + heads + '</div></div>' +
+      allDayRow +
+      '<div class="apt-wkcal-bodyrow" style="height:' + totalH + 'px">' +
+        '<div class="apt-wkcal-timegutter">' + gutter + '</div>' +
+        '<div class="apt-wkcal-track">' + lines + cols + '</div>' +
+      '</div>' +
+    '</div>';
+
+  var wtrack = wrap.querySelector('.apt-wkcal-track');
+  if (wtrack) wtrack.addEventListener('mousedown', aptWkMouseDown_);
 }
 
 // клик по заголовку дня в неделе → перейти в дневной вид этого дня
@@ -605,72 +879,351 @@ function aptAddOnDay(iso) {
   openNewAppointment();
 }
 
-function renderAppointments() {
-  var tbody  = document.getElementById('apt-tbody');
-  var footer = document.getElementById('apt-footer');
-  if (!tbody) return;
-  var list = App._apts || [];
+// Цвет услуги (из каталога, иначе — стабильный из палитры по имени)
+function serviceColor(name) {
+  var svcs = (App.config && App.config.services) || [];
+  for (var i = 0; i < svcs.length; i++) { if (svcs[i].name === name && svcs[i].color) return svcs[i].color; }
+  var pal = ['#4da6ff','#9b59b6','#f0a500','#1abc9c','#e67e22','#5cb85c','#d9534f','#6c8ebf','#e84393','#00b894'];
+  var h = 0, s = String(name || '');
+  for (var j = 0; j < s.length; j++) h = (h * 31 + s.charCodeAt(j)) >>> 0;
+  return pal[h % pal.length];
+}
+function hexToRgba_(hex, a) {
+  var h = hex6_(hex).slice(1);
+  return 'rgba(' + parseInt(h.slice(0,2),16) + ',' + parseInt(h.slice(2,4),16) + ',' + parseInt(h.slice(4,6),16) + ',' + a + ')';
+}
+function aptMinutes_(t) {
+  var m = String(t || '').match(/^(\d{1,2}):(\d{2})/);
+  return m ? (+m[1]) * 60 + (+m[2]) : null;
+}
 
-  // KPI
+// KPI для дня/недели (используется обоими видами)
+function renderAptKpis_(list) {
   var k = function(id, v){ var e = document.getElementById(id); if (e) e.textContent = v; };
-  var planned = list.filter(function(a){ return a.status === 'Запланирована'; }).length;
-  var came    = list.filter(function(a){ return a.status === 'Пришёл'; }).length;
   k('apt-kpi-count', list.length);
-  k('apt-kpi-planned', planned);
-  k('apt-kpi-came', came);
-  // занятость мастеров — сумма минут по активным (не отменённым) записям
+  k('apt-kpi-planned', list.filter(function(a){ return a.status === 'Запланирована'; }).length);
+  k('apt-kpi-came', list.filter(function(a){ return a.status === 'Пришёл'; }).length);
   var byMaster = {};
-  list.forEach(function(a){
-    if (a.status === 'Отменена') return;
-    var m = a.master || '—';
-    byMaster[m] = (byMaster[m] || 0) + (Number(a.duration) || 0);
-  });
-  var masters = Object.keys(byMaster);
-  k('apt-kpi-masters', masters.length
-    ? masters.map(function(m){ return m + ' · ' + Math.round(byMaster[m]/60*10)/10 + 'ч'; }).join(', ')
-    : '—');
+  list.forEach(function(a){ if (a.status === 'Отменена') return; var m = a.master || '—'; byMaster[m] = (byMaster[m]||0) + (Number(a.duration)||0); });
+  var mk = Object.keys(byMaster);
+  k('apt-kpi-masters', mk.length ? mk.map(function(m){ return m + ' · ' + Math.round(byMaster[m]/60*10)/10 + 'ч'; }).join(', ') : '—');
+}
+
+// Дневной вид — календарь-сетка по времени (как Google Calendar)
+function renderAptDayCalendar() {
+  var cal    = document.getElementById('apt-cal');
+  var footer = document.getElementById('apt-footer');
+  if (!cal) return;
+  var list = aptUniq_(App._apts);
+  renderAptKpis_(list);
 
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:28px;color:var(--text2)">На этот день записей нет. <a href="#" onclick="openNewAppointment();return false" style="color:var(--accent)">Добавить запись</a></td></tr>';
+    cal.innerHTML = '<div style="text-align:center;padding:40px 12px;color:var(--text2)">На этот день записей нет. ' +
+      '<a href="#" onclick="openNewAppointment();return false" style="color:var(--accent)">Добавить запись</a></div>';
     if (footer) footer.textContent = '';
     return;
   }
 
-  tbody.innerHTML = list.map(function(a){
-    var meta = APT_STATUS_META[a.status] || APT_STATUS_META['Запланирована'];
-    var cancelled = a.status === 'Отменена';
-    var badge = '<span class="apt-badge ' + meta.cls + '">' + a.status + '</span>';
-    var orderLink = a.orderId ? ' <span style="font-size:10px;color:var(--text3)">→' + a.orderId + '</span>' : '';
-    var acts = '';
-    if (a.status === 'Запланирована') {
-      acts += '<button class="apt-act" style="background:var(--green-soft);color:var(--success)" onclick="aptSetStatus(\'' + a.id + '\',\'Пришёл\')" title="Отметить приход">Пришёл</button>';
-      acts += '<button class="apt-act" style="background:var(--bg-card2);color:var(--text2)" onclick="aptSetStatus(\'' + a.id + '\',\'Отменена\')" title="Отменить">✕</button>';
+  // Разделяем: многодневные (полоса сверху) и однодневные (блоки в сетке)
+  var multiDay = list.filter(function(a){ return a.endDate && a.endDate !== a.date; });
+  var dayList  = list.filter(function(a){ return !(a.endDate && a.endDate !== a.date); });
+
+  // Длительность блока: по времени окончания (если есть), иначе по «Длительность»
+  var aptEndMin_ = function(a){
+    var s = aptMinutes_(a.time);
+    if (a.endTime && a.endDate === a.date) { var em = aptMinutes_(a.endTime); if (em != null && em > s) return em; }
+    return s + (Number(a.duration) || 60);
+  };
+
+  // Диапазон часов сетки: по записям, но не уже 8–20
+  var HH = 58;                       // высота часа, px
+  var minStart = 8 * 60, maxEnd = 20 * 60;
+  dayList.forEach(function(a){
+    var s = aptMinutes_(a.time); if (s == null) return;
+    minStart = Math.min(minStart, s);
+    maxEnd   = Math.max(maxEnd, aptEndMin_(a));
+  });
+  var startH = Math.max(6, Math.floor(minStart / 60));
+  var endH   = Math.min(23, Math.ceil(maxEnd / 60));
+  var gridStart = startH * 60;
+  var totalH = (endH - startH) * HH;
+
+  // Раскладка по колонкам при пересечении
+  var timed = dayList.filter(function(a){ return aptMinutes_(a.time) != null; });
+  timed.forEach(function(a){ a._s = aptMinutes_(a.time); a._e = Math.max(a._s + 15, aptEndMin_(a)); });
+  timed.sort(function(a,b){ return a._s - b._s || a._e - b._e; });
+  var cluster = [], clEnd = -1;
+  var layout = function(cl){
+    var lanes = [];
+    cl.forEach(function(a){
+      var placed = false;
+      for (var i = 0; i < lanes.length; i++) { if (a._s >= lanes[i]) { a._col = i; lanes[i] = a._e; placed = true; break; } }
+      if (!placed) { a._col = lanes.length; lanes.push(a._e); }
+    });
+    cl.forEach(function(a){ a._cols = lanes.length; });
+  };
+  timed.forEach(function(a){
+    if (cluster.length && a._s >= clEnd) { layout(cluster); cluster = []; clEnd = -1; }
+    cluster.push(a); clEnd = Math.max(clEnd, a._e);
+  });
+  if (cluster.length) layout(cluster);
+
+  // Часовые линии + подписи
+  var gutter = '', gridlines = '';
+  for (var h = startH; h <= endH; h++) {
+    var top = (h - startH) * HH;
+    gutter    += '<div class="apt-hour-label" style="top:' + top + 'px">' + aptPad_(h) + ':00</div>';
+    if (h < endH) gridlines += '<div class="apt-hour-line" style="top:' + top + 'px"></div>';
+  }
+
+  // Блоки записей
+  var blocks = timed.map(function(a){ return aptBlockHtml_(a, gridStart, HH); }).join('');
+
+  // Линия «сейчас» (если открыт сегодняшний день)
+  var nowLine = '';
+  if (aptFmtDmy(App._aptDate) === aptFmtDmy(new Date())) {
+    var nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+    if (nowMin >= gridStart && nowMin <= endH * 60) {
+      nowLine = '<div class="apt-now-line" style="top:' + ((nowMin - gridStart) / 60 * HH) + 'px"></div>';
+    }
+  }
+
+  // Полоса многодневных записей — сверху над сеткой
+  // Сверху: многодневные + записи без времени (чтобы были видны и редактируемы)
+  var untimedDay = dayList.filter(function(a){ return aptMinutes_(a.time) == null; });
+  var allDay = '';
+  if (multiDay.length || untimedDay.length) {
+    var bar = function(a, note){
+      var color = serviceColor(a.service);
+      var st = a.workState === 'inwork' ? ' <span class="apt-state apt-state-work">в работе</span>'
+             : a.workState === 'done'   ? ' <span class="apt-state apt-state-done">выполнено</span>' : '';
+      return '<div class="apt-allday-bar" style="background:' + hexToRgba_(color, 0.18) + ';border-left:3px solid ' + color + '" ' +
+        'onclick="openEditAppointment(\'' + a.id + '\')" title="' + (a.service||'') + '">' +
+        '<button class="apt-block-del" title="Удалить" onclick="event.stopPropagation();aptDelete(\'' + a.id + '\')">✕</button>' +
+        '<b>' + (a.client || '—') + '</b> · ' + (a.service || '') + st +
+        '<span class="apt-allday-range">' + note + '</span>' +
+      '</div>';
+    };
+    allDay = '<div class="apt-allday">' +
+      multiDay.map(function(a){ return bar(a, (a.date||'') + ' ' + (a.time||'') + ' → ' + (a.endDate||'') + ' ' + (a.endTime||'')); }).join('') +
+      untimedDay.map(function(a){ return bar(a, '⏱ без времени — задайте время'); }).join('') +
+    '</div>';
+  }
+
+  cal.innerHTML = allDay +
+    '<div class="apt-cal-grid" style="height:' + totalH + 'px">' +
+      '<div class="apt-cal-gutter">' + gutter + '</div>' +
+      '<div class="apt-cal-track">' + gridlines + nowLine + blocks + '</div>' +
+    '</div>';
+  if (footer) footer.textContent = 'Всего записей: ' + list.length + ' · тяните запись для переноса, за нижний край — длительность, клик по пустому месту — новая';
+
+  // параметры сетки для перетаскивания/растягивания
+  App._aptCal = { gridStart: gridStart, HH: HH };
+  var track = cal.querySelector('.apt-cal-track');
+  if (track) {
+    track.addEventListener('mousedown', aptCalMouseDown_);
+    track.addEventListener('click', aptCalClickEmpty_);   // клик по пустому месту = новая запись
+  }
+}
+
+// Клик по свободной области сетки → создать запись на это время
+function aptCalClickEmpty_(e) {
+  if (App._aptSuppressClick) return;                     // не создаём сразу после перетаскивания
+  if (e.target.closest('.apt-block')) return;            // клик по записи — не сюда
+  var cal = App._aptCal; if (!cal) return;
+  var rect = e.currentTarget.getBoundingClientRect();
+  var y = e.clientY - rect.top;
+  var mins = cal.gridStart + Math.round((y / cal.HH * 60) / 15) * 15;
+  mins = Math.max(0, Math.min(23 * 60 + 45, mins));
+  aptCreateAt_(aptPad_(Math.floor(mins / 60)) + ':' + aptPad_(mins % 60));
+}
+function aptCreateAt_(time) {
+  openNewAppointment();
+  var t = document.getElementById('apt-f-time');
+  if (t) t.value = time;
+  var et = document.getElementById('apt-f-endtime');
+  if (et) et.value = aptAddMin_(time, 60);
+}
+// Прибавить минуты к 'HH:mm' в пределах суток
+function aptAddMin_(time, mins) {
+  var m = String(time || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return time || '';
+  var v = Math.min(23 * 60 + 59, (+m[1]) * 60 + (+m[2]) + (Number(mins) || 0));
+  return ('0' + Math.floor(v / 60)).slice(-2) + ':' + ('0' + (v % 60)).slice(-2);
+}
+// Автозаполнение окончания: пустая дата окончания → = дате начала; пустое/раннее время → начало+1ч
+function aptSyncEndDefaults_() {
+  var sd = document.getElementById('apt-f-date').value;
+  var st = document.getElementById('apt-f-time').value;
+  var edEl = document.getElementById('apt-f-enddate');
+  var etEl = document.getElementById('apt-f-endtime');
+  if (edEl && !edEl.value && sd) edEl.value = sd;
+  if (etEl && !etEl.value && st) etEl.value = aptAddMin_(st, 60);
+}
+
+// Перетаскивание (перенос по времени) и растягивание (длительность) записи мышью
+function aptCalMouseDown_(e) {
+  if (e.button !== 0) return;
+  var block = e.target.closest('.apt-block');
+  if (!block) return;
+  if (e.target.closest('.apt-block-acts') || e.target.classList.contains('apt-block-del')) return;   // клики по кнопкам не тянут
+  var cal = App._aptCal; if (!cal) return;
+  if (App._aptDragCleanup) App._aptDragCleanup();   // добить залипший предыдущий drag
+  var track = block.closest('.apt-cal-track');
+  var id = block.getAttribute('data-id');
+  var isResize = e.target.classList.contains('apt-block-resize') && block.offsetHeight > 34;
+  e.preventDefault();
+
+  var HH = cal.HH, moved = false, ghost = null;
+  var trackRect = track ? track.getBoundingClientRect() : null;
+  var blockRect = block.getBoundingClientRect();
+  var offX = e.clientX - blockRect.left, offY = e.clientY - blockRect.top, w = blockRect.width, h0 = blockRect.height;
+  var origH = parseFloat(block.style.height) || 26;
+  var startX = e.clientX, startY = e.clientY;
+
+  var onMove = function(ev) {
+    if (!moved && (Math.abs(ev.clientY - startY) > 3 || Math.abs(ev.clientX - startX) > 3)) moved = true;
+    if (!moved) return;
+    if (isResize) {   // растягивание — высота самого блока
+      block.style.zIndex = 8;
+      block.style.height = Math.max(HH * 0.25, origH + (ev.clientY - startY)) + 'px';
+    } else {          // перенос — призрак-клон, реальные записи не трогаем
+      if (!ghost) {
+        ghost = block.cloneNode(true);
+        ghost.classList.add('apt-dragging');
+        ghost.style.position = 'fixed'; ghost.style.left = '0'; ghost.style.top = '0';
+        ghost.style.width = w + 'px'; ghost.style.height = h0 + 'px';
+        ghost.style.margin = '0'; ghost.style.pointerEvents = 'none'; ghost.style.zIndex = '9999';
+        document.body.appendChild(ghost);
+        block.style.opacity = '0.35';
+      }
+      ghost.style.transform = 'translate(' + (ev.clientX - offX) + 'px,' + (ev.clientY - offY) + 'px)';
+    }
+  };
+  var cleanup = function() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    if (ghost) { ghost.remove(); ghost = null; }
+    block.style.opacity = '';
+    App._aptDragCleanup = null;
+  };
+  var onUp = function(ev) {
+    cleanup();
+    if (!moved) { openEditAppointment(id); return; }   // без движения = клик
+    App._aptSuppressClick = true; setTimeout(function(){ App._aptSuppressClick = false; }, 0);
+    if (isResize) {
+      var h = parseFloat(block.style.height);
+      aptCommitTimeChange_(id, null, Math.max(15, Math.round((h / HH * 60) / 15) * 15));
     } else {
-      acts += '<button class="apt-act" style="background:var(--bg-card2);color:var(--text2)" onclick="aptSetStatus(\'' + a.id + '\',\'Запланирована\')" title="Вернуть в план">↩</button>';
+      var topRel = trackRect ? ((ev.clientY - offY) - trackRect.top) : 0;
+      var mins = cal.gridStart + Math.round((topRel / HH * 60) / 15) * 15;
+      mins = Math.max(0, Math.min(23 * 60 + 45, mins));
+      aptCommitTimeChange_(id, aptPad_(Math.floor(mins / 60)) + ':' + aptPad_(mins % 60), null);
     }
-    if (!cancelled && !a.orderId) {
-      acts += '<button class="apt-act" style="background:rgba(0,184,212,.14);color:var(--accent)" onclick="orderFromAppointment(\'' + a.id + '\')" title="Создать заказ из записи">→ Заказ</button>';
-    }
-    acts += '<button class="apt-act" style="background:var(--bg-card2);color:var(--text)" onclick="openEditAppointment(\'' + a.id + '\')" title="Редактировать">✎</button>';
-    acts += '<button class="apt-act" style="background:var(--red-soft);color:var(--danger)" onclick="aptDelete(\'' + a.id + '\')" title="Удалить">🗑</button>';
-    var rowStyle = cancelled ? 'opacity:.55;text-decoration:line-through' : '';
-    return '<tr style="' + rowStyle + '">' +
-      '<td style="font-weight:700">' + (a.time || '—') + '<div style="font-size:10px;color:var(--text3);font-weight:400">' + (a.duration || 60) + ' мин</div></td>' +
-      '<td><div style="font-weight:500">' + (a.client || '—') + orderLink + '</div>' + (a.phone ? '<div style="font-size:11px;color:var(--text3)">' + a.phone + '</div>' : '') + '</td>' +
-      '<td style="font-size:12px;color:var(--text2)">' + (a.car || '—') + '</td>' +
-      '<td style="font-size:13px">' + (a.service || '—') + '</td>' +
-      '<td style="font-size:13px">' + (a.master || '<span style="color:var(--text3)">не назначен</span>') + '</td>' +
-      '<td style="text-align:center">' + badge + '</td>' +
-      '<td style="text-align:center;white-space:nowrap">' + acts + '</td>' +
-    '</tr>';
-  }).join('');
-  if (footer) footer.textContent = 'Всего записей: ' + list.length;
+  };
+  App._aptDragCleanup = cleanup;
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+}
+
+// Сохранить новое время/длительность записи (оптимистично + сервер)
+function aptCommitTimeChange_(id, time, duration) {
+  var a = (App._apts || []).find(function(x){ return String(x.id) === String(id); });
+  if (!a) return;
+  if (time != null)     a.time = time;
+  if (duration != null) a.duration = duration;
+  // однодневная запись: пересчитываем окончание из начала + длительности
+  var dur = Number(a.duration) || 60;
+  a.endDate = a.date;
+  a.endTime = aptAddMin_(a.time, dur);
+  var patch = { time: a.time, duration: dur, endDate: a.endDate, endTime: a.endTime };
+  renderAptDayCalendar();   // мгновенная перерисовка «начисто» (с привязкой к сетке)
+  // Сохраняем в фоне; при ошибке НЕ откатываем (без «возвратов назад»), только предупреждаем
+  google.script.run
+    .withSuccessHandler(function(resp){ if (!resp || !resp.ok) toast('Не сохранилось: ' + (resp ? resp.error : ''), 'error'); })
+    .withFailureHandler(function(e){ toast('Не сохранилось: ' + e.message, 'error'); })
+    .updateAppointment(id, patch);
+}
+
+// HTML одного блока записи в календаре
+function aptBlockHtml_(a, gridStart, HH) {
+  var color     = serviceColor(a.service);
+  var cancelled = a.status === 'Отменена';
+  var top    = (a._s - gridStart) / 60 * HH;
+  var height = Math.max(26, (a._e - a._s) / 60 * HH - 3);
+  var wPct   = 100 / (a._cols || 1);
+  var leftPct = (a._col || 0) * wPct;
+
+  // Метка состояния: перенесён в воронку → «в работе», оплачен → «выполнено»
+  var stateCls = '', stateBadge = '';
+  if (a.workState === 'inwork') { stateCls = ' apt-block-inwork'; stateBadge = '<span class="apt-state apt-state-work">в работе</span>'; }
+  else if (a.workState === 'done') { stateCls = ' apt-block-done'; stateBadge = '<span class="apt-state apt-state-done">выполнено</span>'; }
+  if (cancelled) stateCls += ' apt-block-cancel';
+
+  // Кнопки (видны при наведении)
+  var btns = '';
+  if (!cancelled && a.workState === 'none') {
+    btns += '<button class="apt-block-btn" title="Перенести в воронку" onclick="event.stopPropagation();aptFunnelMenu(event,\'' + a.id + '\')">→ воронка</button>';
+  } else if (a.orderId) {
+    btns += '<button class="apt-block-btn" title="Открыть заказ" onclick="event.stopPropagation();openOrderCard(\'' + a.orderId + '\')">' + a.orderId + '</button>';
+  }
+
+  var movable = (!cancelled);   // отменённые не двигаем
+  return '<div class="apt-block' + stateCls + '" data-id="' + a.id + '" style="top:' + top + 'px;height:' + height + 'px;left:calc(' + leftPct + '% + 2px);width:calc(' + wPct + '% - 4px);' +
+      'background:' + hexToRgba_(color, 0.16) + ';border-left:3px solid ' + color + (movable ? ';cursor:grab' : '') + '"' +
+      ' title="' + String(a.service||'').replace(/"/g,'') + ' · ' + String(a.master||'').replace(/"/g,'') + ' (тяните — перенос, за низ — длительность)">' +
+      '<button class="apt-block-del" title="Удалить запись" onclick="event.stopPropagation();aptDelete(\'' + a.id + '\')">✕</button>' +
+      '<div class="apt-block-time">' + (a.time || '') + (stateBadge || '') + '</div>' +
+      '<div class="apt-block-client">' + (a.client || '—') + '</div>' +
+      '<div class="apt-block-meta">' + (a.service || '') + (a.master ? ' · ' + a.master : '') + '</div>' +
+      '<div class="apt-block-acts">' + btns + '</div>' +
+      (movable ? '<div class="apt-block-resize" title="Растянуть по длительности"></div>' : '') +
+    '</div>';
+}
+
+// Меню выбора воронки при переносе записи
+function aptFunnelMenu(ev, aptId) {
+  closeAptMenu_();
+  var menu = document.createElement('div');
+  menu.className = 'apt-funnel-menu';
+  menu.id = 'apt-funnel-menu';
+  menu.innerHTML = '<div class="apt-funnel-head">Перенести в воронку:</div>' +
+    orderStatusList().filter(function(s){ return !s.cancelled; }).map(function(s){
+      return '<button class="apt-funnel-item" onclick="aptTransferToFunnel(\'' + aptId + '\',\'' + String(s.name).replace(/'/g,"\\'") + '\')">' +
+        '<span class="apt-funnel-dot" style="background:' + hex6_(s.color) + '"></span>' + s.name + '</button>';
+    }).join('');
+  document.body.appendChild(menu);
+  var x = Math.min(ev.clientX, window.innerWidth - 210);
+  var y = Math.min(ev.clientY, window.innerHeight - 40 - menu.offsetHeight);
+  menu.style.left = Math.max(8, x) + 'px';
+  menu.style.top  = Math.max(8, y) + 'px';
+  setTimeout(function(){ document.addEventListener('click', closeAptMenu_, { once: true }); }, 0);
+}
+function closeAptMenu_() { var m = document.getElementById('apt-funnel-menu'); if (m) m.remove(); }
+
+function aptTransferToFunnel(aptId, statusName) {
+  closeAptMenu_();
+  toast('Переносим в воронку…', 'info');
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : 'нет ответа'), 'error'); return; }
+      App.orders = []; App._dashCache = null; App._debtCache = null;   // появился новый заказ
+      toast('✅ Перенесено в «' + statusName + '». Заполните заказ.', 'success');
+      loadAppointments(true);
+      if (resp.data && resp.data.orderId) openOrderCard(resp.data.orderId);   // сразу открываем заказ
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .createOrderFromAppointment(aptId, statusName);
 }
 
 function aptShift(delta) {
   if (!App._aptDate) App._aptDate = new Date();
-  var step = App._aptView === 'week' ? 7 : 1;
-  App._aptDate = new Date(App._aptDate.getFullYear(), App._aptDate.getMonth(), App._aptDate.getDate() + delta * step);
+  var d = App._aptDate;
+  if (App._aptView === 'month') App._aptDate = new Date(d.getFullYear(), d.getMonth() + delta, 1);
+  else {
+    var step = App._aptView === 'week' ? 7 : 1;
+    App._aptDate = new Date(d.getFullYear(), d.getMonth(), d.getDate() + delta * step);
+  }
   loadAppointments(true);
 }
 function aptGoToday() { App._aptDate = new Date(); loadAppointments(true); }
@@ -737,7 +1290,8 @@ function openNewAppointment() {
   document.getElementById('apt-id').value = '';
   document.getElementById('apt-f-date').value = aptFmtIso(App._aptDate || new Date());
   document.getElementById('apt-f-time').value = '';
-  document.getElementById('apt-f-duration').value = 60;
+  document.getElementById('apt-f-enddate').value = aptFmtIso(App._aptDate || new Date());
+  document.getElementById('apt-f-endtime').value = '';
   document.getElementById('apt-f-client').value = '';
   document.getElementById('apt-f-phone').value = '';
   document.getElementById('apt-f-car').value = '';
@@ -752,6 +1306,7 @@ function openNewAppointment() {
   }
   aptFillFormLists();
   document.getElementById('apt-f-master').value = '';
+  var acts = document.getElementById('apt-edit-actions'); if (acts) acts.style.display = 'none';
   openModal('modal-appointment');
 }
 
@@ -764,7 +1319,9 @@ function openEditAppointment(id) {
   var d = a.date ? a.date.split('.') : null;
   document.getElementById('apt-f-date').value = (d && d.length === 3) ? (d[2]+'-'+d[1]+'-'+d[0]) : aptFmtIso(App._aptDate || new Date());
   document.getElementById('apt-f-time').value = a.time || '';
-  document.getElementById('apt-f-duration').value = a.duration || 60;
+  var ed = (a.endDate || a.date || '').split('.');
+  document.getElementById('apt-f-enddate').value = (ed.length === 3) ? (ed[2]+'-'+ed[1]+'-'+ed[0]) : (d && d.length===3 ? (d[2]+'-'+d[1]+'-'+d[0]) : '');
+  document.getElementById('apt-f-endtime').value = a.endTime || (a.time ? aptAddMin_(a.time, a.duration || 60) : '');
   document.getElementById('apt-f-client').value = a.client || '';
   document.getElementById('apt-f-phone').value = a.phone || '';
   document.getElementById('apt-f-car').value = a.car || '';
@@ -772,6 +1329,28 @@ function openEditAppointment(id) {
   document.getElementById('apt-f-comment').value = a.comment || '';
   aptFillFormLists();
   document.getElementById('apt-f-master').value = a.master || '';
+
+  // Блок действий (статусы / перенос / удаление) — только в режиме редактирования
+  var actions = document.getElementById('apt-edit-actions');
+  if (actions) {
+    var cancelled = a.status === 'Отменена';
+    var b = [];
+    var mk = function(txt, style, call){ return '<button class="apt-act" style="' + style + '" onclick="closeModal(\'modal-appointment\');' + call + '">' + txt + '</button>'; };
+    if (a.status === 'Запланирована') {
+      b.push(mk('✓ Пришёл', 'background:var(--green-soft);color:var(--success)', 'aptSetStatus(\'' + a.id + '\',\'Пришёл\')'));
+      b.push(mk('✕ Отменить', 'background:var(--bg-card2);color:var(--text2)', 'aptSetStatus(\'' + a.id + '\',\'Отменена\')'));
+    } else {
+      b.push(mk('↩ В план', 'background:var(--bg-card2);color:var(--text2)', 'aptSetStatus(\'' + a.id + '\',\'Запланирована\')'));
+    }
+    if (!cancelled && a.workState === 'none') {
+      b.push(mk('→ В воронку', 'background:var(--accent);color:#fff', 'aptFunnelMenu(event,\'' + a.id + '\')'));
+    } else if (a.orderId) {
+      b.push(mk('Открыть заказ ' + a.orderId, 'background:var(--bg-card2);color:var(--text)', 'openOrderCard(\'' + a.orderId + '\')'));
+    }
+    b.push(mk('🗑 Удалить', 'background:var(--red-soft);color:var(--danger)', 'aptDelete(\'' + a.id + '\')'));
+    actions.innerHTML = b.join('');
+    actions.style.display = 'flex';
+  }
   openModal('modal-appointment');
 }
 
@@ -779,10 +1358,26 @@ function submitAppointment() {
   var id = document.getElementById('apt-id').value;
   var isoDate = document.getElementById('apt-f-date').value;
   var d = aptParseIso(isoDate);
+  var endIso = document.getElementById('apt-f-enddate').value;
+  var ed = aptParseIso(endIso);
+  var startTime = document.getElementById('apt-f-time').value.trim();
+  var endTime   = document.getElementById('apt-f-endtime').value.trim();
+  var startDmy  = d ? aptFmtDmy(d) : '';
+  var endDmy    = ed ? aptFmtDmy(ed) : startDmy;
+
+  var effEndTime = endTime || (startTime ? aptAddMin_(startTime, 60) : '');
+  // длительность из времён (для однодневной) — чтобы изменения времени отражались даже без колонок окончания
+  var durMin = 60;
+  if (endDmy === startDmy) {
+    var sMin = aptMinutes_(startTime), eMin = aptMinutes_(effEndTime);
+    if (sMin != null && eMin != null && eMin > sMin) durMin = eMin - sMin;
+  }
   var payload = {
-    date:     d ? aptFmtDmy(d) : '',
-    time:     document.getElementById('apt-f-time').value.trim(),
-    duration: Number(document.getElementById('apt-f-duration').value) || 60,
+    date:     startDmy,
+    time:     startTime,
+    endDate:  endDmy,
+    endTime:  effEndTime,
+    duration: durMin,
     client:   document.getElementById('apt-f-client').value.trim(),
     phone:    document.getElementById('apt-f-phone').value.trim(),
     car:      document.getElementById('apt-f-car').value.trim(),
@@ -790,9 +1385,18 @@ function submitAppointment() {
     master:   document.getElementById('apt-f-master').value,
     comment:  document.getElementById('apt-f-comment').value.trim(),
   };
-  if (!payload.date) { toast('Укажите дату', 'error'); return; }
-  if (!payload.time) { toast('Укажите время', 'error'); return; }
-  if (!payload.client) { toast('Укажите клиента', 'error'); return; }
+  var flag = function(elId, msg){
+    var el = document.getElementById(elId);
+    if (el) { el.focus(); el.style.outline = '2px solid var(--danger)'; setTimeout(function(){ el.style.outline = ''; }, 1800); }
+    toast(msg, 'error');
+  };
+  if (!payload.date)   { flag('apt-f-date', 'Укажите дату'); return; }
+  if (!payload.time)   { flag('apt-f-time', 'Укажите время начала'); return; }
+  if (!payload.client) { flag('apt-f-client', 'Укажите клиента (обязательное поле)'); return; }
+  // Окончание не раньше начала
+  var sKey = payload.date.split('.').reverse().join('') + (payload.time.replace(':',''));
+  var eKey = payload.endDate.split('.').reverse().join('') + (payload.endTime.replace(':',''));
+  if (eKey < sKey) { toast('Окончание не может быть раньше начала', 'error'); return; }
 
   var btn = document.getElementById('apt-f-submit');
   if (btn) { btn.disabled = true; btn.textContent = '...'; }
@@ -801,10 +1405,31 @@ function submitAppointment() {
     if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); if (btn) btn.textContent = id ? 'Сохранить' : 'Создать запись'; return; }
     toast(id ? 'Запись обновлена' : 'Запись создана', 'success');
     closeModal('modal-appointment');
-    // если сохранили на просматриваемый день — перезагрузим; иначе перейдём на день записи
-    var savedDate = aptParseIso(isoDate);
-    if (savedDate) App._aptDate = savedDate;
-    loadAppointments(true);
+
+    // Обновляем локально — БЕЗ полной перезагрузки, чтобы не терять текущий вид
+    var saved = resp.data;
+    App._apts = App._apts || [];
+    if (id) {
+      for (var i = 0; i < App._apts.length; i++) {
+        if (String(App._apts[i].id) === String(id)) {
+          ['date','time','endDate','endTime','duration','client','phone','car','service','master','comment'].forEach(function(k){
+            if (saved && saved[k] !== undefined) App._apts[i][k] = saved[k];
+          });
+          break;
+        }
+      }
+    } else if (saved) {
+      App._apts.push(saved);
+    }
+
+    // Если запись в текущем периоде — просто перерисуем; иначе перейдём к её дате
+    if (aptDateInView_(payload.date)) {
+      aptRerender_();
+      renderAptKpis_(App._apts);
+    } else {
+      var sd = aptParseIso(isoDate); if (sd) App._aptDate = sd;
+      loadAppointments(true);
+    }
   };
   var fail = function(e){ if (btn) { btn.disabled = false; btn.textContent = id ? 'Сохранить' : 'Создать запись'; } toast('Ошибка: ' + e.message, 'error'); };
 
@@ -813,35 +1438,113 @@ function submitAppointment() {
   else r.createAppointment(payload);
 }
 
+// Перерисовать записи текущего вида из App._apts (без запроса к серверу)
+function aptRerender_() {
+  if (App._aptView === 'week') renderAptWeek(aptWeekRange(App._aptDate));
+  else if (App._aptView === 'month') renderAptMonth(aptMonthGrid(App._aptDate));
+  else renderAptDayCalendar();
+}
+
+// Левая легенда услуг с выбором цвета (как «Мои календари» в Google Calendar)
+function renderAptLegend() {
+  var box = document.getElementById('apt-legend');
+  if (!box) return;
+  var svcs = ((App.config && App.config.services) || []).filter(function(s){ return s.active !== false; });
+  if (!svcs.length) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="apt-legend-title">Услуги — цвета</div>' +
+    svcs.map(function(s){
+      var color = hex6_(s.color || serviceColor(s.name));
+      return '<div class="apt-legend-item">' +
+        '<input type="color" class="apt-legend-color" value="' + color + '" title="Сменить цвет услуги" onchange="aptLegendColor(\'' + String(s.code||'').replace(/'/g,"\\'") + '\', this.value)">' +
+        '<span class="apt-legend-name" title="' + (s.name||'') + '">' + (s.name || '') + '</span>' +
+      '</div>';
+    }).join('') +
+    '<div class="apt-legend-hint">Цвет услуги = цвет записи в календаре</div>';
+}
+// Сменить цвет услуги из легенды — мгновенно перекрасить + сохранить каталог
+function aptLegendColor(code, color) {
+  var svcs = (App.config && App.config.services) || [];
+  var found = false;
+  for (var i = 0; i < svcs.length; i++) { if (String(svcs[i].code) === String(code)) { svcs[i].color = color; found = true; break; } }
+  if (!found) return;
+  aptRerender_();          // мгновенно перекрасить записи
+  renderAptLegend();
+  var list = svcs.map(function(s){
+    return { code: s.code, name: s.name, icon: s.icon, color: s.color, active: s.active,
+             contractPrefix: s.contractPrefix, calcType: s.calcType, bonusPoolPct: s.bonusPoolPct, managerBonusPct: s.managerBonusPct };
+  });
+  google.script.run
+    .withSuccessHandler(function(resp){ if (resp && resp.ok && App.config) App.config.services = resp.data.services; })
+    .withFailureHandler(function(){})
+    .saveServicesCatalog(list);
+}
+
+// Дата (dd.MM.yyyy) попадает в текущий просматриваемый период?
+function aptDateInView_(dmy) {
+  var p = String(dmy||'').split('.'); if (p.length !== 3) return true;
+  var d = new Date(+p[2], +p[1]-1, +p[0]);
+  if (App._aptView === 'week')  { var r = aptWeekRange(App._aptDate); return d >= r.mon && d <= r.sun; }
+  if (App._aptView === 'month') { var g = aptMonthGrid(App._aptDate); return d >= g.start && d <= g.end; }
+  return aptFmtDmy(App._aptDate) === dmy;   // день
+}
+
 function aptSetStatus(id, status) {
   // оптимистично
   var a = (App._apts || []).find(function(x){ return String(x.id) === String(id); });
   var prev = a ? a.status : null;
-  if (a) { a.status = status; renderAppointments(); }
+  if (a) { a.status = status; aptRerender_(); }
   google.script.run
     .withSuccessHandler(function(resp){
-      if (!resp || !resp.ok) { if (a) { a.status = prev; renderAppointments(); } toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); }
+      if (!resp || !resp.ok) { if (a) { a.status = prev; aptRerender_(); } toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); }
     })
-    .withFailureHandler(function(e){ if (a) { a.status = prev; renderAppointments(); } toast('Ошибка: ' + e.message, 'error'); })
+    .withFailureHandler(function(e){ if (a) { a.status = prev; aptRerender_(); } toast('Ошибка: ' + e.message, 'error'); })
     .setAppointmentStatus(id, status);
 }
 
 function aptDelete(id) {
   var a = (App._apts || []).find(function(x){ return String(x.id) === String(id); });
   uiConfirm('Удалить запись' + (a ? ' «' + a.client + ' ' + a.time + '»' : '') + '?', function(){
+    // Оптимистично убираем ТОЛЬКО одну запись и перерисовываем — без перезагрузки грида
+    App._apts = (App._apts || []).filter(function(x){ return String(x.id) !== String(id); });
+    aptRerender_();
+    renderAptKpis_(App._apts);
     google.script.run
       .withSuccessHandler(function(resp){
-        if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+        if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); loadAppointments(true); return; }
         toast('Запись удалена', 'success');
-        loadAppointments(true);
       })
-      .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+      .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); loadAppointments(true); })
       .deleteAppointment(id);
   });
 }
 
 // Создать заказ из записи: открыть форму заказа с предзаполнением; после создания
 // запись привяжется к заказу (App._aptPendingLink обрабатывается в обработчике createOrder).
+// Создать заказ для текущего клиента (кнопка на карточке клиента).
+// Работает и для физ, и для юр — тип и реквизиты подставляются автоматически.
+function newOrderForClient() {
+  var c = App._currentClientObj;
+  if (!c) { toast('Клиент не загружен', 'error'); return; }
+  var vehicles = App._currentClientVehicles || [];
+  App._prefillClient = { client: c, vehicle: vehicles[0] || null };
+  openModal('modal-new-order');
+  toast('Клиент подставлен — выберите услугу и укажите стоимость.', 'info');
+}
+
+// Применить предзаполнение клиента к форме заказа (вызывается в конце initOrderForm,
+// чтобы пережить возможную асинхронную инициализацию формы).
+function applyPrefillClient_(p) {
+  if (!p || !p.client) return;
+  var c = p.client;
+  applyOrderClient(c);   // имя, ID, тип (физ/юр), юр-реквизиты
+  var setVal = function(id, v){ var e = document.getElementById(id); if (e) e.value = v || ''; };
+  setVal('ord-client-phone', c['Телефон']);
+  if (p.vehicle) {
+    setVal('ord-car', ((p.vehicle['Марка'] || '') + ' ' + (p.vehicle['Модель'] || '')).trim());
+    setVal('ord-plate', p.vehicle['Госномер']);
+  }
+}
+
 function orderFromAppointment(aptId) {
   var a = (App._apts || []).find(function(x){ return String(x.id) === String(aptId); });
   if (!a) return;
@@ -1484,6 +2187,8 @@ function openClientCard(id) {
         toast('Ошибка загрузки клиента', 'error');
         return;
       }
+      App._currentClientObj = resp.data.client;
+      App._currentClientVehicles = resp.data.vehicles || [];
       renderClientCard(resp.data.client, resp.data.vehicles);
     })
     .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
@@ -1519,7 +2224,7 @@ function renderClientCard(c, vehicles) {
   }
 
   content.innerHTML =
-    '<div class="client-card-header">' +
+    '<div class="client-card-header" style="display:flex;align-items:center;gap:14px;">' +
       '<div class="team-avatar" style="width:64px;height:64px;font-size:24px;">' +
         (c['Имя']||'').split(' ').slice(0,2).map(function(s){ return s&&s[0]?s[0].toUpperCase():''; }).join('') +
       '</div>' +
@@ -1527,6 +2232,7 @@ function renderClientCard(c, vehicles) {
         '<div style="font-size:20px;font-weight:700;">' + (c['Имя']||'—') + '</div>' +
         '<div style="color:var(--text3);margin-top:4px;">' + (isLegal ? '🏢 Юр. лицо' : '👤 Физ. лицо') + '</div>' +
       '</div>' +
+      '<button class="btn btn-primary" style="margin-left:auto" onclick="newOrderForClient()">+ Создать заказ</button>' +
     '</div>' +
     '<div class="card-grid">' +
       '<div class="info-card">' +
@@ -1542,6 +2248,7 @@ function renderClientCard(c, vehicles) {
         '<div class="info-card-title">Реквизиты</div>' +
         infoRow('УНП', c['УНП']) +
         infoRow('Юр. адрес', c['Юр. адрес']) +
+        infoRow('Почтовый адрес', c['Почтовый адрес']) +
         infoRow('Банк. реквизиты', c['Банк. реквизиты']) +
       '</div>' : '') +
       '<div class="info-card">' +
@@ -1592,6 +2299,7 @@ function openEditClientModal() {
     document.getElementById('edit-cl-director').value = c['Директор'] || '';
     document.getElementById('edit-cl-contact').value = c['Контактное лицо'] || '';
     document.getElementById('edit-cl-address').value = c['Юр. адрес'] || '';
+    document.getElementById('edit-cl-postal').value = c['Почтовый адрес'] || '';
     document.getElementById('edit-cl-bank').value = c['Банк. реквизиты'] || '';
   } else {
     document.getElementById('edit-cl-phys-fields').style.display = 'block';
@@ -1646,6 +2354,7 @@ function submitNewClient() {
     payload.director = document.getElementById('cl-director').value.trim();
     payload.contactPerson = document.getElementById('cl-contact').value.trim();
     payload.legalAddress = document.getElementById('cl-address').value.trim();
+    payload.postalAddress = document.getElementById('cl-postal').value.trim();
     payload.bankDetails = document.getElementById('cl-bank').value.trim();
   } else {
     payload.passport = document.getElementById('cl-passport').value.trim();
@@ -1685,7 +2394,7 @@ function submitNewClient() {
 
       closeModal('modal-new-client');
       ['cl-fio','cl-phone','cl-email','cl-passport','cl-org-name','cl-unp',
-       'cl-legal-phone','cl-legal-email','cl-director','cl-contact','cl-address',
+       'cl-legal-phone','cl-legal-email','cl-director','cl-contact','cl-address','cl-postal',
        'cl-bank','cl-car-brand','cl-car-model','cl-car-plate','cl-car-vin','cl-notes'].forEach(function(id){
         var el = document.getElementById(id);
         if (el) el.value = '';
@@ -1731,6 +2440,7 @@ function submitEditClient() {
     payload.director = document.getElementById('edit-cl-director').value.trim();
     payload.contactPerson = document.getElementById('edit-cl-contact').value.trim();
     payload.legalAddress = document.getElementById('edit-cl-address').value.trim();
+    payload.postalAddress = document.getElementById('edit-cl-postal').value.trim();
     payload.bankDetails = document.getElementById('edit-cl-bank').value.trim();
   } else {
     payload.passport = document.getElementById('edit-cl-passport').value.trim();
@@ -1888,7 +2598,7 @@ function submitNewEmployee() {
       closeModal('modal-new-employee');
       ['emp-fio','emp-phone','emp-email','emp-salary','emp-bonus','emp-notes'].forEach(function(id){var el=document.getElementById(id);if(el)el.value='';});
       document.getElementById('emp-position').value='';
-      if (App.currentPage==='team') loadTeam();
+      App._teamList=[]; if (App.currentPage==='team') loadTeam(true);
     })
     .withFailureHandler(function(e){ if(btn){btn.disabled=false;btn.textContent='Сохранить';}toast('Ошибка: '+e.message,'error'); })
     .createEmployee({fio:fio,phone:document.getElementById('emp-phone').value.trim(),email:document.getElementById('emp-email').value.trim(),position:pos,baseSalary:Number(document.getElementById('emp-salary').value)||0,bonusPct:Number(document.getElementById('emp-bonus').value)||0,notes:document.getElementById('emp-notes').value.trim()});
@@ -1933,7 +2643,7 @@ function submitEditEmployee() {
   var btn = document.getElementById('edit-emp-submit-btn');
   if(btn){btn.disabled=true;btn.textContent='Сохраняем...';}
   google.script.run
-    .withSuccessHandler(function(resp){if(btn){btn.disabled=false;btn.textContent='Сохранить';}if(!resp||!resp.ok){toast('Ошибка: '+(resp?resp.error:''),'error');return;}toast('✅ Обновлено','success');closeModal('modal-edit-employee');if(App.currentPage==='team')loadTeam();})
+    .withSuccessHandler(function(resp){if(btn){btn.disabled=false;btn.textContent='Сохранить';}if(!resp||!resp.ok){toast('Ошибка: '+(resp?resp.error:''),'error');return;}toast('✅ Обновлено','success');closeModal('modal-edit-employee');App._teamList=[];if(App.currentPage==='team')loadTeam(true);})
     .withFailureHandler(function(e){if(btn){btn.disabled=false;btn.textContent='Сохранить';}toast('Ошибка: '+e.message,'error');})
     .updateEmployee(id,{fio:fio,phone:document.getElementById('edit-emp-phone').value.trim(),email:document.getElementById('edit-emp-email').value.trim(),position:pos,baseSalary:Number(document.getElementById('edit-emp-salary').value)||0,bonusPct:Number(document.getElementById('edit-emp-bonus').value)||0,notes:document.getElementById('edit-emp-notes').value.trim()});
 }
@@ -2162,7 +2872,7 @@ function loadOrdersKpi() {
     if (!o['ID']) return;
     totalCount++;
     totalRevenue += Number(o['Стоимость заказа']) || 0;
-    if (o['Статус'] === 'В работе' || o['Статус'] === 'Новый') inWork++;
+    if (!isCancelledStatus(o['Статус']) && !isDoneStatus(o['Статус'])) inWork++;
   });
   var avg = totalCount > 0 ? totalRevenue / totalCount : 0;
   var fmt = function(n){ return Math.round(n).toLocaleString('ru') + ' ' + CUR; };
@@ -2174,8 +2884,26 @@ function loadOrdersKpi() {
   updateOrderTabCounts();
 }
 
+// Вкладки-фильтры по статусам = настраиваемые воронки (+ «Все»). Сохраняет активный фильтр.
+function renderOrderStatusTabs() {
+  var box = document.getElementById('orders-status-tabs');
+  if (!box) return;
+  var cur = App._orderFilter || 'all';
+  var esc = function(s){ return String(s||'').replace(/'/g, "\\'"); };
+  var html = '<button class="filter-tab' + (cur === 'all' ? ' active' : '') +
+    '" data-status="all" onclick="setOrderStatusFilter(\'all\', this)">Все <span class="tab-cnt" data-cnt="all">0</span></button>';
+  orderStatusList().forEach(function(s){
+    var nm = s.name;
+    html += '<button class="filter-tab' + (cur === nm ? ' active' : '') + '" data-status="' + nm +
+      '" onclick="setOrderStatusFilter(\'' + esc(nm) + '\', this)">' + nm +
+      ' <span class="tab-cnt" data-cnt="' + nm + '">0</span></button>';
+  });
+  box.innerHTML = html;
+}
+
 // Счётчики на вкладках фильтра по статусам (всего по каждому статусу, без учёта поиска).
 function updateOrderTabCounts() {
+  renderOrderStatusTabs();
   var list = (App.orders || []).filter(function(o){ return o['ID']; });
   var counts = { all: list.length };
   list.forEach(function(o){ var s = o['Статус'] || ''; counts[s] = (counts[s] || 0) + 1; });
@@ -2236,13 +2964,261 @@ function setOrdersView(view) {
   filterOrders();   // перерисовать в выбранном представлении
 }
 
-var ORDER_STATUS_COLORS = {
-  'Новый':    '#6c8ebf',
-  'В работе': '#f0a500',
-  'Готов':    '#4da6ff',
-  'Выдан':    '#5cb85c',
-  'Отменён':  '#d9534f',
-};
+// ─── СТАТУСЫ ЗАКАЗОВ / ВОРОНКИ (из white-label конфига) ──────────────────────
+var DEFAULT_ORDER_STATUSES = [
+  { name: 'Новый',    color: '#6c8ebf' },
+  { name: 'В работе', color: '#f0a500' },
+  { name: 'Готов',    color: '#4da6ff' },
+  { name: 'Выдан',    color: '#5cb85c', done: true },
+  { name: 'Отменён',  color: '#d9534f', cancelled: true },
+];
+function orderStatusList() {
+  var list = (App.config && App.config.orderStatuses) || [];
+  return (list && list.length) ? list : DEFAULT_ORDER_STATUSES;
+}
+function orderStatusNames() { return orderStatusList().map(function(s){ return s.name; }); }
+function orderStatusMeta(name) {
+  var l = orderStatusList();
+  for (var i = 0; i < l.length; i++) { if (l[i].name === name) return l[i]; }
+  return null;
+}
+function orderStatusColor(name) { var m = orderStatusMeta(name); return m ? m.color : 'var(--text2)'; }
+function isCancelledStatus(name) { var m = orderStatusMeta(name); return !!(m && m.cancelled); }
+function isDoneStatus(name) { var m = orderStatusMeta(name); return !!(m && m.done); }
+
+/* ===== РЕДАКТОР ВОРОНОК (СТАТУСОВ ЗАКАЗОВ) ===== */
+function openStatusesEditor() {
+  App._statusesEdit = orderStatusList().map(function(s, i){
+    return { id: s.id || ('st_' + i), name: s.name, color: s.color || '#6c8ebf',
+             cancelled: !!s.cancelled, done: !!s.done, _orig: s.name };
+  });
+  renderStatusesEditor();
+  openModal('modal-statuses');
+}
+
+function renderStatusesEditor() {
+  var box = document.getElementById('statuses-list');
+  if (!box) return;
+  var rows = App._statusesEdit || [];
+  box.innerHTML = rows.map(function(s, i){
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:var(--bg-card)">' +
+      '<input type="color" value="' + s.color + '" oninput="statusSet(' + i + ',\'color\',this.value)" style="width:34px;height:34px;padding:0;border:none;background:none;cursor:pointer" title="Цвет воронки">' +
+      '<input class="form-input" value="' + String(s.name).replace(/"/g,'&quot;') + '" oninput="statusSet(' + i + ',\'name\',this.value)" placeholder="Название" style="flex:1;min-width:70px">' +
+      '<label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:3px;white-space:nowrap" title="Стадия отмены — не учитывается в выручке/ДДС/ЗП"><input type="checkbox"' + (s.cancelled?' checked':'') + ' onchange="statusSet(' + i + ',\'cancelled\',this.checked)">не в выручке</label>' +
+      '<label style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:3px;white-space:nowrap" title="Завершённая стадия (выдан) — не считается «в работе»"><input type="checkbox"' + (s.done?' checked':'') + ' onchange="statusSet(' + i + ',\'done\',this.checked)">завершена</label>' +
+      '<button class="btn btn-ghost" style="padding:2px 7px" onclick="statusMove(' + i + ',-1)" title="Выше"' + (i===0?' disabled':'') + '>↑</button>' +
+      '<button class="btn btn-ghost" style="padding:2px 7px" onclick="statusMove(' + i + ',1)" title="Ниже"' + (i===rows.length-1?' disabled':'') + '>↓</button>' +
+      '<button class="btn btn-ghost" style="padding:2px 8px;color:var(--danger)" onclick="statusDelete(' + i + ')" title="Удалить воронку">✕</button>' +
+    '</div>';
+  }).join('');
+}
+
+function statusSet(i, key, val) {
+  if (App._statusesEdit && App._statusesEdit[i]) App._statusesEdit[i][key] = val;
+  // name/color/чекбоксы не требуют перерисовки — не теряем фокус ввода
+}
+function statusAddRow() {
+  App._statusesEdit = App._statusesEdit || [];
+  App._statusesEdit.push({ id: 'st_new_' + Date.now(), name: '', color: '#6c8ebf', cancelled:false, done:false, _orig: null });
+  renderStatusesEditor();
+}
+function statusMove(i, dir) {
+  var a = App._statusesEdit, j = i + dir;
+  if (!a || j < 0 || j >= a.length) return;
+  var t = a[i]; a[i] = a[j]; a[j] = t;
+  renderStatusesEditor();
+}
+function statusDelete(i) {
+  var a = App._statusesEdit;
+  if (!a) return;
+  if (a.length <= 1) { toast('Нужна хотя бы одна воронка', 'error'); return; }
+  a.splice(i, 1);
+  renderStatusesEditor();
+}
+
+function saveStatusesEditor() {
+  var rows = App._statusesEdit || [];
+  var list = rows.map(function(s){
+    return { id: s.id, name: String(s.name||'').trim(), color: s.color, cancelled: !!s.cancelled, done: !!s.done };
+  });
+  for (var i = 0; i < list.length; i++) {
+    if (!list[i].name) { toast('У воронки №' + (i+1) + ' пустое название', 'error'); return; }
+  }
+  var seen = {};
+  for (var k = 0; k < list.length; k++) {
+    var n = list[k].name.toLowerCase();
+    if (seen[n]) { toast('Повтор названия: «' + list[k].name + '»', 'error'); return; }
+    seen[n] = true;
+  }
+  var renames = [];
+  rows.forEach(function(s){
+    var nm = String(s.name||'').trim();
+    if (s._orig && s._orig !== nm) renames.push({ from: s._orig, to: nm });
+  });
+
+  var btn = document.getElementById('statuses-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : 'нет ответа'), 'error'); return; }
+      if (App.config) App.config.orderStatuses = resp.data.statuses;
+      App._orderFilter = 'all';
+      toast('✅ Воронки сохранены', 'success');
+      closeModal('modal-statuses');
+      App.orders = [];                                  // статусы могли переназначиться — рефетч
+      App._dashCache = null; App._debtCache = null;
+      if (App.currentPage === 'orders') loadOrders(true);
+    })
+    .withFailureHandler(function(e){
+      if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .saveOrderStatuses({ list: list, renames: renames });
+}
+
+/* ===== ИНЛАЙН-РЕДАКТИРОВАНИЕ ВОРОНОК ПРЯМО НА КАНБАНЕ ===== */
+
+// Нормализовать цвет к #rrggbb (для input type=color)
+function hex6_(c) {
+  c = String(c || '').trim();
+  var m3 = /^#([0-9a-fA-F]{3})$/.exec(c);
+  if (m3) return '#' + m3[1].split('').map(function(x){ return x + x; }).join('');
+  return /^#[0-9a-fA-F]{6}$/.test(c) ? c : '#6c8ebf';
+}
+// Контрастный цвет текста на заданном фоне
+function contrastOn_(hex) {
+  var h = hex6_(hex).slice(1);
+  var r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
+  var lum = (0.299*r + 0.587*g + 0.114*b) / 255;
+  return lum > 0.62 ? '#12202e' : '#ffffff';
+}
+
+// Рабочая копия списка воронок (из текущего конфига)
+function statusesWorking_() {
+  return orderStatusList().map(function(s){
+    return { id: s.id, name: s.name, color: s.color, cancelled: !!s.cancelled, done: !!s.done };
+  });
+}
+
+// Оптимистично применить новый список воронок и сохранить на сервере
+function pushStatuses_(list, renames) {
+  if (App.config) App.config.orderStatuses = list;
+  if (App.currentPage === 'orders') { filterOrders(); updateOrderTabCounts(); }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Ошибка сохранения воронок: ' + (resp ? resp.error : 'нет ответа'), 'error'); location.reload(); return; }
+      if (App.config) App.config.orderStatuses = resp.data.statuses;
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); location.reload(); })
+    .saveOrderStatuses({ list: list, renames: renames || [] });
+}
+
+// Перетаскивание колонки-воронки (смена порядка)
+function colDragStart(ev, name) {
+  App._colDrag = name;
+  try { ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', ''); } catch(e){}
+  if (ev.currentTarget) ev.currentTarget.classList.add('col-dragging');
+  ev.stopPropagation();
+}
+function colDragEnd(ev) {
+  App._colDrag = null;
+  if (ev.currentTarget) ev.currentTarget.classList.remove('col-dragging');
+  document.querySelectorAll('.kanban-col.col-drop-hover').forEach(function(c){ c.classList.remove('col-drop-hover'); });
+}
+function reorderStatuses(fromName, toName) {
+  var list = statusesWorking_();
+  var fi = -1;
+  for (var i = 0; i < list.length; i++) { if (list[i].name === fromName) { fi = i; break; } }
+  if (fi < 0) return;
+  var moved = list.splice(fi, 1)[0];
+  var ti = list.length;
+  for (var j = 0; j < list.length; j++) { if (list[j].name === toName) { ti = j; break; } }
+  list.splice(ti, 0, moved);
+  pushStatuses_(list, []);
+}
+
+// Смена цвета воронки
+function changeStatusColorInline(name, color) {
+  var list = statusesWorking_();
+  for (var i = 0; i < list.length; i++) { if (list[i].name === name) { list[i].color = hex6_(color); break; } }
+  pushStatuses_(list, []);
+}
+
+// Добавить новую воронку (+ сразу открыть переименование)
+function addStatusInline() {
+  var list = statusesWorking_();
+  var exists = function(nm){ return list.some(function(s){ return s.name.toLowerCase() === nm.toLowerCase(); }); };
+  var name = 'Новая', n = 1;
+  while (exists(name)) { name = 'Новая ' + (++n); }
+  var palette = ['#6c8ebf','#f0a500','#4da6ff','#5cb85c','#9b59b6','#e67e22','#1abc9c','#d9534f'];
+  list.push({ id: 'st_new_' + Date.now(), name: name, color: palette[list.length % palette.length], cancelled: false, done: false });
+  pushStatuses_(list, []);
+  setTimeout(function(){
+    var t = document.querySelector('.kanban-col[data-status="' + name.replace(/"/g,'\\"') + '"] .kanban-title');
+    if (t) startStatusRename({ stopPropagation: function(){}, currentTarget: t }, name);
+  }, 60);
+}
+
+// Удалить воронку (с переносом её заказов в первую)
+function deleteStatusInline(name) {
+  var list = statusesWorking_();
+  if (list.length <= 1) { toast('Нужна хотя бы одна воронка', 'error'); return; }
+  var cnt = (App.orders || []).filter(function(o){ return (o['Статус'] || '') === name; }).length;
+  var fallback = (list[0].name === name) ? (list[1] && list[1].name) : list[0].name;
+  var doDelete = function(){
+    var newList = list.filter(function(s){ return s.name !== name; });
+    (App.orders || []).forEach(function(o){ if ((o['Статус'] || '') === name) o['Статус'] = fallback; });
+    if (App._orderFilter === name) App._orderFilter = 'all';
+    pushStatuses_(newList, []);
+  };
+  if (cnt > 0) {
+    uiConfirm('В воронке «' + name + '» ' + cnt + ' заказ(ов) — они переедут в «' + fallback + '». Удалить воронку?',
+      doDelete, { title: 'Удалить воронку', okText: 'Удалить', danger: true });
+  } else {
+    doDelete();
+  }
+}
+
+// Инлайн-переименование по двойному клику
+function startStatusRename(ev, name) {
+  if (ev.stopPropagation) ev.stopPropagation();
+  var span = ev.currentTarget;
+  if (!span) return;
+  var head = span.closest('.kanban-col-head');
+  if (head) head.setAttribute('draggable', 'false');   // не мешаем вводу
+  var input = document.createElement('input');
+  input.className = 'kanban-title-input';
+  input.value = name;
+  span.replaceWith(input);
+  input.focus(); input.select();
+  var done = false;
+  var finish = function(commit){
+    if (done) return; done = true;
+    if (commit) commitStatusRename(name, input.value);
+    else if (App.currentPage === 'orders') filterOrders();
+  };
+  input.addEventListener('keydown', function(e){
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { finish(false); }
+  });
+  input.addEventListener('blur', function(){ finish(true); });
+}
+function commitStatusRename(oldName, val) {
+  var newName = String(val || '').trim();
+  if (!newName || newName === oldName) { if (App.currentPage === 'orders') filterOrders(); return; }
+  var list = statusesWorking_();
+  if (list.some(function(s){ return s.name.toLowerCase() === newName.toLowerCase() && s.name !== oldName; })) {
+    toast('Воронка «' + newName + '» уже есть', 'error');
+    if (App.currentPage === 'orders') filterOrders();
+    return;
+  }
+  for (var i = 0; i < list.length; i++) { if (list[i].name === oldName) { list[i].name = newName; break; } }
+  (App.orders || []).forEach(function(o){ if ((o['Статус'] || '') === oldName) o['Статус'] = newName; });
+  if (App._kanbanOrder && App._kanbanOrder[oldName]) { App._kanbanOrder[newName] = App._kanbanOrder[oldName]; delete App._kanbanOrder[oldName]; }
+  if (App._orderFilter === oldName) App._orderFilter = newName;
+  pushStatuses_(list, [{ from: oldName, to: newName }]);
+}
 
 function renderOrdersTable(orders) {
   var tbody  = document.getElementById('orders-tbody');
@@ -2250,8 +3226,9 @@ function renderOrdersTable(orders) {
   if (!tbody) return;
 
   if (!orders || orders.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;padding:32px;color:var(--text2)">Заказов не найдено</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;padding:32px;color:var(--text2)">Заказов не найдено</td></tr>';
     if (footer) footer.textContent = '';
+    updateOrderSelBar();
     return;
   }
 
@@ -2262,7 +3239,7 @@ function renderOrdersTable(orders) {
     var price      = Number(o['Стоимость заказа']) || 0;
     var paid       = Number(o._paid) || 0;
     var status     = o['Статус'] || '';
-    var color      = ORDER_STATUS_COLORS[status] || 'var(--text2)';
+    var color      = orderStatusColor(status);
     var payStatus  = String(o['Статус оплаты'] || '').trim() || 'Не оплачен';
     var payType    = String(o['Тип оплаты'] || '').trim();
     var isLegal    = o._clientType === 'юр';
@@ -2325,8 +3302,10 @@ function renderOrdersTable(orders) {
         '</div>'
       : '';
 
+    var isSel = App._selOrders && App._selOrders[oid];
     html +=
-      '<tr class="' + rowClass + '" style="cursor:pointer" onclick="openOrderCard(\'' + oid + '\')">' +
+      '<tr class="' + rowClass + (isSel ? ' row-selected' : '') + '" data-oid="' + oid + '" style="cursor:pointer" onclick="openOrderCard(\'' + oid + '\')">' +
+      '<td class="col-sel" onclick="event.stopPropagation()" style="text-align:center"><input type="checkbox" class="order-sel-cb"' + (isSel ? ' checked' : '') + ' onclick="toggleOrderSel(\'' + oid + '\',this)"></td>' +
       '<td onclick="event.stopPropagation()" style="white-space:nowrap">' + payBtn + '</td>' +
       '<td style="font-weight:600;font-size:12px;white-space:nowrap"><button class="film-toggle" onclick="event.stopPropagation();toggleOrderFilms(\'' + oid + '\',this)" title="Показать расход плёнки">▸</button>' + (o['Номер договора'] || oid || '') + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + (o['Дата'] || '') + '</td>' +
@@ -2347,7 +3326,7 @@ function renderOrdersTable(orders) {
       '<td style="font-size:12px;color:var(--text-secondary)">' + (o['Менеджер'] || '—') + '</td>' +
       '<td onclick="event.stopPropagation()">' +
         '<select class="form-select" style="font-size:11px;padding:2px 4px;height:26px;min-width:90px" onchange="changeOrderStatus(\'' + oid + '\', this)">' +
-          ['Новый','В работе','Готов','Выдан','Отменён'].map(function(s){
+          orderStatusNames().map(function(s){
             return '<option value="' + s + '"' + (s === status ? ' selected' : '') + '>' + s + '</option>';
           }).join('') +
         '</select>' +
@@ -2364,6 +3343,85 @@ function renderOrdersTable(orders) {
         '↔ Сбросить ширину</button>' +
     '</div>';
   makeColumnsResizable(document.getElementById('orders-table'));
+  updateOrderSelBar();
+  applyOrderColVisibility();
+}
+
+/* ===== ВЫДЕЛЕНИЕ СТРОК ЗАКАЗОВ + ГРУППОВОЕ УДАЛЕНИЕ ===== */
+App._selOrders = App._selOrders || {};   // { orderId: true }
+
+function toggleOrderSel(oid, cb) {
+  if (!oid) return;
+  if (cb && cb.checked) App._selOrders[oid] = true; else delete App._selOrders[oid];
+  var tr = cb && cb.closest('tr');
+  if (tr) tr.classList.toggle('row-selected', !!(cb && cb.checked));
+  updateOrderSelBar();
+}
+
+// «Выбрать все» из шапки — выделяет только строки текущего отфильтрованного списка
+function toggleAllOrderSel(master) {
+  var on = master && master.checked;
+  (App._ordersFiltered || []).forEach(function(o){
+    var id = o['ID']; if (!id) return;
+    if (on) App._selOrders[id] = true; else delete App._selOrders[id];
+  });
+  document.querySelectorAll('#orders-tbody .order-sel-cb').forEach(function(cb){
+    cb.checked = on;
+    var tr = cb.closest('tr'); if (tr) tr.classList.toggle('row-selected', on);
+  });
+  updateOrderSelBar();
+}
+
+function clearOrderSel() {
+  App._selOrders = {};
+  document.querySelectorAll('#orders-tbody .order-sel-cb').forEach(function(cb){
+    cb.checked = false; var tr = cb.closest('tr'); if (tr) tr.classList.remove('row-selected');
+  });
+  var master = document.getElementById('orders-sel-all'); if (master) { master.checked = false; master.indeterminate = false; }
+  updateOrderSelBar();
+}
+
+function selectedOrderIds_() { return Object.keys(App._selOrders || {}); }
+
+// Обновить панель действий и состояние «выбрать все»
+function updateOrderSelBar() {
+  var ids = selectedOrderIds_();
+  var bar = document.getElementById('orders-bulkbar');
+  var cnt = document.getElementById('orders-bulk-count');
+  if (bar) bar.style.display = ids.length ? 'flex' : 'none';
+  if (cnt) cnt.textContent = 'Выбрано заказов: ' + ids.length;
+  var master = document.getElementById('orders-sel-all');
+  if (master) {
+    var total = (App._ordersFiltered || []).length;
+    var selHere = (App._ordersFiltered || []).filter(function(o){ return App._selOrders[o['ID']]; }).length;
+    master.checked = total > 0 && selHere === total;
+    master.indeterminate = selHere > 0 && selHere < total;
+  }
+}
+
+// Групповое удаление выбранных заказов (мягкое — в Корзину, обратимо)
+function bulkDeleteSelectedOrders() {
+  var ids = selectedOrderIds_();
+  if (!ids.length) return;
+  uiConfirm('Удалить выбранные заказы (' + ids.length + ' шт.)?\n\nОни скроются со всех списков и досок. Вернуть можно из «Корзины».',
+    function() {
+      var done = 0, failed = 0;
+      var finish = function() {
+        if (done + failed < ids.length) return;
+        App.orders = []; App._dashCache = null; App._debtCache = null; App._cardCache = {};
+        App._selOrders = {};
+        if (failed) toast('Удалено: ' + done + ', ошибок: ' + failed, failed === ids.length ? 'error' : 'success');
+        else toast('Удалено заказов: ' + done + ' (в Корзине)', 'success');
+        loadOrders(true);
+      };
+      ids.forEach(function(oid) {
+        google.script.run
+          .withSuccessHandler(function(resp){ if (resp && resp.ok) done++; else failed++; finish(); })
+          .withFailureHandler(function(){ failed++; finish(); })
+          .softDeleteOrder(oid);
+      });
+    },
+    { title: 'Удалить выбранные', okText: 'Удалить', danger: true });
 }
 
 // Переключить «Проверено» прямо из таблицы (оптимистично, без захода в карточку)
@@ -2403,7 +3461,8 @@ function toggleOrderVer(id, btn) {
 
 // Ресайз столбцов перетаскиванием правой границы заголовка (один раз на таблицу).
 // Ширина запоминается в localStorage по ключу таблицы и восстанавливается при загрузке.
-function colWidthsKey_(table) { return 'colw_' + (table.id || 'table'); }
+// v2 — сброс старых сохранённых ширин после добавления столбца-чекбокса (сдвиг индексов)
+function colWidthsKey_(table) { return 'colw2_' + (table.id || 'table'); }
 
 // Применить сохранённые ширины (если есть) + выставить общую ширину таблицы
 function applyColWidths_(table) {
@@ -2438,6 +3497,81 @@ function resetTableColWidths_(table) {
   if (total) table.style.width = total + 'px';
 }
 function resetOrderColWidths() { resetTableColWidths_(document.getElementById('orders-table')); toast('Ширина столбцов сброшена', 'success'); }
+
+/* ===== ПОКАЗ/СКРЫТИЕ СТОЛБЦОВ ТАБЛИЦЫ ЗАКАЗОВ ===== */
+// nth-child столбцов таблицы заказов (1 = чекбокс). Скрываемые — те, что можно
+// убрать на узком экране ноутбука, чтобы важные столбцы влезли без прокрутки.
+var ORDER_COLS = [
+  { n: 2,  label: 'Кнопка «Оплатить»' },
+  { n: 4,  label: 'Дата' },
+  { n: 7,  label: 'Услуга' },
+  { n: 8,  label: 'Сумма' },
+  { n: 9,  label: 'Затраты' },
+  { n: 10, label: 'Оплата (метка)' },
+  { n: 12, label: 'Проверено' },
+  { n: 13, label: 'Менеджер' },
+];
+function orderHiddenCols_() {
+  try { var raw = localStorage.getItem('orders_hidden_cols'); if (raw) return JSON.parse(raw) || []; } catch (e) {}
+  return [];
+}
+function applyOrderColVisibility() {
+  var hidden = orderHiddenCols_();
+  var css = hidden.map(function(n){
+    return '#orders-table thead th:nth-child(' + n + '),#orders-table tbody td:nth-child(' + n + '){display:none}';
+  }).join('');
+  var st = document.getElementById('orders-colhide-style');
+  if (!st) { st = document.createElement('style'); st.id = 'orders-colhide-style'; document.head.appendChild(st); }
+  st.textContent = css;
+  // Пересчитать ширину таблицы по видимым столбцам, чтобы скрытие реально
+  // сокращало таблицу (при table-layout:fixed ширина задана явно).
+  var table = document.getElementById('orders-table');
+  if (table && table._resizable) {
+    var ths = table.querySelectorAll('thead th');
+    var total = 0;
+    ths.forEach(function(th, i){ if (hidden.indexOf(i + 1) < 0) total += th.offsetWidth; });
+    if (total) table.style.width = total + 'px';
+  }
+}
+function toggleColsMenu(ev) {
+  if (ev) ev.stopPropagation();
+  var menu = document.getElementById('orders-cols-menu');
+  if (!menu) return;
+  if (menu.style.display === 'block') { menu.style.display = 'none'; return; }
+  var hidden = orderHiddenCols_();
+  menu.innerHTML =
+    '<div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;padding:2px 6px 6px">Показывать столбцы</div>' +
+    ORDER_COLS.map(function(c){
+      var on = hidden.indexOf(c.n) < 0;
+      return '<label style="display:flex;align-items:center;gap:8px;padding:5px 6px;font-size:13px;cursor:pointer;border-radius:6px">' +
+        '<input type="checkbox"' + (on ? ' checked' : '') + ' onchange="setOrderColVisible(' + c.n + ',this.checked)"> ' + c.label + '</label>';
+    }).join('') +
+    '<div style="border-top:1px solid var(--border);margin-top:6px;padding-top:6px">' +
+      '<button class="btn btn-ghost" onclick="showAllOrderCols()" style="width:100%;font-size:12px;padding:5px">Показать все</button>' +
+    '</div>';
+  menu.style.display = 'block';
+  setTimeout(function(){
+    document.addEventListener('click', closeColsMenuOnce_, { once: true });
+  }, 0);
+}
+function closeColsMenuOnce_(e) {
+  var menu = document.getElementById('orders-cols-menu');
+  if (menu && !menu.contains(e.target)) menu.style.display = 'none';
+  else if (menu) document.addEventListener('click', closeColsMenuOnce_, { once: true }); // клик внутри — держим открытым
+}
+function setOrderColVisible(n, visible) {
+  var hidden = orderHiddenCols_();
+  var i = hidden.indexOf(n);
+  if (visible && i >= 0) hidden.splice(i, 1);
+  else if (!visible && i < 0) hidden.push(n);
+  try { localStorage.setItem('orders_hidden_cols', JSON.stringify(hidden)); } catch (e) {}
+  applyOrderColVisibility();
+}
+function showAllOrderCols() {
+  try { localStorage.removeItem('orders_hidden_cols'); } catch (e) {}
+  applyOrderColVisibility();
+  var menu = document.getElementById('orders-cols-menu'); if (menu) menu.style.display = 'none';
+}
 
 function makeColumnsResizable(table) {
   if (!table) return;
@@ -2677,7 +3811,7 @@ function flushAllInline_() {
 }
 
 /* ===== КАНБАН-ДОСКА ===== */
-var KANBAN_COLUMNS = ['Новый', 'В работе', 'Готов', 'Выдан', 'Отменён'];
+// Колонки канбана = настраиваемые воронки (orderStatusNames из white-label конфига)
 
 // Компактный бейдж оплаты для карточки канбана
 function kanbanPayBadge_(o) {
@@ -2701,21 +3835,26 @@ function renderOrdersKanban(orders) {
   if (!board) return;
   orders = orders || [];
 
-  // Группируем по статусу
+  // Группируем по статусу (воронки — из white-label конфига)
+  var STATUS_NAMES = orderStatusNames();
+  var defStatus = STATUS_NAMES[0] || 'Новый';
   var byStatus = {};
-  KANBAN_COLUMNS.forEach(function(s){ byStatus[s] = []; });
+  STATUS_NAMES.forEach(function(s){ byStatus[s] = []; });
   orders.forEach(function(o){
-    var s = o['Статус'] || 'Новый';
-    if (!byStatus[s]) byStatus[s] = [];   // на случай нестандартного статуса
+    var s = o['Статус'] || defStatus;
+    if (!byStatus[s]) byStatus[s] = [];   // нестандартный статус (напр. из старых данных)
     byStatus[s].push(o);
   });
+
+  // Порядок колонок: настроенные воронки по порядку + нестандартные с карточками в конце
+  var columns = STATUS_NAMES.slice();
+  Object.keys(byStatus).forEach(function(s){ if (columns.indexOf(s) < 0 && byStatus[s].length) columns.push(s); });
 
   var esc = function(s){ return String(s||'').replace(/'/g,"\\'"); };
   var html = '';
 
-  Object.keys(byStatus).forEach(function(status){
-    if (KANBAN_COLUMNS.indexOf(status) < 0 && byStatus[status].length === 0) return;
-    var list  = byStatus[status];
+  columns.forEach(function(status){
+    var list  = byStatus[status] || [];
     // Ручной порядок: карточки сортируются по сохранённому списку ID; новые (ещё не расставленные) — наверх
     var ord = (App._kanbanOrder && App._kanbanOrder[status]) || [];
     if (ord.length) {
@@ -2727,7 +3866,7 @@ function renderOrdersKanban(orders) {
         return ia - ib;
       });
     }
-    var color = ORDER_STATUS_COLORS[status] || 'var(--text2)';
+    var color = orderStatusColor(status);
     var sum   = list.reduce(function(a, o){ return a + (Number(o['Стоимость заказа']) || 0); }, 0);
 
     var cards = list.map(function(o){
@@ -2753,16 +3892,28 @@ function renderOrdersKanban(orders) {
       '</div>';
     }).join('');
 
+    var eName = esc(status);
+    var hx    = hex6_(color);
     html +=
       '<div class="kanban-col" data-status="' + status + '"' +
         ' ondragover="kanbanDragOver(event, this)" ondragleave="kanbanDragLeave(event, this)"' +
         ' ondrop="kanbanDrop(event, this)">' +
-        '<div class="kanban-col-head"><span class="kanban-dot" style="background:' + color + '"></span>' + status +
-          '<span class="kanban-count">' + list.length + '</span></div>' +
+        '<div class="kanban-col-head" draggable="true" title="Перетащите, чтобы поменять порядок воронок"' +
+          ' ondragstart="colDragStart(event,\'' + eName + '\')" ondragend="colDragEnd(event)"' +
+          ' style="background:' + hx + ';color:' + contrastOn_(hx) + '">' +
+          '<input type="color" class="kanban-col-color" value="' + hx + '" title="Цвет воронки"' +
+            ' onclick="event.stopPropagation()" onchange="changeStatusColorInline(\'' + eName + '\', this.value)">' +
+          '<span class="kanban-title" title="Двойной клик — переименовать" ondblclick="startStatusRename(event,\'' + eName + '\')">' + status + '</span>' +
+          '<span class="kanban-count">' + list.length + '</span>' +
+          '<button class="kanban-col-del" title="Удалить воронку" onclick="event.stopPropagation();deleteStatusInline(\'' + eName + '\')">✕</button>' +
+        '</div>' +
         '<div class="kanban-col-sum">' + Math.round(sum).toLocaleString('ru') + ' ' + CUR + '</div>' +
         '<div class="kanban-col-body">' + (cards || '<div class="kanban-empty">Перетащите сюда</div>') + '</div>' +
       '</div>';
   });
+
+  // Плитка добавления новой воронки
+  html += '<button class="kanban-add-col" title="Добавить воронку" onclick="addStatusInline()">+</button>';
 
   board.innerHTML = html;
 }
@@ -2784,6 +3935,10 @@ function kanbanDragEnd(ev) {
 function kanbanDragOver(ev, col) {
   ev.preventDefault();                       // разрешаем drop
   try { ev.dataTransfer.dropEffect = 'move'; } catch(e){}
+  if (App._colDrag != null) {                // перетаскивание КОЛОНКИ (смена порядка воронок)
+    if (col) col.classList.add('col-drop-hover');
+    return;
+  }
   if (col) {
     col.classList.add('drop-hover');
     kanbanShowIndicator_(col.querySelector('.kanban-col-body'), ev.clientY);   // линия в точке вставки
@@ -2793,12 +3948,19 @@ function kanbanDragLeave(ev, col) {
   // снимаем подсветку только когда курсор реально покинул колонку
   if (col && !col.contains(ev.relatedTarget)) {
     col.classList.remove('drop-hover');
+    col.classList.remove('col-drop-hover');
     kanbanClearIndicator_(col.querySelector('.kanban-col-body'));
   }
 }
 function kanbanDrop(ev, col) {
   ev.preventDefault();
-  if (col) col.classList.remove('drop-hover');
+  if (col) { col.classList.remove('drop-hover'); col.classList.remove('col-drop-hover'); }
+  if (App._colDrag != null) {                // бросили КОЛОНКУ → меняем порядок воронок
+    var tgt = col ? col.getAttribute('data-status') : '';
+    var frm = App._colDrag; App._colDrag = null;
+    if (tgt && frm && tgt !== frm) reorderStatuses(frm, tgt);
+    return;
+  }
   var body   = col ? col.querySelector('.kanban-col-body') : null;
   var index  = kanbanInsertIndex_(body, ev.clientY);     // позиция вставки ДО подсчёта учитывает все карточки кроме перетаскиваемой
   if (body) kanbanClearIndicator_(body);
@@ -3025,6 +4187,15 @@ function initOrderForm() {
   document.querySelectorAll('#ord-masters-wrap input[type=checkbox]').forEach(function(cb){ cb.checked = false; });
   var hid = document.getElementById('ord-masters'); if (hid) hid.value = '';
 
+  // Сбрасываем тип заказчика на «Физ. лицо»
+  setOrderClientType('физ', document.getElementById('ord-ctype-phys'));
+
+  // Автоподбор клиента по имени/названию из базы
+  fillOrderClientDatalist();
+
+  // Если открыто «Создать заказ» из карточки клиента — подставляем клиента
+  if (App._prefillClient) { applyPrefillClient_(App._prefillClient); App._prefillClient = null; }
+
   // Комплекс оклейки: заполняем список, сбрасываем поля, показываем/прячем по услуге
   fillOrdComplexOptions();
   var oc = document.getElementById('ord-complex'); if (oc) oc.value = '';
@@ -3062,27 +4233,30 @@ function fillMaterialSelect(sel, selectedId) {
 }
 
 /* --- Добавить строку материала --- */
-function addMaterialLine() {
+function addMaterialLine(asLeftover) {
   var idx = App._orderMaterials.length;
-  App._orderMaterials.push({ materialId:'', name:'', unit:'пм', qty:0, rollWidth:1.52, pricePerSqm:0, type:'расход', cost:0 });
+  var type = asLeftover ? 'остаток' : 'расход';
+  var unit = asLeftover ? 'м²' : 'пм';   // остаток обычно меряют в м²
+  App._orderMaterials.push({ materialId:'', name:'', unit:unit, qty:0, rollWidth:1.52, pricePerSqm:0, type:type, cost:0 });
 
   var list  = document.getElementById('ord-materials-list');
   var empty = document.getElementById('ord-materials-empty');
   if (empty) empty.style.display = 'none';
 
   var row = document.createElement('div');
-  row.className = 'line-item-row';
+  row.className = 'line-item-row' + (asLeftover ? ' line-item-leftover' : '');
   row.id = 'mat-row-' + idx;
+  var sel = function(v, cur){ return v === cur ? ' selected' : ''; };
   row.innerHTML =
     '<select class="mat-select line-item-select" onchange="onMaterialSelect(this,' + idx + ')"></select>' +
     '<select class="line-item-unit" onchange="onMaterialChange(' + idx + ')">' +
-      '<option value="пм">пм</option>' +
-      '<option value="м²">м²</option>' +
+      '<option value="пм"' + sel('пм', unit) + '>пм</option>' +
+      '<option value="м²"' + sel('м²', unit) + '>м²</option>' +
     '</select>' +
     '<input class="line-item-qty" type="number" placeholder="кол-во" min="0" step="0.01" oninput="onMaterialChange(' + idx + ')">' +
     '<select class="line-item-type" onchange="onMaterialChange(' + idx + ')">' +
-      '<option value="расход">расход</option>' +
-      '<option value="остаток">остаток</option>' +
+      '<option value="расход"' + sel('расход', type) + '>расход</option>' +
+      '<option value="остаток"' + sel('остаток', type) + '>остаток (−)</option>' +
     '</select>' +
     '<span class="line-item-cost" id="mat-cost-' + idx + '" style="min-width:60px;text-align:right;font-size:12px">0 ' + CUR + '</span>' +
     '<button class="line-item-remove" onclick="removeMaterialLine(' + idx + ')">✕</button>';
@@ -3098,7 +4272,8 @@ function onMaterialSelect(sel, idx) {
   if (!m) return;
   m.materialId  = opt.value;
   m.name        = opt.textContent.split(' (')[0];
-  m.unit        = opt.dataset.unit      || 'пм';
+  // для строки-остатка сохраняем выбранную единицу (обычно м²), для расхода — берём дефолт материала
+  if (m.type !== 'остаток') m.unit = opt.dataset.unit || 'пм';
   m.pricePerSqm = Number(opt.dataset.price)     || 0;
   m.rollWidth   = Number(opt.dataset.rollWidth)  || 1.52;
 
@@ -3214,6 +4389,85 @@ function setOrderPayType(val, btn) {
   recalcOrderPreview();
 }
 
+// Заполнить datalist имён клиентов для автоподбора в форме заказа.
+// Берёт из App.clients, при отсутствии — подгружает один раз.
+function fillOrderClientDatalist() {
+  var dl = document.getElementById('ord-client-namelist');
+  if (!dl) return;
+  var build = function(list) {
+    dl.innerHTML = (list || []).map(function(c) {
+      var name = String(c['Имя'] || '').replace(/"/g, '&quot;');
+      var hint = (String(c['Тип'] || '') === 'юр' ? 'юр. лицо' : 'физ. лицо') +
+                 (c['Телефон'] ? ' · ' + c['Телефон'] : '');
+      return name ? '<option value="' + name + '">' + hint + '</option>' : '';
+    }).join('');
+  };
+  if (App.clients && App.clients.length) { build(App.clients); return; }
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (resp && resp.ok) { App.clients = resp.data || []; build(App.clients); }
+    })
+    .withFailureHandler(function(){})
+    .getClients({});
+}
+
+// При вводе имени/названия — если точно совпало с клиентом из базы, подставить его данные.
+function orderClientNameInput() {
+  var el = document.getElementById('ord-client-name');
+  var name = (el ? el.value : '').trim().toLowerCase();
+  if (!name) { var idEl = document.getElementById('ord-client-id'); if (idEl) idEl.value = ''; return; }
+  var list = App.clients || [];
+  for (var i = 0; i < list.length; i++) {
+    if (String(list[i]['Имя'] || '').trim().toLowerCase() === name) {
+      applyOrderClient(list[i]);
+      return;
+    }
+  }
+  // Имя изменили вручную и оно не совпадает с существующим — отвязываем ID (создастся новый клиент)
+  var idEl2 = document.getElementById('ord-client-id'); if (idEl2) idEl2.value = '';
+}
+
+// Переключатель Физ./Юр. лицо в форме заказа
+function setOrderClientType(type, btn) {
+  App._orderClientType = type;
+  if (btn) {
+    var wrap = btn.closest('div');
+    if (wrap) wrap.querySelectorAll('.ctype-btn').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+  } else {
+    // программное переключение (например, при подстановке найденного клиента)
+    var phys = document.getElementById('ord-ctype-phys');
+    var leg  = document.getElementById('ord-ctype-legal');
+    if (phys) phys.classList.toggle('active', type !== 'юр');
+    if (leg)  leg.classList.toggle('active',  type === 'юр');
+  }
+  var legalBox = document.getElementById('ord-legal-fields');
+  if (legalBox) legalBox.style.display = (type === 'юр') ? 'block' : 'none';
+  var lbl = document.getElementById('ord-client-name-label');
+  if (lbl) lbl.textContent = (type === 'юр') ? 'Название организации *' : 'Имя клиента *';
+  var nameEl = document.getElementById('ord-client-name');
+  if (nameEl) nameEl.placeholder = (type === 'юр') ? 'ООО «Компания»' : 'ФИО клиента';
+}
+
+// Подставить данные найденного/выбранного клиента в форму заказа (имя, тип, реквизиты)
+function applyOrderClient(c) {
+  if (!c) return;
+  document.getElementById('ord-client-name').value = c['Имя'] || '';
+  document.getElementById('ord-client-id').value   = c['ID']  || '';
+  var phoneEl = document.getElementById('ord-client-phone');
+  if (phoneEl && c['Телефон']) phoneEl.value = c['Телефон'];
+  var type = (String(c['Тип'] || '') === 'юр') ? 'юр' : 'физ';
+  setOrderClientType(type, null);
+  if (type === 'юр') {
+    var set = function(id, v){ var el = document.getElementById(id); if (el) el.value = v || ''; };
+    set('ord-cl-unp', c['УНП']);
+    set('ord-cl-director', c['Директор']);
+    set('ord-cl-address', c['Юр. адрес']);
+    set('ord-cl-postal', c['Почтовый адрес']);
+    set('ord-cl-bank', c['Банк. реквизиты']);
+  }
+}
+
 function orderSearchClient() {
   var phone = (document.getElementById('ord-client-phone') || {}).value || '';
   if (phone.replace(/\D/g,'').length < 7) return;
@@ -3225,12 +4479,12 @@ function orderSearchClient() {
       if (found) {
         found.style.display = 'block';
         found.innerHTML = '<strong>' + (c['Имя'] || '') + '</strong>' +
+          (String(c['Тип']||'') === 'юр' ? ' &nbsp;<span style="color:var(--text3)">(юр. лицо)</span>' : '') +
           (c['Авто'] ? ' &nbsp;·&nbsp; ' + c['Авто'] : '') +
           '<button class="btn btn-ghost" style="margin-left:10px;padding:2px 8px;font-size:11px" onclick="fillOrderClient()">Использовать</button>';
         App._foundClient = c;
       }
-      document.getElementById('ord-client-name').value = c['Имя'] || '';
-      document.getElementById('ord-client-id').value   = c['ID']  || '';
+      applyOrderClient(c);
     })
     .withFailureHandler(function(){})
     .findClientByPhone(phone);
@@ -3238,9 +4492,7 @@ function orderSearchClient() {
 
 function fillOrderClient() {
   if (!App._foundClient) return;
-  var c = App._foundClient;
-  document.getElementById('ord-client-name').value = c['Имя']  || '';
-  document.getElementById('ord-client-id').value   = c['ID']   || '';
+  applyOrderClient(App._foundClient);
   var found = document.getElementById('ord-client-found');
   if (found) found.style.display = 'none';
 }
@@ -3345,11 +4597,19 @@ function submitNewOrderProceed() {
   var prepayMeth  = (document.getElementById('ord-prepay-method') || {}).value || 'Нал';
   var rassrMonths = Number((document.getElementById('ord-rassr-months') || {}).value || 0);
 
+  var clientType = App._orderClientType || 'физ';
+
   var payload = {
     service:     service,
     clientId:    (document.getElementById('ord-client-id')    || {}).value || '',
     clientName:  name,
     clientPhone: (document.getElementById('ord-client-phone') || {}).value || '',
+    clientType:  clientType,
+    unp:          clientType === 'юр' ? ((document.getElementById('ord-cl-unp')      || {}).value || '').trim() : '',
+    director:     clientType === 'юр' ? ((document.getElementById('ord-cl-director') || {}).value || '').trim() : '',
+    legalAddress: clientType === 'юр' ? ((document.getElementById('ord-cl-address')  || {}).value || '').trim() : '',
+    postalAddress:clientType === 'юр' ? ((document.getElementById('ord-cl-postal')   || {}).value || '').trim() : '',
+    bankDetails:  clientType === 'юр' ? ((document.getElementById('ord-cl-bank')     || {}).value || '').trim() : '',
     car:         (document.getElementById('ord-car')          || {}).value || '',
     plate:       (document.getElementById('ord-plate')        || {}).value || '',
     price:       price,
@@ -3373,9 +4633,11 @@ function submitNewOrderProceed() {
     closeModal('modal-new-order');
     ['ord-service','ord-client-phone','ord-client-name','ord-client-id',
      'ord-car','ord-plate','ord-price','ord-masters','ord-notes','ord-prepay',
-     'ord-complex','ord-elements','ord-elements-count'].forEach(function(id){
+     'ord-complex','ord-elements','ord-elements-count',
+     'ord-cl-unp','ord-cl-director','ord-cl-address','ord-cl-postal','ord-cl-bank'].forEach(function(id){
       var el = document.getElementById(id); if (el) el.value = '';
     });
+    setOrderClientType('физ', document.getElementById('ord-ctype-phys'));
     var found = document.getElementById('ord-client-found'); if (found) found.style.display = 'none';
     var preview = document.getElementById('ord-finance-preview'); if (preview) preview.style.display = 'none';
     App._orderPayType = '';
@@ -3833,7 +5095,7 @@ function renderRecentOrders(orders, totalCount) {
   };
 
   var rows = orders.map(function(o) {
-    var statusColor = ORDER_STATUS_COLORS[o.status] || 'var(--text2)';
+    var statusColor = orderStatusColor(o.status);
     var carLine = (o.car || '—') + (o.plate ? ' · ' + o.plate : '');
     var verCell = o.verified
       ? '<button class="ver-btn ver-on" onclick="event.stopPropagation();toggleOrderVerDash(\'' + o.id + '\',this)" title="Проверено — нажмите, чтобы снять">✓</button>'
@@ -3847,6 +5109,7 @@ function renderRecentOrders(orders, totalCount) {
       '<td style="text-align:center">' + payBadge(o) + '</td>' +
       '<td style="text-align:center"><span style="font-size:11px;font-weight:600;color:' + statusColor + '">' + (o.status || '') + '</span></td>' +
       '<td style="text-align:center">' + verCell + '</td>' +
+      '<td style="text-align:center" onclick="event.stopPropagation()"><button class="row-del-btn" onclick="deleteOrderFromDash(\'' + o.id + '\')" title="Удалить заказ (в Корзину)">🗑</button></td>' +
     '</tr>';
   }).join('');
 
@@ -3855,6 +5118,7 @@ function renderRecentOrders(orders, totalCount) {
       '<th style="min-width:120px">Договор</th><th style="min-width:80px">Дата</th><th style="min-width:140px">Авто / Госномер</th><th style="min-width:110px">Услуга</th>' +
       '<th style="min-width:90px;text-align:right">Сумма</th><th style="min-width:70px;text-align:center">Оплата</th><th style="min-width:90px;text-align:center">Статус</th>' +
       '<th style="min-width:84px;text-align:center" title="Проверено директором">✓ Пров.</th>' +
+      '<th style="width:44px;text-align:center" title="Удалить"></th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>' + footNote + '</div>';
   makeColumnsResizable(document.getElementById('dash-orders-table'));
 }
@@ -3889,6 +5153,31 @@ function toggleOrderVerDash(id, btn) {
       toast('Ошибка: ' + e.message, 'error');
     })
     .toggleOrderVerification(id);
+}
+
+// Удаление заказа прямо с главной (дашборд) — мягкое, в Корзину (обратимо)
+function deleteOrderFromDash(id) {
+  if (!id) return;
+  var recent = (App._dashCache && App._dashCache.data && App._dashCache.data.recentOrders) || [];
+  var o = recent.find(function(x){ return String(x.id) === String(id); });
+  var num = o ? (o.contract || id) : id;
+  var sum = o ? (Number(o.price) || 0) : 0;
+  uiConfirm('Удалить заказ ' + num + (sum ? (' на ' + sum.toLocaleString('ru') + ' ' + CUR) : '') + '?\n\nЗаказ скроется со всех списков и досок. Его можно вернуть из «Корзины».',
+    function() {
+      google.script.run
+        .withSuccessHandler(function(resp){
+          if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+          if (App._dashCache && App._dashCache.data && App._dashCache.data.recentOrders) {
+            App._dashCache.data.recentOrders = App._dashCache.data.recentOrders.filter(function(x){ return String(x.id) !== String(id); });
+          }
+          App.orders = []; App._debtCache = null; App._cardCache = {};
+          toast('Заказ удалён (в Корзине)', 'success');
+          renderDashboard(true);   // пересчитать KPI и список с сервера
+        })
+        .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+        .softDeleteOrder(id);
+    },
+    { title: 'Удалить заказ', okText: 'Удалить', danger: true });
 }
 
 /* ===== ФИНАНСЫ ===== */
@@ -4414,6 +5703,7 @@ function loadServices() {
   App._servicesEdit = ((App.config && App.config.services) || []).map(function(s){
     return {
       code: s.code || '', name: s.name || '', icon: s.icon || '🔧',
+      color: s.color || '#4da6ff',
       active: s.active !== false, contractPrefix: s.contractPrefix || '',
       calcType: s.calcType || 'fixed', bonusPoolPct: (s.bonusPoolPct != null ? s.bonusPoolPct : 35),
       managerBonusPct: (s.managerBonusPct != null ? s.managerBonusPct : 10),
@@ -4427,10 +5717,11 @@ function renderServicesEditor() {
   if (!tb) return;
   var list = App._servicesEdit || [];
   var inp = 'padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--inp);color:var(--text);font-size:13px;width:100%';
-  if (!list.length) { tb.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:16px">Нет услуг — нажмите «+ Услуга»</td></tr>'; return; }
+  if (!list.length) { tb.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:16px">Нет услуг — нажмите «+ Услуга»</td></tr>'; return; }
   tb.innerHTML = list.map(function(s, i){
     return '<tr>' +
       '<td><input value="' + (s.icon||'').replace(/"/g,'&quot;') + '" onchange="svcEdit(' + i + ',\'icon\',this.value)" style="' + inp + ';text-align:center" maxlength="2"></td>' +
+      '<td style="text-align:center"><input type="color" value="' + (s.color||'#4da6ff') + '" onchange="svcEdit(' + i + ',\'color\',this.value)" title="Цвет услуги (в календаре)" style="width:30px;height:26px;padding:0;border:none;background:none;cursor:pointer"></td>' +
       '<td><input value="' + (s.name||'').replace(/"/g,'&quot;') + '" onchange="svcEdit(' + i + ',\'name\',this.value)" placeholder="Название услуги" style="' + inp + '"></td>' +
       '<td><input value="' + (s.contractPrefix||'').replace(/"/g,'&quot;') + '" onchange="svcEdit(' + i + ',\'contractPrefix\',this.value)" placeholder="04/01-" style="' + inp + '"></td>' +
       '<td><input type="number" min="0" max="100" value="' + s.bonusPoolPct + '" onchange="svcEdit(' + i + ',\'bonusPoolPct\',this.value)" style="' + inp + ';text-align:right"></td>' +
@@ -4445,30 +5736,59 @@ function svcEdit(i, field, val) {
   if (!App._servicesEdit || !App._servicesEdit[i]) return;
   if (field === 'bonusPoolPct' || field === 'managerBonusPct') val = Number(val) || 0;
   App._servicesEdit[i][field] = val;
+  scheduleServicesSave_();          // автосохранение
 }
 function addServiceRow() {
   if (!App._servicesEdit) App._servicesEdit = [];
-  App._servicesEdit.push({ code:'', name:'', icon:'🔧', active:true, contractPrefix:'', calcType:'fixed', bonusPoolPct:35, managerBonusPct:10 });
+  App._servicesEdit.push({ code:'', name:'', icon:'🔧', color:'#4da6ff', active:true, contractPrefix:'', calcType:'fixed', bonusPoolPct:35, managerBonusPct:10 });
   renderServicesEditor();
+  // новая строка без названия не сохраняется до ввода имени (сервер отклоняет пустой каталог)
 }
 function removeServiceRow(i) {
   if (!App._servicesEdit) return;
   App._servicesEdit.splice(i, 1);
   renderServicesEditor();
+  scheduleServicesSave_();          // удаление сразу сохраняем
 }
+
+// Автосохранение каталога услуг (debounce), тихо, без перерисовки таблицы (не теряем фокус)
+function scheduleServicesSave_() {
+  clearTimeout(App._svcSaveTimer);
+  App._svcSaveTimer = setTimeout(saveServicesSilent_, 700);
+}
+function saveServicesSilent_() {
+  clearTimeout(App._svcSaveTimer); App._svcSaveTimer = null;
+  var list = (App._servicesEdit || []).filter(function(s){ return String(s.name||'').trim(); });
+  if (!list.length) return;         // пустой каталог сервер отклонит — не трогаем
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Не сохранилось: ' + (resp?resp.error:''), 'error'); return; }
+      if (App.config) App.config.services = resp.data.services;
+      fillServiceDropdowns();       // сразу обновляем списки услуг (в т.ч. форму заказа)
+      showSavedHint_('services-saved-hint');
+    })
+    .withFailureHandler(function(e){ toast('Ошибка сохранения услуг: ' + e.message, 'error'); })
+    .saveServicesCatalog(list);
+}
+function flushServicesSave_() {
+  if (App._svcSaveTimer) saveServicesSilent_();
+}
+// Кнопка «Сохранить» тоже работает — просто форсирует сейв + подтверждение
 function saveServicesCatalogUI() {
   var list = (App._servicesEdit || []).filter(function(s){ return String(s.name||'').trim(); });
   if (!list.length) { toast('Добавьте хотя бы одну услугу', 'error'); return; }
-  google.script.run
-    .withSuccessHandler(function(resp){
-      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
-      if (App.config) App.config.services = resp.data.services;
-      fillServiceDropdowns();          // обновить все списки услуг
-      toast('Каталог услуг сохранён', 'success');
-      loadServices();
-    })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
-    .saveServicesCatalog(list);
+  saveServicesSilent_();
+  toast('Каталог услуг сохранён', 'success');
+}
+
+// Короткий ненавязчивый индикатор «Сохранено ✓» рядом с заголовком
+function showSavedHint_(id) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = '✓ сохранено';
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(function(){ el.style.opacity = '0'; }, 1600);
 }
 
 /* ===== КОМПЛЕКСЫ ОКЛЕЙКИ (white-label) ===== */
@@ -4508,6 +5828,7 @@ function cxEdit(i, field, val) {
   if (!App._complexesEdit || !App._complexesEdit[i]) return;
   if (field === 'price') val = Number(val) || 0;
   App._complexesEdit[i][field] = val;
+  scheduleComplexesSave_();
 }
 function addComplexRow() {
   if (!App._complexesEdit) App._complexesEdit = [];
@@ -4518,20 +5839,36 @@ function removeComplexRow(i) {
   if (!App._complexesEdit) return;
   App._complexesEdit.splice(i, 1);
   renderComplexesEditor();
+  scheduleComplexesSave_();
+}
+
+// Автосохранение каталога комплексов (debounce)
+function scheduleComplexesSave_() {
+  clearTimeout(App._cxSaveTimer);
+  App._cxSaveTimer = setTimeout(saveComplexesSilent_, 700);
+}
+function saveComplexesSilent_() {
+  clearTimeout(App._cxSaveTimer); App._cxSaveTimer = null;
+  var list = (App._complexesEdit || []).filter(function(c){ return String(c.name||'').trim(); });
+  if (!list.length) return;
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Не сохранилось: ' + (resp?resp.error:''), 'error'); return; }
+      if (App.config) App.config.complexes = resp.data.complexes;
+      rebuildComplexesMap_();
+      showSavedHint_('complexes-saved-hint');
+    })
+    .withFailureHandler(function(e){ toast('Ошибка сохранения комплексов: ' + e.message, 'error'); })
+    .saveComplexesCatalog(list);
+}
+function flushComplexesSave_() {
+  if (App._cxSaveTimer) saveComplexesSilent_();
 }
 function saveComplexesCatalogUI() {
   var list = (App._complexesEdit || []).filter(function(c){ return String(c.name||'').trim(); });
   if (!list.length) { toast('Добавьте хотя бы один комплекс', 'error'); return; }
-  google.script.run
-    .withSuccessHandler(function(resp){
-      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
-      if (App.config) App.config.complexes = resp.data.complexes;
-      rebuildComplexesMap_();          // обновить карту для селектора в карточке
-      toast('Каталог комплексов сохранён', 'success');
-      loadComplexes();
-    })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
-    .saveComplexesCatalog(list);
+  saveComplexesSilent_();
+  toast('Каталог комплексов сохранён', 'success');
 }
 
 /* ===== ДДС ===== */
@@ -4956,8 +6293,7 @@ function renderOrderCard(order) {
   var materials = order.materials || [];
   var expenses  = order.expenses  || [];
 
-  var statusColors = { 'Новый':'var(--accent)', 'В работе':'#f59e0b', 'Готов':'var(--success)', 'Выдан':'var(--text3)', 'Отменён':'var(--danger)' };
-  var statusColor  = statusColors[order['Статус']] || 'var(--text3)';
+  var statusColor  = orderStatusColor(order['Статус']);
 
   App._currentOrder = order;
 
@@ -5047,7 +6383,7 @@ function renderOrderCard(order) {
           '<span style="font-size:11px;padding:2px 9px;border-radius:20px;background:' + payStatusColor + '22;color:' + payStatusColor + '">' + payStatus + '</span>' +
         '</div>' +
         '<select style="font-size:12px;font-weight:700;padding:5px 8px;border-radius:8px;border:1px solid var(--border);background:var(--inp);color:' + statusColor + '" onchange="changeOrderStatus(\'' + oid + '\', this)">' +
-          ['Новый','В работе','Готов','Выдан','Отменён'].map(function(s){ return '<option' + (s===order['Статус']?' selected':'') + '>' + s + '</option>'; }).join('') +
+          orderStatusNames().map(function(s){ return '<option' + (s===order['Статус']?' selected':'') + '>' + s + '</option>'; }).join('') +
         '</select>' +
       '</div>' +
     '</div>' +
@@ -5074,7 +6410,7 @@ function renderOrderCard(order) {
             cvInput_('Год выпуска', 'cv-year', order['Год выпуска']) +
             cvInput_('Пробег, км', 'cv-mileage', order['Пробег']) +
             (/тонир|tint/i.test(order['Услуга']||'')
-              ? cvInput_('Светопропуск., %', 'cv-light', order['Светопропускаемость'])
+              ? ''  /* для тонировки плёнка и светопропускаемость — в отдельном блоке ниже */
               : '<div class="cardveh-field"><label>Комплекс оклейки</label>' + complexSelectHtml_(order['Комплекс']) + '</div>' +
                 cvInput_('Кол-во элементов', 'cv-elements-count', order['Кол-во элементов']) +
                 cvTextarea_('Элементы оклейки (правьте вручную: удаляйте/добавляйте)', 'cv-elements', order['Элементы'])) +
@@ -5086,20 +6422,23 @@ function renderOrderCard(order) {
           (isLegal ? '<div style="font-size:11px;color:var(--text3);margin-top:4px">Заполните «Подписант» и «Доверенность» — если договор подписывает не директор, а представитель по доверенности.</div>' : '') +
           '<div style="text-align:right;margin-top:6px;font-size:11px;color:var(--text3);min-height:14px"><span id="cv-status"></span></div>') +
 
-        // Материалы (редактируемый расход плёнки)
-        '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">' +
-            '<span style="font-weight:600">Материалы (расход плёнки)</span>' +
-            '<div style="display:flex;gap:10px;align-items:center">' +
-              '<span id="card-mat-status" style="font-size:11px;color:var(--text3)"></span>' +
-              '<button class="btn" onclick="addCardMatLine()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--bg-card2);color:var(--text);border:1px solid var(--border);border-radius:7px">+ Добавить</button>' +
-            '</div>' +
-          '</div>' +
-          '<table class="data-table" style="border:none">' +
-            '<thead><tr><th>Материал</th><th style="text-align:center">Кол-во</th><th style="text-align:center">м²</th><th style="text-align:center">Цена/м²</th><th>Тип</th><th style="text-align:right">Стоимость</th></tr></thead>' +
-            '<tbody id="card-mat-tbody">' + matRows + '</tbody>' +
-          '</table>' +
-        '</div>' +
+        // Материалы: для тонировки — свой блок (плёнка + светопропускаемость),
+        // для оклейки — таблица расхода плёнки в м².
+        (/тонир|tint/i.test(order['Услуга']||'')
+          ? tintFilmSectionHtml_(order)
+          : '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">' +
+                '<span style="font-weight:600">Материалы (расход плёнки)</span>' +
+                '<div style="display:flex;gap:10px;align-items:center">' +
+                  '<span id="card-mat-status" style="font-size:11px;color:var(--text3)"></span>' +
+                  '<button class="btn" onclick="addCardMatLine()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--bg-card2);color:var(--text);border:1px solid var(--border);border-radius:7px">+ Добавить</button>' +
+                '</div>' +
+              '</div>' +
+              '<table class="data-table" style="border:none">' +
+                '<thead><tr><th>Материал</th><th style="text-align:center">Кол-во</th><th style="text-align:center">м²</th><th style="text-align:center">Цена/м²</th><th>Тип</th><th style="text-align:right">Стоимость</th></tr></thead>' +
+                '<tbody id="card-mat-tbody">' + matRows + '</tbody>' +
+              '</table>' +
+            '</div>') +
 
         // Расходы (редактируемые)
         '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden">' +
@@ -5298,6 +6637,112 @@ function cardMatOptions_(selectedId) {
   return opts;
 }
 
+// ─── ТОНИРОВКА: блок «Тонировочные плёнки» (вместо m²-таблицы материалов) ─────
+// Тонировка отличается от оклейки: у КАЖДОГО стекла своя плёнка и свой процент
+// светопропускаемости — это идёт в договор/акт. Комплексы, элементы и расход в
+// м² тут не нужны. Каждая плёнка = строка материалов (модель «1 × стоимость»),
+// с полями Зона и Светопропускаемость, чтобы документы и финансы работали.
+
+// Пустая строка тонировочной плёнки: кол-во=1, единица=м² → «Стоимость = Цена».
+function blankTintRow_() {
+  return { 'Материал ID':'', 'Название':'', 'Единица':'м²', 'Кол-во':1,
+    'Ширина рулона':1.52, 'Цена за м²':0, 'Тип':'расход', 'Кол-во м²':1, 'Стоимость':0,
+    'Зона':'', 'Светопропускаемость':'' };
+}
+
+// Список названий тонировочных плёнок для подсказки (datalist).
+function tintFilmNames_() {
+  var set = {};
+  (App._materials || []).forEach(function(m){ var n = (m['Название']||'').trim(); if (n) set[n] = true; });
+  ['Nano Ceramic', 'Carbon', 'Dipal', 'Спектрол'].forEach(function(n){ if (!set[n]) set[n] = true; });
+  return Object.keys(set);
+}
+// Типовые зоны/стёкла для подсказки.
+var TINT_ZONES = ['Задняя полусфера', 'Лобовое стекло', 'Полоса на лобовое', 'Передние боковые', 'Задние боковые', 'Передняя полусфера', 'Заднее стекло', 'Люк', 'Панорамная крыша'];
+
+// HTML блока «Тонировочные плёнки» (для карточки заказа при услуге «Тонировка»).
+function tintFilmSectionHtml_(order) {
+  var o = App._currentOrder;
+  if (!o.materials) o.materials = [];
+  if (!o.materials.length) o.materials = [ blankTintRow_() ];
+  // Бэкофилл для старых заказов: если у первой плёнки нет %, но задан общий по
+  // заказу — переносим его в первую строку (потом редактируется по-строчно).
+  var first = o.materials[0];
+  if (first && !String(first['Светопропускаемость']==null?'':first['Светопропускаемость']).trim()
+            && String(order['Светопропускаемость']==null?'':order['Светопропускаемость']).trim()) {
+    first['Светопропускаемость'] = order['Светопропускаемость'];
+  }
+  var films = tintFilmNames_().map(function(n){ return '<option value="' + String(n).replace(/"/g,'&quot;') + '">'; }).join('');
+  var zones = TINT_ZONES.map(function(n){ return '<option value="' + n + '">'; }).join('');
+  return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">' +
+      '<span style="font-weight:600">Тонировочные плёнки</span>' +
+      '<div style="display:flex;gap:10px;align-items:center">' +
+        '<span id="card-mat-status" style="font-size:11px;color:var(--text3)"></span>' +
+        '<button class="btn" onclick="addTintFilmLine()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--bg-card2);color:var(--text);border:1px solid var(--border);border-radius:7px">+ Плёнка</button>' +
+      '</div>' +
+    '</div>' +
+    '<table class="data-table" style="border:none">' +
+      '<thead><tr><th>Стекло / зона</th><th>Плёнка (тип)</th><th style="text-align:center">Светопроп., %</th><th style="text-align:center">Стоимость</th><th></th></tr></thead>' +
+      '<tbody id="card-mat-tbody">' + renderTintRows() + '</tbody>' +
+    '</table>' +
+    '<datalist id="tint-film-list">' + films + '</datalist>' +
+    '<datalist id="tint-zone-list">' + zones + '</datalist>' +
+    '<div style="padding:6px 14px 10px;font-size:11px;color:var(--text3)">Добавьте по строке на каждое стекло с разной плёнкой/процентом — всё попадёт в договор и акт.</div>' +
+  '</div>';
+}
+
+// Строки редактора тонировочных плёнок.
+function renderTintRows() {
+  var o = App._currentOrder;
+  var mats = (o && o.materials) || [];
+  var inp = 'padding:4px 7px;border:1px solid var(--border);border-radius:6px;background:var(--inp);color:var(--text);font-size:12px';
+  var esc = function(s){ return String(s==null?'':s).replace(/"/g,'&quot;'); };
+  return mats.map(function(m, i){
+    var cost = Number(m['Цена за м²']) || 0;
+    return '<tr>' +
+      '<td><input class="cardmat-zone" data-i="' + i + '" list="tint-zone-list" value="' + esc(m['Зона']) + '" placeholder="напр. Лобовое" oninput="tintRowEdit(' + i + ')" style="' + inp + ';min-width:140px"></td>' +
+      '<td><input class="cardmat-name" data-i="' + i + '" list="tint-film-list" value="' + esc(m['Название']) + '" placeholder="напр. Nano Ceramic" oninput="tintRowEdit(' + i + ')" style="' + inp + ';min-width:150px"></td>' +
+      '<td style="text-align:center;white-space:nowrap"><input class="cardmat-light" data-i="' + i + '" value="' + esc(m['Светопропускаемость']) + '" placeholder="%" oninput="tintRowEdit(' + i + ')" style="' + inp + ';width:60px;text-align:center"></td>' +
+      '<td style="text-align:center;white-space:nowrap"><input class="cardmat-price" data-i="' + i + '" type="number" step="0.01" min="0" value="' + cost + '" oninput="tintRowEdit(' + i + ')" style="' + inp + ';width:78px"> ' + CUR + '</td>' +
+      '<td><button onclick="removeTintFilmLine(' + i + ')" title="Удалить плёнку" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px">✕</button></td>' +
+    '</tr>';
+  }).join('');
+}
+
+// Правка строки тонировочной плёнки → в модель материалов + автосохранение.
+function tintRowEdit(i) {
+  var o = App._currentOrder; if (!o || !o.materials || !o.materials[i]) return;
+  var m  = o.materials[i];
+  var z  = document.querySelector('.cardmat-zone[data-i="'  + i + '"]');
+  var nm = document.querySelector('.cardmat-name[data-i="'  + i + '"]');
+  var lt = document.querySelector('.cardmat-light[data-i="' + i + '"]');
+  var pr = document.querySelector('.cardmat-price[data-i="' + i + '"]');
+  if (z)  m['Зона']                = z.value;
+  if (nm) m['Название']            = nm.value;
+  if (lt) m['Светопропускаемость'] = lt.value;
+  if (pr) m['Цена за м²']          = Number(pr.value) || 0;
+  m['Единица'] = 'м²'; m['Кол-во'] = 1;             // держим модель «1 × стоимость»
+  matAutoSave();
+}
+
+function addTintFilmLine() {
+  var o = App._currentOrder; if (!o) return;
+  if (!o.materials) o.materials = [];
+  o.materials.push(blankTintRow_());
+  var tb = document.getElementById('card-mat-tbody');
+  if (tb) tb.innerHTML = renderTintRows();
+}
+
+function removeTintFilmLine(i) {
+  var o = App._currentOrder; if (!o || !o.materials) return;
+  o.materials.splice(i, 1);
+  if (!o.materials.length) o.materials = [ blankTintRow_() ];
+  var tb = document.getElementById('card-mat-tbody');
+  if (tb) tb.innerHTML = renderTintRows();
+  matAutoSave();
+}
+
 function blankMatRow_() {
   return { 'Материал ID':'', 'Название':'', 'Единица':'пм', 'Кол-во':0,
     'Ширина рулона':1.52, 'Цена за м²':0, 'Тип':'расход', 'Кол-во м²':0, 'Стоимость':0 };
@@ -5424,6 +6869,8 @@ function saveCardMaterials() {
       rollWidth:   Number(m['Ширина рулона']) || 1.52,
       pricePerSqm: Number(m['Цена за м²']) || 0,
       type:        m['Тип'] === 'остаток' ? 'остаток' : 'расход',
+      zone:        m['Зона'] || '',                    // тонировка
+      light:       m['Светопропускаемость'] || '',     // тонировка
     };
   });
 
@@ -5810,6 +7257,8 @@ function syncCardEditors_() {
     var t = document.querySelector('.cardmat-type[data-i="'+i+'"]');  if (t) m['Тип']        = t.value;
     var nm= document.querySelector('.cardmat-name[data-i="'+i+'"]');  if (nm) m['Название']  = nm.value;
     var pr= document.querySelector('.cardmat-price[data-i="'+i+'"]'); if (pr) m['Цена за м²']= Number(pr.value)||0;
+    var z = document.querySelector('.cardmat-zone[data-i="'+i+'"]');  if (z) m['Зона']       = z.value;   // тонировка
+    var lt= document.querySelector('.cardmat-light[data-i="'+i+'"]'); if (lt) m['Светопропускаемость'] = lt.value; // тонировка
   });
   (o.expenses || []).forEach(function(e, i){
     var n = document.querySelector('.cardexp-name[data-i="'+i+'"]');   if (n) e['Название'] = n.value;
@@ -5830,7 +7279,7 @@ function matFlush_(cb) {
   var id = o['ID'];
   syncCardEditors_();
   var matLines = (o.materials || []).filter(function(m){ return (m['Материал ID'] || String(m['Название']||'').trim() || Number(m['Кол-во']) > 0); })
-    .map(function(m){ return { materialId:m['Материал ID']||'', name:m['Название']||'', unit:m['Единица']||'пм', qty:Number(m['Кол-во'])||0, rollWidth:Number(m['Ширина рулона'])||1.52, pricePerSqm:Number(m['Цена за м²'])||0, type:m['Тип']==='остаток'?'остаток':'расход' }; });
+    .map(function(m){ return { materialId:m['Материал ID']||'', name:m['Название']||'', unit:m['Единица']||'пм', qty:Number(m['Кол-во'])||0, rollWidth:Number(m['Ширина рулона'])||1.52, pricePerSqm:Number(m['Цена за м²'])||0, type:m['Тип']==='остаток'?'остаток':'расход', zone:m['Зона']||'', light:m['Светопропускаемость']||'' }; });
   var expLines = (o.expenses || []).filter(function(e){ return (String(e['Название']||'').trim()) || (Number(e['Сумма']) > 0); })
     .map(function(e){ return { name:e['Название']||'', amount:Number(e['Сумма'])||0 }; });
   matSetStatus_('сохранение…');

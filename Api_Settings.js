@@ -62,6 +62,7 @@ function saveServicesCatalog(list) {
         code:            String(x.code || x.name).toUpperCase().replace(/\s+/g, '_').slice(0, 16),
         name:            String(x.name).trim(),
         icon:            x.icon || '🔧',
+        color:           /^#[0-9a-fA-F]{3,8}$/.test(String(x.color)) ? String(x.color) : '#4da6ff',
         active:          x.active !== false,
         contractPrefix:  String(x.contractPrefix || '').trim(),
         calcType:        x.calcType || 'fixed',
@@ -155,6 +156,146 @@ function saveKanbanOrder(map) {
     // НЕ зовём bumpDataVersion_ — это только UI-порядок, не влияет на финансовые чтения из кэша
     return { ok: true };
   });
+}
+
+// ─── СТАТУСЫ ЗАКАЗОВ / «ВОРОНКИ» КАНБАНА (white-label) ───────────────────────
+
+/**
+ * Эффективный список статусов-«воронок»: переопределение из ORDER_STATUSES_JSON,
+ * иначе дефолт CONFIG.ORDER_STATUSES. Формат: [{id,name,color,cancelled}].
+ */
+function getOrderStatuses() {
+  try {
+    var sheet = getTab('DATABASE', 'SETTINGS');
+    var lastRow = sheet.getLastRow();
+    if (lastRow >= 2) {
+      var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+      for (var i = 0; i < data.length; i++) {
+        if (data[i][0] === 'ORDER_STATUSES_JSON' && data[i][1]) {
+          var arr = JSON.parse(data[i][1]);
+          if (Array.isArray(arr) && arr.length) return arr;
+        }
+      }
+    }
+  } catch (e) { /* битый JSON или нет настройки — дефолт */ }
+  return CONFIG.ORDER_STATUSES;
+}
+
+/** Имена статусов, помеченных «отменён» (исключаются из выручки/ДДС/ЗП). */
+function getCancelledStatusNames_() {
+  try {
+    var names = getOrderStatuses().filter(function(s){ return s && s.cancelled; })
+      .map(function(s){ return String(s.name); });
+    return names.length ? names : ['Отменён'];
+  } catch (e) { return ['Отменён']; }
+}
+
+/** Множество имён «отменённых» статусов — для быстрой проверки в циклах. */
+function getCancelledStatusSet_() {
+  var set = {};
+  getCancelledStatusNames_().forEach(function(n){ set[n] = true; });
+  return set;
+}
+
+/** Множество имён «завершённых» статусов (done) — не считаются «в работе». */
+function getDoneStatusSet_() {
+  var set = {};
+  try {
+    getOrderStatuses().forEach(function(s){ if (s && s.done) set[String(s.name)] = true; });
+  } catch (e) {}
+  return set;
+}
+
+/** Имя статуса по умолчанию для нового заказа (первая воронка). */
+function getDefaultStatusName_() {
+  var list = getOrderStatuses();
+  return (list[0] && list[0].name) ? list[0].name : 'Новый';
+}
+
+/**
+ * Сохранить список статусов-«воронок».
+ * payload = { list: [{id,name,color,cancelled}], renames: [{from,to}] }
+ * Переименования/удаления применяются к существующим заказам (чтобы не осиротели)
+ * и к ручному порядку канбана.
+ */
+function saveOrderStatuses(payload) {
+  return safeCall(function() {
+    payload = payload || {};
+    var list = payload.list;
+    if (!Array.isArray(list)) throw new Error('Неверный формат воронок');
+
+    var seen = {};
+    var clean = [];
+    list.forEach(function(x){
+      if (!x) return;
+      var name = String(x.name || '').trim();
+      if (!name) return;
+      var key = name.toLowerCase();
+      if (seen[key]) throw new Error('Повторяющееся название воронки: «' + name + '»');
+      seen[key] = true;
+      clean.push({
+        id:    String(x.id || name).slice(0, 40),
+        name:  name,
+        color: /^#[0-9a-fA-F]{3,8}$/.test(String(x.color)) ? String(x.color) : '#6c8ebf',
+        cancelled: !!x.cancelled,
+        done:      !!x.done,
+      });
+    });
+    if (!clean.length) throw new Error('Нужна хотя бы одна воронка');
+
+    var validNames = {};
+    clean.forEach(function(s){ validNames[s.name] = true; });
+    var fallback = clean[0].name;
+
+    var renameMap = {};
+    (payload.renames || []).forEach(function(r){
+      if (r && r.from && r.to && r.from !== r.to) renameMap[String(r.from)] = String(r.to);
+    });
+
+    // Переносим существующие заказы (переименование + осиротевшие → в первую воронку)
+    applyStatusReassign_(renameMap, validNames, fallback);
+    // Обновляем ключи ручного порядка канбана
+    remapKanbanOrderKeys_(renameMap, validNames, fallback);
+
+    saveSetting('ORDER_STATUSES_JSON', JSON.stringify(clean), 'Статусы заказов / воронки', 'Заказы');
+    bumpDataVersion_();
+    return { count: clean.length, statuses: clean };
+  });
+}
+
+/** Перенести статусы существующих заказов по карте переименований и удалений. */
+function applyStatusReassign_(renameMap, validNames, fallback) {
+  var sheet = getTab('DATABASE', 'ORDERS');
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var col = headers.indexOf('Статус');
+  if (col < 0) return;
+  var range = sheet.getRange(2, col + 1, lastRow - 1, 1);
+  var vals = range.getValues();
+  var changed = false;
+  for (var i = 0; i < vals.length; i++) {
+    var cur = String(vals[i][0] || '');
+    if (!cur) continue;
+    var next = renameMap[cur] || cur;
+    if (!validNames[next]) next = fallback;   // удалённая воронка → первая
+    if (next !== cur) { vals[i][0] = next; changed = true; }
+  }
+  if (changed) range.setValues(vals);
+}
+
+/** Обновить ключи (статусы) в ручном порядке канбана после переименований/удалений. */
+function remapKanbanOrderKeys_(renameMap, validNames, fallback) {
+  try {
+    var order = getKanbanOrder();
+    var out = {};
+    Object.keys(order).forEach(function(st){
+      var to = renameMap[st] || st;
+      if (!validNames[to]) to = fallback;
+      out[to] = (out[to] || []).concat(order[st] || []);
+    });
+    saveKanbanOrder(out);
+  } catch (e) { /* порядок канбана не критичен */ }
 }
 
 function saveSettings(settings) {

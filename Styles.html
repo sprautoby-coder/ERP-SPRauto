@@ -76,6 +76,10 @@
 #dash-orders-table tbody tr.row-verified td:last-child {
   box-shadow: inset -4px 0 0 var(--success);
 }
+/* Выделенная чекбоксом строка (для группового удаления) */
+#orders-table tbody tr.row-selected td { background-image: linear-gradient(rgba(56,132,255,.18), rgba(56,132,255,.18)) !important; }
+#orders-table th.col-sel, #orders-table td.col-sel { padding-left: 6px; padding-right: 6px; }
+#orders-table td.col-sel input, #orders-table th.col-sel input { width: 16px; height: 16px; cursor: pointer; }
 
 *, *::before, *::after { box-sizing:border-box; margin:0; padding:0; }
 html { scroll-behavior:smooth; }
@@ -355,12 +359,26 @@ body {
 .ver-on  { background:var(--green-soft); color:var(--success); border-color:rgba(46,204,113,.35); width:26px; height:24px; padding:0; }
 .ver-off { background:var(--bg-card2); color:var(--text3); font-weight:600; }
 .ver-off:hover { color:var(--success); border-color:rgba(46,204,113,.35); }
+.row-del-btn { border:1px solid var(--border); background:var(--bg-card2); border-radius:6px; cursor:pointer; padding:3px 7px; font-size:13px; line-height:1; opacity:.7; transition:var(--t); }
+.row-del-btn:hover { opacity:1; background:var(--red-soft); border-color:rgba(217,83,79,.4); }
 /* ресайз и видимые границы столбцов */
 .resizable-table th, .resizable-table td { border-right:1px solid var(--border); }
 .resizable-table th:last-child, .resizable-table td:last-child { border-right:none; }
 .col-resizer { position:absolute; top:0; right:0; width:7px; height:100%; cursor:col-resize; user-select:none; z-index:2; }
 .col-resizer:hover { background:var(--accent); opacity:.4; }
-#orders-table-wrap, #dash-orders-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+/* Горизонтальная прокрутка широких таблиц — полоса ВСЕГДА видна (на Windows
+   системная полоса-оверлей прячется, и пользователь не понимает, что таблицу
+   можно двигать вправо-влево). Делаем заметный бегунок внизу. */
+#orders-table-wrap, #dash-orders-wrap {
+  overflow-x:scroll; overflow-y:hidden; -webkit-overflow-scrolling:touch;
+  scrollbar-width:auto; scrollbar-color:var(--accent) var(--bg-card2);
+}
+#orders-table-wrap::-webkit-scrollbar, #dash-orders-wrap::-webkit-scrollbar { height:14px; }
+#orders-table-wrap::-webkit-scrollbar-track, #dash-orders-wrap::-webkit-scrollbar-track { background:var(--bg-card2); }
+#orders-table-wrap::-webkit-scrollbar-thumb, #dash-orders-wrap::-webkit-scrollbar-thumb {
+  background:var(--accent); border-radius:8px; border:3px solid var(--bg-card2); min-width:60px;
+}
+#orders-table-wrap::-webkit-scrollbar-thumb:hover, #dash-orders-wrap::-webkit-scrollbar-thumb:hover { background:var(--text2); }
 /* раскрытие расхода плёнки в строке заказа */
 .film-toggle { border:none; background:none; color:var(--text3); cursor:pointer; font-size:12px; padding:0 5px 0 0; transition:transform .15s; display:inline-block; }
 .film-toggle.open { transform:rotate(90deg); color:var(--accent); }
@@ -416,7 +434,7 @@ body {
 
 /* ===== КЛИЕНТЫ: ВИД ТАБЛИЦА ===== */
 .clients-table-wrap { border:1px solid var(--border); border-radius:12px; overflow:hidden; }
-#orders-table-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+/* #orders-table-wrap: горизонтальная полоса задана выше (всегда видна) */
 .clients-table { width:100%; border-collapse:collapse; font-size:13px; table-layout:fixed; }
 .clients-table thead th { background:var(--bg-card2); color:var(--text3); font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:9px 12px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; overflow:hidden; }
 .clients-table thead th[onclick] { cursor:pointer; }
@@ -457,12 +475,29 @@ body {
   .quick-actions-grid { grid-template-columns:repeat(2,1fr); }
   .clients-kpi-row { grid-template-columns:1fr 1fr; }
 }
+/* Бургер — только на мобильном; фон под выезжающим меню */
+.topbar-burger { display:none; align-items:center; justify-content:center; width:40px; height:40px; margin-right:6px;
+  border:none; background:transparent; color:var(--text); border-radius:10px; cursor:pointer; }
+.topbar-burger:hover { background:var(--bg-hover); }
+.sidebar-backdrop { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:999; }
+
+/* Кнопка смены темы в шапке (всегда доступна) */
+.topbar-icon-btn { display:inline-flex; align-items:center; justify-content:center; width:38px; height:38px;
+  border:none; background:transparent; color:var(--text2); border-radius:9px; cursor:pointer; transition:var(--t); }
+.topbar-icon-btn:hover { background:var(--bg-hover); color:var(--text); }
+.theme-ic-light { display:none; }
+[data-theme="light"] .theme-ic-dark { display:none; }
+[data-theme="light"] .theme-ic-light { display:inline; }
+
 @media (max-width:768px) {
-  .sidebar { width:60px; }
-  .sidebar-logo { padding:12px 10px; justify-content:center; }
-  .logo-text,.logo-sub,.nav-item span,.nav-label { display:none; }
-  .nav-item { justify-content:center; padding:9px; }
-  .main { margin-left:60px; }
+  /* Сайдбар → выезжающее меню (off-canvas) с полными подписями */
+  .sidebar { position:fixed; top:0; left:0; bottom:0; z-index:1000; width:250px;
+    transform:translateX(-100%); transition:transform .25s ease; overflow-y:auto; }
+  body.sidebar-open .sidebar { transform:translateX(0); box-shadow:4px 0 28px rgba(0,0,0,.35); }
+  body.sidebar-open .sidebar-backdrop { display:block; }
+  .main { margin-left:0; }              /* контент на всю ширину */
+  .topbar-burger { display:inline-flex; }
+
   .kpi-grid { grid-template-columns:1fr 1fr; }
   .quick-actions-grid { grid-template-columns:1fr 1fr; }
   .fab-wrap { right:16px; bottom:16px; }
@@ -495,6 +530,15 @@ body {
   .quick-actions-grid { grid-template-columns:1fr; }
   .modal { border-radius:14px 14px 0 0; }
   .photo-thumb { width:80px; height:80px; }
+  /* Топбар компактнее, лишнее прячем */
+  .topbar { padding:0 10px; }
+  .topbar-sync { display:none; }
+  .page-title { font-size:16px; }
+  .hide-mobile { display:none !important; }
+  .content { padding:12px 10px; }
+  /* Тач-цели крупнее */
+  .btn { padding:9px 14px; }
+  .nav-item { padding:12px 16px; }
 }
 
 /* ===== LINE-ITEM СТРОКИ (материалы / расходы в заказе) ===== */
@@ -507,6 +551,7 @@ body {
   animation: li-fade .15s ease;
 }
 .line-item-row:last-child { border-bottom: none; }
+.line-item-leftover { background: var(--red-soft); border-radius: 8px; padding-left: 6px; padding-right: 6px; }
 .line-item-select, .line-item-name {
   flex: 3; min-width: 0;
   padding: 5px 26px 5px 8px; border-radius: 7px;
@@ -607,6 +652,28 @@ body {
 .kanban-col.drop-hover .kanban-col-body { background: var(--accent-soft); border-radius: 8px; }
 .kanban-empty { text-align: center; color: var(--text3); font-size: 12px; padding: 18px 6px; }
 
+/* --- Настраиваемые воронки: цветная шапка-прямоугольник + инлайн-редактирование --- */
+.kanban-col-head { border-bottom: none; border-radius: 11px 11px 0 0; cursor: grab; user-select: none; }
+.kanban-col-head:active { cursor: grabbing; }
+.kanban-col-head.col-dragging { opacity: .45; }
+.kanban-title { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; }
+.kanban-title-input { flex: 1; min-width: 40px; font: inherit; color: inherit;
+  background: rgba(255,255,255,.20); border: 1px solid rgba(255,255,255,.55); border-radius: 6px; padding: 1px 6px; outline: none; }
+.kanban-col-head .kanban-count { background: rgba(255,255,255,.25); color: inherit; }
+.kanban-col-color { width: 18px; height: 18px; padding: 0; border: 2px solid rgba(255,255,255,.75);
+  border-radius: 50%; background: transparent; cursor: pointer; flex: 0 0 auto; overflow: hidden; }
+.kanban-col-color::-webkit-color-swatch-wrapper { padding: 0; }
+.kanban-col-color::-webkit-color-swatch { border: none; border-radius: 50%; }
+.kanban-col-del { margin-left: 2px; background: rgba(255,255,255,.20); color: inherit; border: none;
+  border-radius: 6px; width: 22px; height: 22px; cursor: pointer; font-size: 12px; line-height: 1; flex: 0 0 auto;
+  opacity: 0; transition: opacity .15s; }
+.kanban-col-head:hover .kanban-col-del { opacity: 1; }
+.kanban-col.col-drop-hover { outline: 2px dashed var(--accent); outline-offset: 2px; }
+.kanban-add-col { flex: 0 0 auto; width: 54px; align-self: stretch; border: 2px dashed var(--border);
+  border-radius: 12px; background: transparent; color: var(--text3); font-size: 30px; font-weight: 300;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; transition: .15s; }
+.kanban-add-col:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
+
 .kanban-card {
   position: relative;
   background: var(--bg-card); border: 1px solid var(--border); border-left: 3px solid var(--text3);
@@ -685,6 +752,121 @@ body {
 @media (max-width: 880px) {
   .apt-week { grid-template-columns: repeat(7, 150px); overflow-x: auto; }
 }
+
+/* --- Календарь дня (сетка по времени) --- */
+.apt-cal { background: var(--bg-card2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 10px 10px 6px; overflow: hidden; }
+.apt-cal-grid { position: relative; }
+.apt-cal-gutter { position: absolute; left: 0; top: 0; width: 50px; height: 100%; border-right: 1px solid var(--border); }
+.apt-hour-label { position: absolute; right: 7px; transform: translateY(-7px); font-size: 11px; font-weight: 600; color: var(--text2); white-space: nowrap; }
+.apt-cal-track { position: relative; margin-left: 56px; height: 100%; }
+.apt-hour-line { position: absolute; left: 0; right: 0; border-top: 1px solid var(--border); opacity: .5; }
+.apt-now-line { position: absolute; left: 0; right: 0; border-top: 2px solid var(--danger); z-index: 3; }
+.apt-now-line::before { content: ''; position: absolute; left: -4px; top: -4px; width: 7px; height: 7px; border-radius: 50%; background: var(--danger); }
+.apt-block { position: absolute; border-radius: 7px; padding: 3px 7px; overflow: hidden; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,.12); transition: filter .12s, transform .12s; z-index: 2; }
+.apt-block:hover { filter: brightness(1.05); box-shadow: 0 3px 10px rgba(0,0,0,.2); z-index: 4; }
+.apt-block-time { font-size: 11px; font-weight: 700; color: var(--text); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+.apt-block-client { font-size: 12.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apt-block-meta { font-size: 10.5px; color: var(--text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apt-block-inwork { opacity: .62; }
+.apt-block-done { opacity: .55; }
+.apt-block-cancel { opacity: .45; text-decoration: line-through; }
+.apt-state { font-size: 9.5px; font-weight: 700; padding: 0 6px; border-radius: 8px; text-transform: uppercase; letter-spacing: .3px; }
+.apt-state-work { background: var(--yellow-soft); color: var(--warning); }
+.apt-state-done { background: var(--green-soft); color: var(--success); }
+.apt-block-acts { position: absolute; right: 4px; bottom: 3px; opacity: 0; transition: opacity .12s; }
+.apt-block:hover .apt-block-acts { opacity: 1; }
+.apt-block-btn { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 6px; border: none; cursor: pointer;
+  background: var(--accent); color: #fff; }
+.apt-block-btn:hover { filter: brightness(1.08); }
+/* Кнопка удаления записи (правый верхний угол блока, при наведении) */
+.apt-block-del { position: absolute; top: 2px; right: 2px; width: 18px; height: 18px; border: none; border-radius: 5px;
+  background: var(--red-soft); color: var(--danger); font-size: 11px; line-height: 1; cursor: pointer;
+  opacity: 0; transition: opacity .12s; z-index: 5; }
+.apt-block:hover .apt-block-del { opacity: 1; }
+.apt-cal-track { cursor: copy; }   /* подсказка: клик по пустому месту создаёт запись */
+/* Ручка растягивания длительности (нижний край блока) */
+.apt-block-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; cursor: ns-resize; }
+.apt-block-resize::after { content: ''; position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%);
+  width: 26px; height: 3px; border-radius: 2px; background: rgba(0,0,0,.22); opacity: 0; transition: opacity .12s; }
+.apt-block:hover .apt-block-resize::after { opacity: 1; }
+/* Меню выбора воронки */
+.apt-funnel-menu { position: fixed; z-index: 9999; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,.28); padding: 6px; min-width: 190px; }
+.apt-funnel-head { font-size: 11px; color: var(--text3); padding: 4px 8px 6px; }
+.apt-funnel-item { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; border: none;
+  background: transparent; color: var(--text); font-size: 13px; padding: 7px 8px; border-radius: 7px; cursor: pointer; }
+.apt-funnel-item:hover { background: var(--bg-hover); }
+.apt-funnel-dot { width: 11px; height: 11px; border-radius: 50%; flex: 0 0 auto; }
+/* Многодневные записи — полоса сверху (день) и спан над днями (неделя) */
+.apt-allday { display: flex; flex-direction: column; gap: 6px; padding: 4px 4px 8px; margin-bottom: 8px; border-bottom: 1px dashed var(--border); }
+.apt-allday-bar { position: relative; border-radius: 7px; padding: 6px 10px; font-size: 12.5px; cursor: pointer; }
+.apt-allday-bar:hover { filter: brightness(1.05); }
+.apt-allday-range { font-size: 10.5px; color: var(--text3); margin-left: 8px; white-space: nowrap; }
+.apt-week-spanrow { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin-bottom: 2px; }
+.apt-wk-span { border-radius: 7px; padding: 4px 9px; font-size: 11.5px; cursor: pointer; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.apt-wk-span:hover { filter: brightness(1.05); }
+
+/* --- Недельный календарь (сетка по времени) --- */
+.apt-wkcal { border: 1px solid var(--border); border-radius: 12px; overflow: hidden; background: var(--bg-card2); }
+.apt-wkcal-headrow, .apt-wkcal-alldayrow, .apt-wkcal-bodyrow { display: flex; }
+.apt-wkcal-corner { width: 52px; flex: 0 0 52px; border-right: 1px solid var(--border); }
+.apt-wkcal-corner-label { display: flex; align-items: center; justify-content: center; text-align: center; font-size: 9px; color: var(--text3); line-height: 1.1; }
+.apt-wkcal-heads { flex: 1; display: flex; }
+.apt-wkcal-dh { flex: 1; min-width: 0; text-align: center; padding: 8px 4px; font-size: 12px; font-weight: 700; color: var(--text);
+  border-left: 1px solid var(--border); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apt-wkcal-dh:first-child { border-left: none; }
+.apt-wkcal-dh:hover { background: var(--bg-hover); }
+.apt-wkcal-dh.today { color: var(--accent); background: var(--accent-soft); }
+.apt-wkcal-alldayrow { border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.apt-wkcal-spans { flex: 1; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding: 4px; align-content: start; }
+.apt-wkcal-timegutter { width: 52px; flex: 0 0 52px; position: relative; border-right: 1px solid var(--border); }
+.apt-wkcal-track { flex: 1; position: relative; }
+.apt-wkcal-col { position: absolute; top: 0; bottom: 0; border-left: 1px solid var(--border); cursor: copy; }
+.apt-wkcal-col:first-child { border-left: none; }
+.apt-wk-block { position: absolute; border-radius: 6px; padding: 1px 5px; overflow: hidden; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.12); z-index: 2; }
+.apt-wk-block:hover { filter: brightness(1.06); box-shadow: 0 3px 8px rgba(0,0,0,.2); z-index: 4; }
+.apt-wk-block-t { font-size: 10.5px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apt-wk-block.apt-dragging { box-shadow: 0 8px 24px rgba(0,0,0,.35); opacity: .96; transition: none; }
+.apt-wk-untimed { position: absolute; left: 2px; right: 2px; height: 17px; border-radius: 5px; padding: 0 5px;
+  font-size: 10px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  cursor: pointer; z-index: 3; }
+.apt-wk-untimed:hover { filter: brightness(1.06); }
+@media (max-width: 880px) { .apt-wkcal-track, .apt-wkcal-heads { min-width: 620px; } .apt-wkcal { overflow-x: auto; } }
+
+/* --- Месячный вид --- */
+.apt-mon-head { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; margin-bottom: 6px; }
+.apt-mon-wd { text-align: center; font-size: 11px; font-weight: 700; color: var(--text3); text-transform: uppercase; }
+.apt-mon-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); grid-auto-rows: 1fr; gap: 6px; }
+.apt-mon-cell { min-height: 96px; background: var(--bg-card2); border: 1px solid var(--border); border-radius: 10px;
+  padding: 4px; display: flex; flex-direction: column; gap: 3px; overflow: hidden; }
+.apt-mon-cell.apt-mon-other { opacity: .5; }
+.apt-mon-cell.apt-mon-today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.apt-mon-daynum { align-self: flex-start; font-size: 12px; font-weight: 700; color: var(--text2); min-width: 22px; height: 22px;
+  display: flex; align-items: center; justify-content: center; border-radius: 6px; cursor: pointer; }
+.apt-mon-daynum:hover { background: var(--accent-soft); color: var(--accent); }
+.apt-mon-today .apt-mon-daynum { background: var(--accent); color: #fff; }
+.apt-mon-chips { display: flex; flex-direction: column; gap: 2px; overflow: hidden; }
+.apt-mon-chip { font-size: 10.5px; line-height: 1.3; padding: 1px 5px; border-radius: 5px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.apt-mon-chip:hover { filter: brightness(1.06); }
+.apt-mon-more { font-size: 10px; color: var(--accent); cursor: pointer; padding: 0 5px; }
+.apt-mon-more:hover { text-decoration: underline; }
+@media (max-width: 760px) { .apt-mon-grid { grid-template-columns: repeat(7, 84px); overflow-x: auto; } }
+
+/* --- Раскладка календаря: слева легенда услуг --- */
+.apt-layout { display: flex; gap: 14px; align-items: flex-start; }
+.apt-views { flex: 1; min-width: 0; }
+.apt-legend { width: 190px; flex: 0 0 190px; background: var(--bg-card2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px; position: sticky; top: 12px; }
+.apt-legend-title { font-size: 11px; font-weight: 700; color: var(--text2); margin-bottom: 10px; text-transform: uppercase; letter-spacing: .4px; }
+.apt-legend-item { display: flex; align-items: center; gap: 9px; padding: 5px 2px; }
+.apt-legend-color { width: 18px; height: 18px; padding: 0; border: none; background: none; border-radius: 5px; cursor: pointer; flex: 0 0 auto; }
+.apt-legend-color::-webkit-color-swatch-wrapper { padding: 0; }
+.apt-legend-color::-webkit-color-swatch { border: none; border-radius: 5px; }
+.apt-legend-name { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.apt-legend-hint { font-size: 10.5px; color: var(--text3); margin-top: 12px; line-height: 1.35; border-top: 1px solid var(--border); padding-top: 8px; }
+@media (max-width: 900px) { .apt-layout { flex-direction: column; } .apt-legend { width: 100%; flex: none; position: static; } }
 
 /* ===== КАССА ===== */
 .kassa-datenav { display: flex; align-items: center; gap: 6px; margin-top: 8px; }

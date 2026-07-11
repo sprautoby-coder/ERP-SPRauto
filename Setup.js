@@ -60,6 +60,9 @@ function runSetupWizard() {
     step('Модель оплаты и колонки заказов', migratePaymentModel);
     step('Склад: остатки материалов', migrateStockColumns);
     step('Поля для документов (год, пробег, светопроп., элементы)', addOrderDocColumns);
+    step('Почтовый адрес клиентов (юрлица)', addClientPostalColumn);
+    step('Записи: дата/время окончания', addAppointmentEndColumns);
+    step('Тонировка: зона и светопропускаемость плёнок', addOrderMaterialTintColumns);
     return { steps: steps, status: getSetupStatus_() };
   });
 }
@@ -187,6 +190,8 @@ function getNewSheetsSchema() {
       'Цена за м²',            // снимок цены из справочника
       'Тип',                   // расход / остаток
       'Стоимость',             // 0 если остаток, иначе Кол-во м² × Цена за м²
+      'Зона',                  // тонировка: стекло/зона (Лобовое, Передние боковые…)
+      'Светопропускаемость',   // тонировка: % пропускания света этой плёнки
       'Создан',
     ],
 
@@ -235,9 +240,11 @@ function getNewSheetsSchema() {
     // Календарь записей (v2.0): запись клиента на услугу к мастеру на дату/время
     APPOINTMENTS: [
       'ID',
-      'Дата',                  // dd.MM.yyyy
-      'Время',                 // HH:mm
-      'Длительность',          // минут
+      'Дата',                  // dd.MM.yyyy — дата начала
+      'Время',                 // HH:mm — время начала
+      'Дата окончания',        // dd.MM.yyyy — по умолчанию = дате начала
+      'Время окончания',       // HH:mm
+      'Длительность',          // минут (для однодневных, вычисляется)
       'Клиент',
       'Телефон',
       'Авто',
@@ -274,6 +281,7 @@ function getNewSheetsSchema() {
       // Поля юр. лица
       'УНП',
       'Юр. адрес',
+      'Почтовый адрес',
       'Банк. реквизиты',
       'Директор',
       'Контактное лицо',
@@ -340,6 +348,60 @@ function addDueDateColumn() {
 // ─── МИГРАЦИЯ: поля для документов (год, пробег, светопроп., элементы) ───────
 
 /** Добавить в лист «Заказы» колонки для договоров. Идемпотентно. */
+/**
+ * Добавить колонку «Почтовый адрес» в лист Клиенты (после «Юр. адрес»).
+ * Идемпотентно: если колонка уже есть — пропускает.
+ */
+function addClientPostalColumn() {
+  const sheet = getTab('DATABASE', 'CLIENTS');
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (headers.indexOf('Почтовый адрес') >= 0) return 'Колонка «Почтовый адрес» уже есть';
+  const afterIdx = headers.indexOf('Юр. адрес');
+  const insertAt = afterIdx >= 0 ? afterIdx + 1 : sheet.getLastColumn();
+  sheet.insertColumnAfter(insertAt);
+  sheet.getRange(1, insertAt + 1).setValue('Почтовый адрес')
+    .setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff');
+  sheet.autoResizeColumn(insertAt + 1);
+  return 'Добавлена колонка «Почтовый адрес»';
+}
+
+/**
+ * Добавить колонки «Дата окончания» и «Время окончания» в лист Записи
+ * (после «Время»). Бэкфилл: окончание = дате начала. Идемпотентно.
+ */
+function addAppointmentEndColumns() {
+  const sheet = getTab('DATABASE', 'APPOINTMENTS');
+  let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const style = function(cell){ cell.setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff'); };
+  const need = ['Дата окончания', 'Время окончания'];
+  let added = [];
+  // Вставляем сразу после «Время», чтобы было рядом
+  need.forEach(function(col){
+    headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    if (headers.indexOf(col) >= 0) return;
+    const after = headers.indexOf('Время') >= 0 ? headers.indexOf('Время') + (added.length + 1) : sheet.getLastColumn();
+    sheet.insertColumnAfter(after);
+    style(sheet.getRange(1, after + 1).setValue(col));
+    added.push(col);
+  });
+  // Бэкфилл: окончание = дате начала (время окончания оставляем пустым — на клиенте посчитается)
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    const h2 = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const dCol = h2.indexOf('Дата'), edCol = h2.indexOf('Дата окончания');
+    if (dCol >= 0 && edCol >= 0) {
+      const dates = sheet.getRange(2, dCol + 1, lastRow - 1, 1).getValues();
+      const ends  = sheet.getRange(2, edCol + 1, lastRow - 1, 1).getValues();
+      let changed = false;
+      for (let i = 0; i < ends.length; i++) {
+        if (!ends[i][0] && dates[i][0]) { ends[i][0] = dates[i][0]; changed = true; }
+      }
+      if (changed) sheet.getRange(2, edCol + 1, lastRow - 1, 1).setValues(ends);
+    }
+  }
+  return added.length ? ('Добавлены: ' + added.join(', ')) : 'Колонки окончания уже есть';
+}
+
 function addOrderDocColumns() {
   const sheet = getTab('DATABASE', 'ORDERS');
   let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
@@ -356,6 +418,27 @@ function addOrderDocColumns() {
   });
   Logger.log(added.length ? 'Добавлены: ' + added.join(', ') : 'Все колонки уже есть');
   return added.length ? ('Добавлены колонки: ' + added.join(', ')) : 'Колонки документов уже есть';
+}
+
+/**
+ * Тонировка: добавить в «Расход материалов» колонки «Зона» и «Светопропускаемость»,
+ * чтобы у каждой плёнки заказа был свой процент. Идемпотентно.
+ */
+function addOrderMaterialTintColumns() {
+  const sheet = getTab('DATABASE', 'ORDER_MATERIALS');
+  let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const need = ['Зона', 'Светопропускаемость'];
+  const added = [];
+  need.forEach(function(col) {
+    if (headers.indexOf(col) >= 0) return;
+    const lastCol = sheet.getLastColumn();
+    sheet.insertColumnAfter(lastCol);
+    sheet.getRange(1, lastCol + 1).setValue(col)
+      .setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff');
+    headers.push(col);
+    added.push(col);
+  });
+  return added.length ? ('Добавлены колонки: ' + added.join(', ')) : 'Колонки тонировки уже есть';
 }
 
 // ─── МИГРАЦИЯ v1.5: «Тип оплаты» и «Проверено» ──────────────────────────────

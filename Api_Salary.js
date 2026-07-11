@@ -13,10 +13,11 @@ function calcSalaryForPeriod(from, to) {
     const employees = readSheetAsObjects('DATABASE', 'EMPLOYEES')
       .filter(function(e){ return e['ID'] && e['Статус'] === 'Работает'; });
 
+    const cancelledSet = getCancelledStatusSet_();
     const orders = readSheetAsObjects('DATABASE', 'ORDERS')
       .filter(function(o){
         if (!o['ID']) return false;
-        if (!o['Статус'] || o['Статус'] === 'Отменён') return false;
+        if (!o['Статус'] || cancelledSet[o['Статус']]) return false;
         if (from || to) {
           const d = parseSalDate_(o['Дата']);
           if (from && d && d < new Date(from)) return false;

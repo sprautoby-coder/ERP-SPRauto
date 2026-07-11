@@ -216,9 +216,10 @@ function getDebtOrders() {
     });
 
     const result = [];
+    const cancelledSet = getCancelledStatusSet_();
 
     orders.forEach(function(o) {
-      if (!o['ID'] || o['Статус'] === 'Отменён') return;
+      if (!o['ID'] || cancelledSet[o['Статус']]) return;
 
       // Статус оплаты с откатом на legacy «Безнал» для старых строк
       let payStatus = String(o['Статус оплаты'] || '').trim();

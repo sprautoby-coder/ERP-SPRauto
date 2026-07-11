@@ -58,6 +58,8 @@ function getDashboardData(period) {
     let revenue = 0, grossProfit = 0, materialCost = 0, expensesSum = 0;
     let inWork = 0, debtSum = 0, debtCount = 0;
     const byService = {};
+    const cancelledSet = getCancelledStatusSet_();
+    const doneSet = getDoneStatusSet_();
 
     filtered.forEach(function(o) {
       const price  = Number(o['Стоимость заказа'])  || 0;
@@ -71,10 +73,10 @@ function getDashboardData(period) {
       grossProfit += gross;
       materialCost+= mat;
 
-      if (status === 'В работе' || status === 'Новый') inWork++;
+      if (!cancelledSet[status] && !doneSet[status]) inWork++;
 
       // Дебиторка = остаток по неоплаченным/частичным (по «Статус оплаты», откат на legacy «Безнал»)
-      if (status !== 'Отменён') {
+      if (!cancelledSet[status]) {
         let payStatus = String(o['Статус оплаты'] || '').trim();
         if (!payStatus) {
           const bz = String(o['Безнал'] || '').trim();

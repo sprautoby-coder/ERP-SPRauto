@@ -95,9 +95,12 @@ function readSheetAsObjects(bookKey, tabKey) {
     for (var j = 0; j < headers.length; j++) {
       var val = range[i][j];
       if (val instanceof Date) {
-        val = val.getTime() > 0
-          ? Utilities.formatDate(val, tz, 'dd.MM.yyyy')
-          : '';
+        // Google Sheets хранит «время суток» как дату 1899-12-30 (getTime()<0).
+        // Раньше такие значения превращались в '' — время записей терялось. Теперь:
+        //  год ≤ 1900 → это время → 'HH:mm'; иначе → дата 'dd.MM.yyyy'.
+        val = (val.getFullYear() <= 1900)
+          ? Utilities.formatDate(val, tz, 'HH:mm')
+          : Utilities.formatDate(val, tz, 'dd.MM.yyyy');
       }
       obj[headers[j]] = val;
     }
