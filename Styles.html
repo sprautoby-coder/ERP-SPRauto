@@ -370,8 +370,8 @@ body {
    системная полоса-оверлей прячется, и пользователь не понимает, что таблицу
    можно двигать вправо-влево). Делаем заметный бегунок внизу. */
 #orders-table-wrap, #dash-orders-wrap {
-  overflow-x:scroll; overflow-y:auto; -webkit-overflow-scrolling:touch;
-  max-height:calc(100vh - 220px);   /* прокрутка ВНУТРИ области → бегунок всегда виден, шапка закреплена */
+  overflow-x:auto; overflow-y:auto; -webkit-overflow-scrolling:touch;
+  max-height:calc(100vh - 220px);   /* прокрутка ВНУТРИ области → бегунок виден, шапка закреплена */
   scrollbar-width:auto; scrollbar-color:var(--accent) var(--bg-card2);
 }
 #orders-table-wrap::-webkit-scrollbar, #dash-orders-wrap::-webkit-scrollbar { height:14px; width:12px; }

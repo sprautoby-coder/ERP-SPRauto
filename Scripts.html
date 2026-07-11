@@ -3325,7 +3325,7 @@ function renderOrdersTable(orders) {
       '<td style="text-align:center">' + verCell + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + (o['Менеджер'] || '—') + '</td>' +
       '<td onclick="event.stopPropagation()">' +
-        '<select class="form-select" style="font-size:11px;padding:2px 4px;height:26px;min-width:90px" onchange="changeOrderStatus(\'' + oid + '\', this)">' +
+        '<select class="form-select" style="font-size:11px;padding:2px 4px;height:26px;width:100%;min-width:0;max-width:100%" onchange="changeOrderStatus(\'' + oid + '\', this)">' +
           orderStatusNames().map(function(s){
             return '<option value="' + s + '"' + (s === status ? ' selected' : '') + '>' + s + '</option>';
           }).join('') +
@@ -3464,18 +3464,33 @@ function toggleOrderVer(id, btn) {
 // v2 — сброс старых сохранённых ширин после добавления столбца-чекбокса (сдвиг индексов)
 function colWidthsKey_(table) { return 'colw2_' + (table.id || 'table'); }
 
-// Применить сохранённые ширины (если есть) + выставить общую ширину таблицы
+// Применить ширины столбцов. По умолчанию таблица УЖИМАЕТСЯ под ширину экрана
+// (чтобы все колонки были видны без прокрутки); ячейки обрезаются многоточием.
+// Если пользователь вручную растянул столбцы (есть сохранённые ширины) —
+// уважаем их и, если шире экрана, показываем горизонтальный бегунок.
 function applyColWidths_(table) {
   var ths = table.querySelectorAll('thead th');
-  var total = 0;
   var saved = null;
   try { var raw = localStorage.getItem(colWidthsKey_(table)); if (raw) saved = JSON.parse(raw); } catch (e) {}
+  var widths = [];
   ths.forEach(function(th, i){
-    var w = (saved && saved[i] > 20) ? saved[i] : (table._origW ? table._origW[i] : th.offsetWidth);
-    th.style.width = w + 'px';
-    total += w;
+    widths.push((saved && saved[i] > 20) ? saved[i] : (table._origW ? table._origW[i] : th.offsetWidth));
   });
-  if (total) table.style.width = total + 'px';
+  var sum = widths.reduce(function(a, b){ return a + b; }, 0);
+  var wrap = table.parentElement;
+  var containerW = wrap ? wrap.clientWidth : 0;
+  var fitted = false;
+  // Не трогали вручную и таблица шире контейнера → ужать пропорционально
+  if (!saved && containerW && sum > containerW) {
+    var k = containerW / sum;
+    widths = widths.map(function(w){ return Math.max(30, Math.floor(w * k)); });
+    sum = widths.reduce(function(a, b){ return a + b; }, 0);
+    fitted = true;
+  }
+  // Снимаем инлайновый min-width из разметки, иначе он не даст столбцу ужаться.
+  ths.forEach(function(th, i){ th.style.width = widths[i] + 'px'; th.style.minWidth = '0'; });
+  // Влезло — тянем на всю ширину (без пустого края); шире экрана — по сумме (бегунок)
+  table.style.width = (fitted || (containerW && sum <= containerW)) ? '100%' : (sum + 'px');
 }
 
 function saveColWidths_(table) {
@@ -3490,11 +3505,8 @@ function saveColWidths_(table) {
 function resetTableColWidths_(table) {
   if (!table) return;
   try { localStorage.removeItem(colWidthsKey_(table)); } catch (e) {}
-  var ths = table.querySelectorAll('thead th');
-  var orig = table._origW || [];
-  var total = 0;
-  ths.forEach(function(th, i){ var w = orig[i] || th.offsetWidth; th.style.width = w + 'px'; total += w; });
-  if (total) table.style.width = total + 'px';
+  applyColWidths_(table);   // без сохранённых ширин → снова ужмётся под экран
+  if (table.id === 'orders-table') applyOrderColVisibility();
 }
 function resetOrderColWidths() { resetTableColWidths_(document.getElementById('orders-table')); toast('Ширина столбцов сброшена', 'success'); }
 
@@ -3523,10 +3535,11 @@ function applyOrderColVisibility() {
   var st = document.getElementById('orders-colhide-style');
   if (!st) { st = document.createElement('style'); st.id = 'orders-colhide-style'; document.head.appendChild(st); }
   st.textContent = css;
-  // Пересчитать ширину таблицы по видимым столбцам, чтобы скрытие реально
-  // сокращало таблицу (при table-layout:fixed ширина задана явно).
+  // Если что-то скрыто — пересчитать ширину по видимым столбцам, чтобы таблица
+  // реально сократилась. Если ничего не скрыто — ширину не трогаем (её уже
+  // корректно выставил applyColWidths_: «влезло» = 100%).
   var table = document.getElementById('orders-table');
-  if (table && table._resizable) {
+  if (table && table._resizable && hidden.length) {
     var ths = table.querySelectorAll('thead th');
     var total = 0;
     ths.forEach(function(th, i){ if (hidden.indexOf(i + 1) < 0) total += th.offsetWidth; });
