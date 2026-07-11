@@ -370,15 +370,18 @@ body {
    системная полоса-оверлей прячется, и пользователь не понимает, что таблицу
    можно двигать вправо-влево). Делаем заметный бегунок внизу. */
 #orders-table-wrap, #dash-orders-wrap {
-  overflow-x:scroll; overflow-y:hidden; -webkit-overflow-scrolling:touch;
+  overflow-x:scroll; overflow-y:auto; -webkit-overflow-scrolling:touch;
+  max-height:calc(100vh - 220px);   /* прокрутка ВНУТРИ области → бегунок всегда виден, шапка закреплена */
   scrollbar-width:auto; scrollbar-color:var(--accent) var(--bg-card2);
 }
-#orders-table-wrap::-webkit-scrollbar, #dash-orders-wrap::-webkit-scrollbar { height:14px; }
+#orders-table-wrap::-webkit-scrollbar, #dash-orders-wrap::-webkit-scrollbar { height:14px; width:12px; }
 #orders-table-wrap::-webkit-scrollbar-track, #dash-orders-wrap::-webkit-scrollbar-track { background:var(--bg-card2); }
 #orders-table-wrap::-webkit-scrollbar-thumb, #dash-orders-wrap::-webkit-scrollbar-thumb {
   background:var(--accent); border-radius:8px; border:3px solid var(--bg-card2); min-width:60px;
 }
 #orders-table-wrap::-webkit-scrollbar-thumb:hover, #dash-orders-wrap::-webkit-scrollbar-thumb:hover { background:var(--text2); }
+/* Закреплённая шапка таблицы при вертикальной прокрутке внутри области */
+#orders-table-wrap thead th, #dash-orders-wrap thead th { position:sticky; top:0; z-index:3; }
 /* раскрытие расхода плёнки в строке заказа */
 .film-toggle { border:none; background:none; color:var(--text3); cursor:pointer; font-size:12px; padding:0 5px 0 0; transition:transform .15s; display:inline-block; }
 .film-toggle.open { transform:rotate(90deg); color:var(--accent); }
