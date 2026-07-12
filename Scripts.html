@@ -1557,7 +1557,7 @@ function applyPrefillClient_(p) {
   setVal('ord-client-phone', c['Телефон']);
   if (p.vehicle) {
     setVal('ord-car', ((p.vehicle['Марка'] || '') + ' ' + (p.vehicle['Модель'] || '')).trim());
-    setVal('ord-plate', p.vehicle['Госномер']);
+    setVal('ord-vin', p.vehicle['VIN']);
   }
 }
 
@@ -4643,7 +4643,7 @@ function submitNewOrderProceed() {
     postalAddress:clientType === 'юр' ? ((document.getElementById('ord-cl-postal')   || {}).value || '').trim() : '',
     bankDetails:  clientType === 'юр' ? ((document.getElementById('ord-cl-bank')     || {}).value || '').trim() : '',
     car:         (document.getElementById('ord-car')          || {}).value || '',
-    plate:       (document.getElementById('ord-plate')        || {}).value || '',
+    vin:         (document.getElementById('ord-vin')          || {}).value || '',
     price:       price,
     payType:     payType,
     duePayDate:  duePay,
@@ -4665,7 +4665,7 @@ function submitNewOrderProceed() {
   var finalizeNewOrder = function() {
     closeModal('modal-new-order');
     ['ord-service','ord-client-phone','ord-client-name','ord-client-id',
-     'ord-car','ord-plate','ord-price','ord-masters','ord-notes','ord-prepay',
+     'ord-car','ord-vin','ord-price','ord-masters','ord-notes','ord-prepay',
      'ord-complex','ord-elements','ord-elements-count',
      'ord-cl-unp','ord-cl-director','ord-cl-address','ord-cl-postal','ord-cl-bank'].forEach(function(id){
       var el = document.getElementById(id); if (el) el.value = '';
