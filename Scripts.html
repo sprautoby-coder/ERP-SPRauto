@@ -1976,7 +1976,8 @@ function filterClients() {
   var q = search.toLowerCase();
 
   var filtered = App.clients.filter(function(c) {
-    if (App._clientFilter !== 'all' && c['Тип'] !== App._clientFilter) return false;
+    if (App._clientFilter === 'опт') { if (String(c['Оптовик']) !== 'Да') return false; }
+    else if (App._clientFilter !== 'all' && c['Тип'] !== App._clientFilter) return false;
     if (sourceFilter && c['Источник лида'] !== sourceFilter) return false;
     if (q) {
       var name  = String(c['Имя'] || '').toLowerCase();
