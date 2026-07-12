@@ -375,6 +375,10 @@ select.mat-inp { cursor:pointer; padding-right:2px; }
 /* Разделители столбцов в справочнике материалов — чтобы границы цен были видны */
 #materials-tbody td, #page-materials thead th { border-right:1px solid var(--border); }
 #materials-tbody td:last-child, #page-materials thead th:last-child { border-right:none; }
+/* Справочник материалов: шире (не зажимать 1280px), компактные ячейки */
+#page-materials .table-wrap { max-width:1400px; }
+#page-materials .data-table td, #page-materials .data-table th { padding:5px 8px; }
+#page-materials .data-table { table-layout:fixed; }
 /* ресайз и видимые границы столбцов */
 .resizable-table th, .resizable-table td { border-right:1px solid var(--border); }
 .resizable-table th:last-child, .resizable-table td:last-child { border-right:none; }
