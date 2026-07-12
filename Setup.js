@@ -63,6 +63,7 @@ function runSetupWizard() {
     step('Почтовый адрес клиентов (юрлица)', addClientPostalColumn);
     step('Записи: дата/время окончания', addAppointmentEndColumns);
     step('Тонировка: зона и светопропускаемость плёнок', addOrderMaterialTintColumns);
+    step('Продажа материалов: длина рулона и цены (пог.м, рулон)', addMaterialSalesColumns);
     return { steps: steps, status: getSetupStatus_() };
   });
 }
@@ -168,8 +169,11 @@ function getNewSheetsSchema() {
       'Категория',             // PPF плёнка / Тонировочная плёнка / Антихром / Химия / Расходник
       'Услуга',                // PPF / Тонировка / Полировка / Универсальная
       'Единица',               // пм / м² / шт / л / кг
-      'Цена',                  // цена за единицу (для пм — цена за м²)
-      'Ширина рулона',         // метры, только для единицы "пм" (обычно 1.52)
+      'Цена',                  // себестоимость за единицу (для пм — за м²)
+      'Ширина рулона',         // метры (обычно 1.52)
+      'Длина рулона',          // метры — сколько пог.м в рулоне (для продажи)
+      'Цена за пог.м',         // ПРОДАЖА: цена за погонный метр (перепродажа)
+      'Цена за рулон',         // ПРОДАЖА: цена за целый рулон (перепродажа)
       'Остаток',               // текущий остаток на складе (в ед. измерения)
       'Мин. остаток',          // порог «мало» для подсветки
       'Активен',               // Да / Нет
@@ -439,6 +443,27 @@ function addOrderMaterialTintColumns() {
     added.push(col);
   });
   return added.length ? ('Добавлены колонки: ' + added.join(', ')) : 'Колонки тонировки уже есть';
+}
+
+/**
+ * Продажа материалов: добавить в справочник «Материалы» колонки
+ * «Длина рулона», «Цена за пог.м», «Цена за рулон». Идемпотентно.
+ */
+function addMaterialSalesColumns() {
+  const sheet = getTab('DATABASE', 'MATERIALS');
+  let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const need = ['Длина рулона', 'Цена за пог.м', 'Цена за рулон'];
+  const added = [];
+  need.forEach(function(col) {
+    if (headers.indexOf(col) >= 0) return;
+    const lastCol = sheet.getLastColumn();
+    sheet.insertColumnAfter(lastCol);
+    sheet.getRange(1, lastCol + 1).setValue(col)
+      .setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff');
+    headers.push(col);
+    added.push(col);
+  });
+  return added.length ? ('Добавлены колонки: ' + added.join(', ')) : 'Колонки продажи материалов уже есть';
 }
 
 // ─── МИГРАЦИЯ v1.5: «Тип оплаты» и «Проверено» ──────────────────────────────

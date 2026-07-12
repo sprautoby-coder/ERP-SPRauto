@@ -4759,9 +4759,10 @@ function renderMaterialsTable(list) {
   var tbody = document.getElementById('materials-tbody');
   if (!tbody) return;
   if (!list || list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3)">Материалы не добавлены. Нажмите «+ Добавить материал» или «⬇ Импорт из таблицы»</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text3)">Материалы не добавлены. Нажмите «+ Добавить материал» или «⬇ Импорт из таблицы»</td></tr>';
     return;
   }
+  var fmtBr = function(v){ return (v === '' || v == null || isNaN(Number(v))) ? '' : Number(v).toLocaleString('ru') + ' ' + CUR; };
   tbody.innerHTML = list.map(function(m) {
     var unit      = m['Единица']      || '—';
     var rollWidth = m['Ширина рулона'] ? m['Ширина рулона'] + ' м' : '—';
@@ -4769,13 +4770,19 @@ function renderMaterialsTable(list) {
     var active    = m['Активен'] !== 'Нет';
     var id        = m['ID'] || '';
     var ellip = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    // Цены продажи: за пог. метр и за рулон
+    var perM = fmtBr(m['Цена за пог.м']), perR = fmtBr(m['Цена за рулон']);
+    var sellCell = (perM || perR)
+      ? (perM ? perM + '/пм' : '—') + '<span style="color:var(--text3)"> · </span>' + (perR ? perR + '/рул' : '—')
+      : '<span style="color:var(--text3)">—</span>';
     return '<tr style="' + (active ? '' : 'opacity:.45') + '">' +
       '<td style="font-weight:600;' + ellip + '" title="' + String(m['Название']||'').replace(/"/g,'&quot;') + '">' + (m['Название'] || '—') + '</td>' +
       '<td style="color:var(--text3);font-size:12px;' + ellip + '">' + (m['Категория'] || '—') + '</td>' +
       '<td style="font-size:12px">' + (m['Услуга'] || '—') + '</td>' +
       '<td style="font-size:12px">' + unit + '</td>' +
-      '<td style="font-size:12px">' + (unit === 'пм' ? rollWidth : '—') + '</td>' +
+      '<td style="font-size:12px">' + rollWidth + '</td>' +
       '<td style="font-weight:600;color:var(--accent);text-align:right;white-space:nowrap">' + price + '</td>' +
+      '<td style="font-size:12px;text-align:right;white-space:nowrap;' + ellip + '">' + sellCell + '</td>' +
       '<td style="text-align:center"><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:' +
         (active ? 'rgba(40,167,69,.15)' : 'var(--bg-hover)') + ';color:' +
         (active ? 'var(--success)' : 'var(--text3)') + '">' +
@@ -4793,21 +4800,17 @@ function renderMaterialsTable(list) {
 }
 
 function openEditMaterial(m) {
-  document.getElementById('edit-mat-id').value         = m['ID']             || '';
-  document.getElementById('edit-mat-name').value       = m['Название']       || '';
-  document.getElementById('edit-mat-category').value   = m['Категория']      || '';
-  document.getElementById('edit-mat-service').value    = m['Услуга']         || 'Универсальная';
-  document.getElementById('edit-mat-unit').value       = m['Единица']        || 'пм';
-  document.getElementById('edit-mat-price').value      = m['Цена']           || '';
-  document.getElementById('edit-mat-roll-width').value = m['Ширина рулона']  || 1.52;
-  toggleEditRollWidth();
+  document.getElementById('edit-mat-id').value          = m['ID']             || '';
+  document.getElementById('edit-mat-name').value        = m['Название']       || '';
+  document.getElementById('edit-mat-category').value    = m['Категория']      || '';
+  document.getElementById('edit-mat-service').value     = m['Услуга']         || 'Универсальная';
+  document.getElementById('edit-mat-unit').value        = m['Единица']        || 'пм';
+  document.getElementById('edit-mat-price').value       = m['Цена']           || '';
+  document.getElementById('edit-mat-roll-width').value  = m['Ширина рулона']  || '';
+  document.getElementById('edit-mat-roll-length').value = m['Длина рулона']   || '';
+  document.getElementById('edit-mat-sell-meter').value  = m['Цена за пог.м']  || '';
+  document.getElementById('edit-mat-sell-roll').value   = m['Цена за рулон']  || '';
   openModal('modal-edit-material');
-}
-
-function toggleEditRollWidth() {
-  var unit = (document.getElementById('edit-mat-unit') || {}).value;
-  var wrap = document.getElementById('edit-mat-roll-wrap');
-  if (wrap) wrap.style.display = (unit === 'пм') ? '' : 'none';
 }
 
 function submitEditMaterial() {
@@ -4818,14 +4821,18 @@ function submitEditMaterial() {
   if (!name)  { toast('Укажите название', 'error'); return; }
   if (!price) { toast('Укажите цену', 'error'); return; }
 
+  var numOrEmpty = function(eid){ var v = (document.getElementById(eid) || {}).value; return (v === '' || v == null) ? '' : Number(v); };
   var payload = {
-    name:      name,
-    category:  (document.getElementById('edit-mat-category')  || {}).value || '',
-    service:   (document.getElementById('edit-mat-service')   || {}).value || 'Универсальная',
-    unit:      unit,
-    price:     price,
-    rollWidth: unit === 'пм' ? Number((document.getElementById('edit-mat-roll-width') || {}).value || 1.52) : '',
-    active:    'Да',
+    name:        name,
+    category:    (document.getElementById('edit-mat-category')  || {}).value || '',
+    service:     (document.getElementById('edit-mat-service')   || {}).value || 'Универсальная',
+    unit:        unit,
+    price:       price,
+    rollWidth:   numOrEmpty('edit-mat-roll-width'),
+    rollLength:  numOrEmpty('edit-mat-roll-length'),
+    sellPerMeter:numOrEmpty('edit-mat-sell-meter'),
+    sellPerRoll: numOrEmpty('edit-mat-sell-roll'),
+    active:      'Да',
   };
 
   var btn = document.getElementById('edit-mat-submit-btn');
@@ -4912,12 +4919,6 @@ function importMaterialsFromRaschet() {
     .importMaterialsFromRaschet();
 }
 
-function toggleRollWidth() {
-  var unit = (document.getElementById('mat-unit') || {}).value;
-  var wrap = document.getElementById('mat-roll-wrap');
-  if (wrap) wrap.style.display = (unit === 'пм') ? '' : 'none';
-}
-
 function submitNewMaterial() {
   var name  = ((document.getElementById('mat-name')  || {}).value || '').trim();
   var price = Number((document.getElementById('mat-price') || {}).value || 0);
@@ -4925,13 +4926,17 @@ function submitNewMaterial() {
   if (!name)  { toast('Укажите название', 'error'); return; }
   if (!price) { toast('Укажите цену', 'error'); return; }
 
+  var numOrEmpty = function(eid){ var v = (document.getElementById(eid) || {}).value; return (v === '' || v == null) ? '' : Number(v); };
   var payload = {
-    name:      name,
-    category:  (document.getElementById('mat-category')  || {}).value || '',
-    service:   (document.getElementById('mat-service')   || {}).value || 'Универсальная',
-    unit:      unit,
-    price:     price,
-    rollWidth: unit === 'пм' ? Number((document.getElementById('mat-roll-width') || {}).value || 1.52) : null,
+    name:        name,
+    category:    (document.getElementById('mat-category')  || {}).value || '',
+    service:     (document.getElementById('mat-service')   || {}).value || 'Универсальная',
+    unit:        unit,
+    price:       price,
+    rollWidth:   numOrEmpty('mat-roll-width'),
+    rollLength:  numOrEmpty('mat-roll-length'),
+    sellPerMeter:numOrEmpty('mat-sell-meter'),
+    sellPerRoll: numOrEmpty('mat-sell-roll'),
   };
 
   var btn = document.getElementById('mat-submit-btn');
@@ -4945,7 +4950,7 @@ function submitNewMaterial() {
       closeModal('modal-new-material');
       App._materials = []; // сброс кеша
       if (App.currentPage === 'materials') loadMaterials();
-      ['mat-name','mat-price','mat-roll-width'].forEach(function(id){ var el = document.getElementById(id); if(el) el.value = ''; });
+      ['mat-name','mat-price','mat-roll-length','mat-sell-meter','mat-sell-roll'].forEach(function(id){ var el = document.getElementById(id); if(el) el.value = ''; });
     })
     .withFailureHandler(function(e) {
       if (btn) { btn.disabled = false; btn.textContent = 'Сохранить'; }
