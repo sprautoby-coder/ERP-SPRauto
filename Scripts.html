@@ -4759,30 +4759,29 @@ function renderMaterialsTable(list) {
   var tbody = document.getElementById('materials-tbody');
   if (!tbody) return;
   if (!list || list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text3)">Материалы не добавлены. Нажмите «+ Добавить материал» или «⬇ Импорт из таблицы»</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text3)">Материалы не добавлены. Нажмите «+ Добавить материал» или «⬇ Импорт из таблицы»</td></tr>';
     return;
   }
-  var fmtBr = function(v){ return (v === '' || v == null || isNaN(Number(v))) ? '' : Number(v).toLocaleString('ru') + ' ' + CUR; };
+  var dash = '<span style="color:var(--text3)">—</span>';
+  var fmtBr = function(v){ return (v === '' || v == null || isNaN(Number(v)) || Number(v) === 0) ? dash : Number(v).toLocaleString('ru') + ' ' + CUR; };
   tbody.innerHTML = list.map(function(m) {
     var unit      = m['Единица']      || '—';
-    var rollWidth = m['Ширина рулона'] ? m['Ширина рулона'] + ' м' : '—';
-    var price     = m['Цена'] ? Number(m['Цена']).toLocaleString('ru') + ' ' + CUR : '—';
+    var rollWidth = m['Ширина рулона'] ? m['Ширина рулона'] + ' м' : dash;
+    var rollLen   = m['Длина рулона']  ? m['Длина рулона']  + ' м' : dash;
+    var price     = m['Цена'] ? Number(m['Цена']).toLocaleString('ru') + ' ' + CUR : dash;
     var active    = m['Активен'] !== 'Нет';
     var id        = m['ID'] || '';
     var ellip = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-    // Цены продажи: за пог. метр и за рулон
-    var perM = fmtBr(m['Цена за пог.м']), perR = fmtBr(m['Цена за рулон']);
-    var sellCell = (perM || perR)
-      ? (perM ? perM + '/пм' : '—') + '<span style="color:var(--text3)"> · </span>' + (perR ? perR + '/рул' : '—')
-      : '<span style="color:var(--text3)">—</span>';
     return '<tr style="' + (active ? '' : 'opacity:.45') + '">' +
       '<td style="font-weight:600;' + ellip + '" title="' + String(m['Название']||'').replace(/"/g,'&quot;') + '">' + (m['Название'] || '—') + '</td>' +
       '<td style="color:var(--text3);font-size:12px;' + ellip + '">' + (m['Категория'] || '—') + '</td>' +
       '<td style="font-size:12px">' + (m['Услуга'] || '—') + '</td>' +
       '<td style="font-size:12px">' + unit + '</td>' +
-      '<td style="font-size:12px">' + rollWidth + '</td>' +
+      '<td style="font-size:12px;text-align:right;white-space:nowrap">' + rollWidth + '</td>' +
+      '<td style="font-size:12px;text-align:right;white-space:nowrap">' + rollLen + '</td>' +
       '<td style="font-weight:600;color:var(--accent);text-align:right;white-space:nowrap">' + price + '</td>' +
-      '<td style="font-size:12px;text-align:right;white-space:nowrap;' + ellip + '">' + sellCell + '</td>' +
+      '<td style="font-size:12px;text-align:right;white-space:nowrap">' + fmtBr(m['Цена за пог.м']) + '</td>' +
+      '<td style="font-size:12px;text-align:right;white-space:nowrap">' + fmtBr(m['Цена за рулон']) + '</td>' +
       '<td style="text-align:center"><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:' +
         (active ? 'rgba(40,167,69,.15)' : 'var(--bg-hover)') + ';color:' +
         (active ? 'var(--success)' : 'var(--text3)') + '">' +
