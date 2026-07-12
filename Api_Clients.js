@@ -81,6 +81,7 @@ function createClient(payload) {
       'Контактное лицо':   payload.contactPerson || '',
       'Источник лида':     payload.leadSource || '',
       'Заметки':           payload.notes || '',
+      'Оптовик':           payload.wholesale ? 'Да' : 'Нет',
       'Статус':            'Активен',
       'Всего заказов':     0,
       'Сумма заказов':     0,
@@ -135,6 +136,7 @@ function updateClient(id, payload) {
           'Заметки':         payload.notes || '',
           'Обновлён':        nowStr,
         };
+        if (payload.wholesale !== undefined) updates['Оптовик'] = payload.wholesale ? 'Да' : 'Нет';
         
         for (var key in updates) {
           var colIdx = headers.indexOf(key);

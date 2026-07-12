@@ -64,6 +64,8 @@ function runSetupWizard() {
     step('Записи: дата/время окончания', addAppointmentEndColumns);
     step('Тонировка: зона и светопропускаемость плёнок', addOrderMaterialTintColumns);
     step('Продажа материалов: длина рулона и цены (пог.м, рулон)', addMaterialSalesColumns);
+    step('Модуль «Продажи»: листы продаж и позиций', addSalesSheets);
+    step('Клиенты: тег «Оптовик»', addClientWholesaleColumn);
     return { steps: steps, status: getSetupStatus_() };
   });
 }
@@ -497,6 +499,46 @@ function fixNumericColumns_(sheet, cols) {
   });
 }
 
+/**
+ * Модуль «Продажи»: создать листы «Продажи» и «Позиции продаж» (если нет).
+ * Идемпотентно — не трогает существующие данные.
+ */
+function addSalesSheets() {
+  const book = openBook('DATABASE');
+  const schema = getNewSheetsSchema();
+  const need = ['SALES', 'SALE_ITEMS'];
+  const created = [];
+  need.forEach(function(key) {
+    const name = CONFIG.TABS[key];
+    const cols = schema[key];
+    if (!name || !cols) return;
+    let sheet = book.getSheetByName(name);
+    if (!sheet) {
+      sheet = book.insertSheet(name);
+      sheet.getRange(1, 1, 1, cols.length).setValues([cols])
+        .setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff');
+      sheet.setFrozenRows(1);
+      sheet.autoResizeColumns(1, cols.length);
+      created.push(name);
+    }
+  });
+  return created.length ? ('Созданы листы: ' + created.join(', ')) : 'Листы продаж уже есть';
+}
+
+/**
+ * Клиенты: добавить колонку «Оптовик» (Да/Нет) — тег оптового клиента. Идемпотентно.
+ */
+function addClientWholesaleColumn() {
+  const sheet = getTab('DATABASE', 'CLIENTS');
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (headers.indexOf('Оптовик') >= 0) return 'Колонка «Оптовик» уже есть';
+  const lastCol = sheet.getLastColumn();
+  sheet.insertColumnAfter(lastCol);
+  sheet.getRange(1, lastCol + 1).setValue('Оптовик')
+    .setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff');
+  return 'Добавлена колонка «Оптовик»';
+}
+
 // ─── МИГРАЦИЯ v1.5: «Тип оплаты» и «Проверено» ──────────────────────────────
 
 /**
@@ -803,10 +845,15 @@ function getDatabaseSchema() {
       'Расчётный счёт', 'Банк', 'BIC', 'Тариф', 'Долг', 'Дата создания', 'Заметки'
     ],
     SALES: [
-      'ID', 'Дата', 'Оптовый клиент ID', 'Название клиента',
-      'Товары (JSON)', 'Количество позиций', 'Сумма', 'Валюта',
-      'Оплачено', 'Долг', 'Способ оплаты',
-      'Документ', 'Статус', 'Кто провёл', 'Комментарий'
+      'ID', 'Дата', 'Клиент ID', 'Клиент', 'Телефон',
+      'Способ оплаты',          // Нал / Безнал / Отсрочка / Рассрочка
+      'Итого', 'Оплачено', 'Статус оплаты',   // Не оплачен / Частично / Оплачен
+      'Срок оплаты', 'Комментарий', 'Удалён', 'Создан', 'Обновлён'
+    ],
+    SALE_ITEMS: [
+      'ID', 'Продажа ID', 'Материал ID', 'Название',
+      'Единица',                // пог.м / рулон / м² / шт
+      'Кол-во', 'Цена', 'Сумма', 'Создан'
     ],
   };
 }
