@@ -442,7 +442,9 @@ function addOrderMaterialTintColumns() {
     headers.push(col);
     added.push(col);
   });
-  return added.length ? ('Добавлены колонки: ' + added.join(', ')) : 'Колонки тонировки уже есть';
+  // «Светопропускаемость» — число (иначе наследует формат даты от «Создан» → «00:00»)
+  fixNumericColumns_(sheet, ['Светопропускаемость']);
+  return added.length ? ('Добавлены колонки: ' + added.join(', ')) : 'Колонки тонировки уже есть (формат обновлён)';
 }
 
 /**
@@ -463,7 +465,36 @@ function addMaterialSalesColumns() {
     headers.push(col);
     added.push(col);
   });
-  return added.length ? ('Добавлены колонки: ' + added.join(', ')) : 'Колонки продажи материалов уже есть';
+  // ВАЖНО: новые колонки вставляются после «Обновлён» (дата/время) и наследуют
+  // его формат → числа превращаются в «00:00». Принудительно ставим числовой
+  // формат и чистим значения, ставшие датой из-за прежнего формата.
+  fixNumericColumns_(sheet, need);
+  return added.length ? ('Добавлены колонки: ' + added.join(', ')) : 'Колонки продажи материалов уже есть (формат обновлён)';
+}
+
+/**
+ * Привести перечисленные колонки к числовому формату и убрать значения,
+ * которые из-за унаследованного формата «дата/время» стали объектом Date.
+ */
+function fixNumericColumns_(sheet, cols) {
+  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) {
+    cols.forEach(function(col){ const i = headers.indexOf(col); if (i >= 0) sheet.getRange(2, i + 1, 1, 1).setNumberFormat('0.####'); });
+    return;
+  }
+  cols.forEach(function(col) {
+    const idx = headers.indexOf(col);
+    if (idx < 0) return;
+    const rng = sheet.getRange(2, idx + 1, lastRow - 1, 1);
+    rng.setNumberFormat('0.####');
+    const vals = rng.getValues();
+    let changed = false;
+    for (let r = 0; r < vals.length; r++) {
+      if (vals[r][0] instanceof Date) { vals[r][0] = ''; changed = true; }
+    }
+    if (changed) rng.setValues(vals);
+  });
 }
 
 // ─── МИГРАЦИЯ v1.5: «Тип оплаты» и «Проверено» ──────────────────────────────

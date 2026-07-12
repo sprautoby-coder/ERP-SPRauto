@@ -361,6 +361,20 @@ body {
 .ver-off:hover { color:var(--success); border-color:rgba(46,204,113,.35); }
 .row-del-btn { border:1px solid var(--border); background:var(--bg-card2); border-radius:6px; cursor:pointer; padding:3px 7px; font-size:13px; line-height:1; opacity:.7; transition:var(--t); }
 .row-del-btn:hover { opacity:1; background:var(--red-soft); border-color:rgba(217,83,79,.4); }
+/* Инлайн-редактирование справочника материалов: поля-ячейки, границы видны при наведении */
+.mat-inp { width:100%; border:1px solid transparent; background:transparent; color:var(--text); font-size:12px; padding:4px 6px; border-radius:6px; font-family:inherit; box-sizing:border-box; transition:border-color .12s, background .12s; }
+.mat-inp:hover { border-color:var(--border); }
+.mat-inp:focus { border-color:var(--accent); background:var(--inp); outline:none; }
+.mat-inp.mat-name { font-weight:600; }
+.mat-inp.mat-num  { text-align:right; }
+.mat-inp.mat-cost { color:var(--accent); font-weight:600; }
+select.mat-inp { cursor:pointer; padding-right:2px; }
+.mat-inp.mat-saving { border-color:var(--warning); }
+.mat-inp.mat-ok  { border-color:var(--success); }
+.mat-inp.mat-err { border-color:var(--danger); }
+/* Разделители столбцов в справочнике материалов — чтобы границы цен были видны */
+#materials-tbody td, #page-materials thead th { border-right:1px solid var(--border); }
+#materials-tbody td:last-child, #page-materials thead th:last-child { border-right:none; }
 /* ресайз и видимые границы столбцов */
 .resizable-table th, .resizable-table td { border-right:1px solid var(--border); }
 .resizable-table th:last-child, .resizable-table td:last-child { border-right:none; }

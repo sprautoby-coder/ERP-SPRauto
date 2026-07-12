@@ -4755,6 +4755,13 @@ function filterMaterials() {
   renderMaterialsTable(list);
 }
 
+// Справочники для инлайн-редактирования
+var MAT_CATS  = ['PPF плёнка','Тонировочная плёнка','Антихром','Защита фар','Химия','Расходник','Инструмент'];
+var MAT_SVCS  = [['Универсальная','Универсальная'],['PPF','Оклейка PPF'],['TINT','Тонировка'],['POLISH','Полировка'],['ANTICHR','Антихром']];
+var MAT_UNITS = ['пм','м²','шт','л','кг'];
+// Число из ячейки: пусто/0/дата(«00:00») → пустая строка (в инпуте — пусто)
+function matNum_(v){ var n = parseFloat(v); return (isFinite(n) && n !== 0) ? n : ''; }
+
 function renderMaterialsTable(list) {
   var tbody = document.getElementById('materials-tbody');
   if (!tbody) return;
@@ -4762,33 +4769,38 @@ function renderMaterialsTable(list) {
     tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text3)">Материалы не добавлены. Нажмите «+ Добавить материал» или «⬇ Импорт из таблицы»</td></tr>';
     return;
   }
-  var dash = '<span style="color:var(--text3)">—</span>';
-  var fmtBr = function(v){ return (v === '' || v == null || isNaN(Number(v)) || Number(v) === 0) ? dash : Number(v).toLocaleString('ru') + ' ' + CUR; };
+  var esc = function(s){ return String(s == null ? '' : s).replace(/"/g,'&quot;'); };
+  // инпут для инлайн-редактирования числового/текстового поля
+  var inp = function(id, field, val, extra){
+    return '<input class="mat-inp' + (extra || '') + '" value="' + esc(val) + '"' +
+      (extra && extra.indexOf('mat-num') >= 0 ? ' type="number" step="0.01"' : '') +
+      ' onchange="inlineMatSave(\'' + id + '\',\'' + field + '\',this.value,this)">';
+  };
+  var sel = function(id, field, val, opts){
+    var o = opts.map(function(op){
+      var v = Array.isArray(op) ? op[0] : op, lbl = Array.isArray(op) ? op[1] : op;
+      return '<option value="' + esc(v) + '"' + (String(val) === String(v) ? ' selected' : '') + '>' + lbl + '</option>';
+    }).join('');
+    return '<select class="mat-inp mat-sel" onchange="inlineMatSave(\'' + id + '\',\'' + field + '\',this.value,this)">' + o + '</select>';
+  };
   tbody.innerHTML = list.map(function(m) {
-    var unit      = m['Единица']      || '—';
-    var rollWidth = m['Ширина рулона'] ? m['Ширина рулона'] + ' м' : dash;
-    var rollLen   = m['Длина рулона']  ? m['Длина рулона']  + ' м' : dash;
-    var price     = m['Цена'] ? Number(m['Цена']).toLocaleString('ru') + ' ' + CUR : dash;
-    var active    = m['Активен'] !== 'Нет';
-    var id        = m['ID'] || '';
-    var ellip = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-    return '<tr style="' + (active ? '' : 'opacity:.45') + '">' +
-      '<td style="font-weight:600;' + ellip + '" title="' + String(m['Название']||'').replace(/"/g,'&quot;') + '">' + (m['Название'] || '—') + '</td>' +
-      '<td style="color:var(--text3);font-size:12px;' + ellip + '">' + (m['Категория'] || '—') + '</td>' +
-      '<td style="font-size:12px">' + (m['Услуга'] || '—') + '</td>' +
-      '<td style="font-size:12px">' + unit + '</td>' +
-      '<td style="font-size:12px;text-align:right;white-space:nowrap">' + rollWidth + '</td>' +
-      '<td style="font-size:12px;text-align:right;white-space:nowrap">' + rollLen + '</td>' +
-      '<td style="font-weight:600;color:var(--accent);text-align:right;white-space:nowrap">' + price + '</td>' +
-      '<td style="font-size:12px;text-align:right;white-space:nowrap">' + fmtBr(m['Цена за пог.м']) + '</td>' +
-      '<td style="font-size:12px;text-align:right;white-space:nowrap">' + fmtBr(m['Цена за рулон']) + '</td>' +
+    var active = m['Активен'] !== 'Нет';
+    var id     = m['ID'] || '';
+    return '<tr data-mid="' + id + '" style="' + (active ? '' : 'opacity:.5') + '">' +
+      '<td>' + inp(id, 'name', m['Название'] || '', ' mat-name') + '</td>' +
+      '<td>' + sel(id, 'category', m['Категория'] || '', [''].concat(MAT_CATS)) + '</td>' +
+      '<td>' + sel(id, 'service',  m['Услуга']    || 'Универсальная', MAT_SVCS) + '</td>' +
+      '<td>' + sel(id, 'unit',     m['Единица']   || 'пм', MAT_UNITS) + '</td>' +
+      '<td>' + inp(id, 'rollWidth',   matNum_(m['Ширина рулона']), ' mat-num') + '</td>' +
+      '<td>' + inp(id, 'rollLength',  matNum_(m['Длина рулона']),  ' mat-num') + '</td>' +
+      '<td>' + inp(id, 'price',       matNum_(m['Цена']),          ' mat-num mat-cost') + '</td>' +
+      '<td>' + inp(id, 'sellPerMeter',matNum_(m['Цена за пог.м']), ' mat-num') + '</td>' +
+      '<td>' + inp(id, 'sellPerRoll', matNum_(m['Цена за рулон']), ' mat-num') + '</td>' +
       '<td style="text-align:center"><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:' +
         (active ? 'rgba(40,167,69,.15)' : 'var(--bg-hover)') + ';color:' +
         (active ? 'var(--success)' : 'var(--text3)') + '">' +
         (active ? 'Активен' : 'Архив') + '</span></td>' +
       '<td style="text-align:right;white-space:nowrap">' +
-        '<button class="btn btn-ghost" style="padding:3px 9px;font-size:11px;margin-right:4px;color:var(--accent);font-weight:600" ' +
-          'onclick=\'openEditMaterial(' + JSON.stringify(m).replace(/'/g, "\\u0027") + ')\'>Изменить</button>' +
         (active
           ? '<button class="btn btn-ghost" style="padding:3px 9px;font-size:11px;color:var(--text3);margin-right:4px" onclick="deactivateMat(\'' + id + '\')">Архив</button>'
           : '<button class="btn btn-ghost" style="padding:3px 9px;font-size:11px;color:var(--success);margin-right:4px" onclick="restoreMat(\'' + id + '\')">Восст.</button>') +
@@ -4796,6 +4808,32 @@ function renderMaterialsTable(list) {
       '</td>' +
       '</tr>';
   }).join('');
+}
+
+// Названия колонок листа для локального обновления кэша
+var MAT_FIELD_COL = {
+  name:'Название', category:'Категория', service:'Услуга', unit:'Единица', price:'Цена',
+  rollWidth:'Ширина рулона', rollLength:'Длина рулона', sellPerMeter:'Цена за пог.м', sellPerRoll:'Цена за рулон'
+};
+var MAT_NUM_FIELDS = { rollWidth:1, rollLength:1, price:1, sellPerMeter:1, sellPerRoll:1 };
+
+// Сохранить одно поле материала прямо из таблицы (без перезагрузки всей таблицы)
+function inlineMatSave(id, field, value, el) {
+  if (!id) return;
+  var isNum = MAT_NUM_FIELDS[field];
+  var val   = isNum ? (String(value).trim() === '' ? '' : Number(value)) : value;
+  var m = (App._materials || []).find(function(x){ return String(x['ID']) === String(id); });
+  if (m) m[MAT_FIELD_COL[field]] = val;                 // оптимистично в кэш
+  if (el) { el.classList.remove('mat-err'); el.classList.add('mat-saving'); }
+  var payload = {}; payload[field] = val;
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (el) el.classList.remove('mat-saving');
+      if (!resp || !resp.ok) { if (el) el.classList.add('mat-err'); toast('Ошибка сохранения: ' + (resp ? resp.error : ''), 'error'); return; }
+      if (el) { el.classList.add('mat-ok'); setTimeout(function(){ el.classList.remove('mat-ok'); }, 900); }
+    })
+    .withFailureHandler(function(e){ if (el) { el.classList.remove('mat-saving'); el.classList.add('mat-err'); } toast('Ошибка: ' + e.message, 'error'); })
+    .updateMaterial(id, payload);
 }
 
 function openEditMaterial(m) {
