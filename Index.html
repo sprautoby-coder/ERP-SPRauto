@@ -1017,6 +1017,44 @@
     </div>
   </div>
 
+  <!-- МОДАЛ: НОВЫЙ ОПТОВЫЙ КЛИЕНТ (упрощённый, без авто) -->
+  <div class="modal-dialog-bg" id="modal-new-wholesale" onclick="closeModalOnOverlay(event)">
+    <div class="modal" style="max-width:460px">
+      <div class="modal-header">
+        <div class="modal-title">Новый оптовый клиент</div>
+        <button class="modal-close" onclick="closeModal('modal-new-wholesale')">&#10005;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row">
+          <label class="form-label">Тип клиента</label>
+          <div style="display:flex;gap:8px">
+            <button type="button" class="ctype-btn active" id="ws-type-fiz" onclick="setWholesaleType('физ',this)">👤 Физ. лицо</button>
+            <button type="button" class="ctype-btn" id="ws-type-ur" onclick="setWholesaleType('юр',this)">🏢 Юр. лицо</button>
+          </div>
+        </div>
+        <div class="form-row"><label class="form-label" id="ws-name-label">ФИО *</label><input class="form-input" id="ws-name" placeholder="Имя или название организации"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-row" style="margin:0"><label class="form-label">Телефон</label><input class="form-input" id="ws-phone" placeholder="+375..."></div>
+          <div class="form-row" style="margin:0"><label class="form-label">Email</label><input class="form-input" id="ws-email" placeholder="email@mail.com"></div>
+        </div>
+        <div id="ws-legal-fields" style="display:none">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="form-row" style="margin:0"><label class="form-label">УНП</label><input class="form-input" id="ws-unp"></div>
+            <div class="form-row" style="margin:0"><label class="form-label">Директор</label><input class="form-input" id="ws-director"></div>
+          </div>
+          <div class="form-row"><label class="form-label">Юр. адрес</label><input class="form-input" id="ws-legal-address"></div>
+          <div class="form-row"><label class="form-label">Банк. реквизиты (р/с, банк)</label><input class="form-input" id="ws-bank"></div>
+        </div>
+        <div class="form-row"><label class="form-label">Заметки</label><textarea class="form-input" id="ws-notes" rows="2" placeholder="Тариф, договорённости..."></textarea></div>
+        <div style="font-size:11px;color:var(--text3)">Клиент сохранится с тегом «Оптовик» и появится в списке продаж.</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modal-new-wholesale')">Отмена</button>
+        <button class="btn btn-primary" id="ws-submit-btn" onclick="submitWholesaleClient()">Сохранить клиента</button>
+      </div>
+    </div>
+  </div>
+
   <!-- КАЛЕНДАРЬ ЗАПИСЕЙ -->
   <div class="content page" id="page-appointments">
     <div class="section-header">

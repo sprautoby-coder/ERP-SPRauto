@@ -4923,10 +4923,11 @@ function openNewSale(){
 function fillSaleClientsDatalist_(){
   var dl=document.getElementById('sale-clients-list'); if(!dl) return;
   App._saleClientByLabel={};
-  dl.innerHTML=(App.clients||[]).map(function(c){
+  // В продажах — только оптовые клиенты (отдельная база)
+  dl.innerHTML=(App.clients||[]).filter(function(c){ return String(c['Оптовик'])==='Да'; }).map(function(c){
     var label=(c['Имя']||'')+(c['Телефон']?' — '+c['Телефон']:'');
     App._saleClientByLabel[label]=c;
-    return '<option value="'+saleEsc_(label)+'">'+(String(c['Оптовик'])==='Да'?' (оптовик)':'')+'</option>';
+    return '<option value="'+saleEsc_(label)+'">';
   }).join('');
 }
 function fillSaleMaterialsDatalist_(){
@@ -4940,7 +4941,58 @@ function onSaleClientInput(){
   if(c){ document.getElementById('sale-client-id').value=c['ID']||''; if(chosen){ chosen.textContent='✓ '+(c['Имя']||'')+(String(c['Оптовик'])==='Да'?' · оптовик':''); chosen.style.color='var(--success)'; } }
   else { document.getElementById('sale-client-id').value=''; if(chosen){ chosen.textContent=v?'Новый клиент «'+v+'» будет создан (оптовик)':''; chosen.style.color='var(--text3)'; } }
 }
-function openQuickClientForSale(){ openModal('modal-new-client'); }
+// Упрощённая форма нового ОПТОВОГО клиента (без авто) — из модуля продаж
+App._wholesaleType = 'физ';
+function openQuickClientForSale(){
+  App._wholesaleType='физ';
+  var fiz=document.getElementById('ws-type-fiz'), ur=document.getElementById('ws-type-ur');
+  if(fiz) fiz.classList.add('active'); if(ur) ur.classList.remove('active');
+  var lf=document.getElementById('ws-legal-fields'); if(lf) lf.style.display='none';
+  var lbl=document.getElementById('ws-name-label'); if(lbl) lbl.textContent='ФИО *';
+  ['ws-name','ws-phone','ws-email','ws-unp','ws-director','ws-legal-address','ws-bank','ws-notes'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+  // подставим то, что уже введено в поле клиента продажи
+  var typed=(document.getElementById('sale-client-search')||{}).value||'';
+  var nm=document.getElementById('ws-name'); if(nm && typed && !App._saleClientByLabel[typed]) nm.value=typed.split(' — ')[0];
+  openModal('modal-new-wholesale');
+}
+function setWholesaleType(t, btn){
+  App._wholesaleType=t;
+  document.querySelectorAll('#modal-new-wholesale .ctype-btn').forEach(function(b){ b.classList.remove('active'); });
+  if(btn) btn.classList.add('active');
+  var lf=document.getElementById('ws-legal-fields'); if(lf) lf.style.display=(t==='юр')?'':'none';
+  var lbl=document.getElementById('ws-name-label'); if(lbl) lbl.textContent=(t==='юр')?'Название организации *':'ФИО *';
+}
+function submitWholesaleClient(){
+  var name=((document.getElementById('ws-name')||{}).value||'').trim();
+  if(!name){ toast('Укажите имя или название','error'); return; }
+  var payload={
+    type: App._wholesaleType, name: name, wholesale: true,
+    phone: ((document.getElementById('ws-phone')||{}).value||'').trim(),
+    email: ((document.getElementById('ws-email')||{}).value||'').trim(),
+    notes: ((document.getElementById('ws-notes')||{}).value||'').trim(),
+  };
+  if(App._wholesaleType==='юр'){
+    payload.unp=((document.getElementById('ws-unp')||{}).value||'').trim();
+    payload.director=((document.getElementById('ws-director')||{}).value||'').trim();
+    payload.legalAddress=((document.getElementById('ws-legal-address')||{}).value||'').trim();
+    payload.bankDetails=((document.getElementById('ws-bank')||{}).value||'').trim();
+  }
+  var btn=document.getElementById('ws-submit-btn'); if(btn){btn.disabled=true;btn.textContent='Сохраняем…';}
+  google.script.run.withSuccessHandler(function(resp){
+    if(btn){btn.disabled=false;btn.textContent='Сохранить клиента';}
+    if(!resp||!resp.ok){ toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
+    var nc=resp.data||{};
+    toast('Оптовый клиент создан','success');
+    closeModal('modal-new-wholesale');
+    // добавим в кэш и выберем в форме продажи
+    App.clients=App.clients||[]; App.clients.push({ 'ID':nc['ID']||'', 'Имя':name, 'Телефон':payload.phone, 'Тип':payload.type, 'Оптовик':'Да' });
+    fillSaleClientsDatalist_();
+    var label=name+(payload.phone?' — '+payload.phone:'');
+    var srch=document.getElementById('sale-client-search'); if(srch) srch.value=label;
+    var cid=document.getElementById('sale-client-id'); if(cid) cid.value=nc['ID']||'';
+    onSaleClientInput();
+  }).withFailureHandler(function(e){ if(btn){btn.disabled=false;btn.textContent='Сохранить клиента';} toast('Ошибка: '+e.message,'error'); }).createClient(payload);
+}
 
 function onSalePayTypeChange(){
   var pt=(document.getElementById('sale-paytype')||{}).value;
