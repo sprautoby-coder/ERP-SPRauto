@@ -290,9 +290,11 @@ function managerOptionsHtml_(selected, placeholder){
 function fillOrderEmployees() {
   var employees = App.employees || [];
 
-  // Менеджер — select (любой сотрудник, по приоритету должностей)
+  // Менеджер и Администратор — select (любой сотрудник, по приоритету должностей)
   var selMgr = document.getElementById('ord-manager');
   if (selMgr) selMgr.innerHTML = managerOptionsHtml_(selMgr.value);
+  var selAdm = document.getElementById('ord-admin');
+  if (selAdm) selAdm.innerHTML = managerOptionsHtml_(selAdm.value);
 
   // Мастера — заменяем текстовое поле на select с множественным выбором
   var masterWrap = document.getElementById('ord-masters-wrap');
@@ -4646,6 +4648,7 @@ function submitNewOrderProceed() {
     payType:     payType,
     duePayDate:  duePay,
     manager:     (document.getElementById('ord-manager') || {}).value || '',
+    admin:       (document.getElementById('ord-admin')   || {}).value || '',
     masters:     ((document.getElementById('ord-masters') || {}).value || '').trim(),
     notes:       ((document.getElementById('ord-notes')   || {}).value || '').trim(),
     complex:       (document.getElementById('ord-complex')        || {}).value || '',
@@ -7282,6 +7285,7 @@ function renderCardPersonnel() {
   var inp  = 'font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:7px;background:var(--inp);color:var(--text);width:100%';
 
   var mgrOpts = managerOptionsHtml_(mgr, '— менеджер —');
+  var adminOpts = managerOptionsHtml_(String(o['Администратор'] || ''), '— администратор —');
 
   var masterChecks = emps.length
     ? emps.map(function(e){
@@ -7300,6 +7304,8 @@ function renderCardPersonnel() {
     '</div>' +
     '<label style="font-size:10px;color:var(--text3)">Менеджер</label>' +
     '<select id="card-mgr" style="' + inp + ';margin:2px 0 8px" onchange="persAutoSave()">' + mgrOpts + '</select>' +
+    '<label style="font-size:10px;color:var(--text3)">Администратор</label>' +
+    '<select id="card-admin" style="' + inp + ';margin:2px 0 8px" onchange="persAutoSave()">' + adminOpts + '</select>' +
     '<div style="font-size:10px;color:var(--text3);margin-bottom:2px">Мастера (оклейщики)</div>' +
     '<div style="max-height:118px;overflow:auto">' + masterChecks + '</div>' +
   '</div>';
@@ -7318,12 +7324,13 @@ function persFlush_(cb) {
   var o = App._currentOrder; if (!o || !o['ID']) { if (cb) cb(); return; }
   var id = o['ID'];
   var mgr = (document.getElementById('card-mgr') || {}).value || '';
+  var admin = (document.getElementById('card-admin') || {}).value || '';
   var masters = [];
   document.querySelectorAll('.card-master-cb:checked').forEach(function(cb2){ masters.push(cb2.value); });
   var st = function(t,c){ var e=document.getElementById('card-pers-status'); if(e){e.textContent=t; e.style.color=c||'var(--text3)';} };
   st('сохранение…');
   // обновим модель сразу (для документов/перерисовки)
-  o['Менеджер'] = mgr; o['Оклейщики'] = masters.join(', ');
+  o['Менеджер'] = mgr; o['Оклейщики'] = masters.join(', '); o['Администратор'] = admin;
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) { st('ошибка сохранения', 'var(--danger)'); if (cb) cb(); return; }
@@ -7337,7 +7344,7 @@ function persFlush_(cb) {
       st('✓ сохранено', 'var(--success)'); if (cb) cb();
     })
     .withFailureHandler(function(e){ st('ошибка: ' + e.message, 'var(--danger)'); if (cb) cb(); })
-    .updateOrder(id, { manager: mgr, masters: masters.join(', ') });
+    .updateOrder(id, { manager: mgr, masters: masters.join(', '), admin: admin });
 }
 
 /* --- Карточка заказа: редактор расходов (такси, арматура) --- */

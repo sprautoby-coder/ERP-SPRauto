@@ -269,6 +269,7 @@ function createOrder(payload) {
       'Срок оплаты':           payload.duePayDate || '',
       'Менеджер':              payload.manager || '',
       'Оклейщики':             payload.masters || '',
+      'Администратор':         payload.admin || '',
       'Итого материалы':       totalMaterialCost,
       'Итого расходы':         totalExpenses,
       'Валовая прибыль':       finance.grossProfit,
@@ -406,6 +407,7 @@ function updateOrder(id, payload) {
       if (payload.notes       !== undefined) setCell('Заметки',         payload.notes);
       if (payload.manager     !== undefined) setCell('Менеджер',        payload.manager);
       if (payload.masters     !== undefined) setCell('Оклейщики',       payload.masters);
+      if (payload.admin       !== undefined) setCell('Администратор',   payload.admin);
 
       if (payload.service !== undefined) {
         setCell('Услуга', getServiceName_(payload.service));
