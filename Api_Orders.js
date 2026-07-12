@@ -241,7 +241,9 @@ function createOrder(payload) {
 
     const finance       = calcOrderFinance_(payload.price, totalMaterialCost, totalExpenses, payType, payload.manager, payload.masters);
     const contractNum   = generateContractNumber_(payload.service);
-    const serviceName   = getServiceName_(payload.service);
+    // «Услуга» — все выбранные услуги через запятую (основная + доп.), номер договора — по основной
+    const codes         = (payload.serviceCodes && payload.serviceCodes.length) ? payload.serviceCodes : [payload.service];
+    const serviceName   = codes.map(function(c){ return getServiceName_(c); }).filter(String).join(', ') || getServiceName_(payload.service);
     const headers       = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
     const defaultStatus = getDefaultStatusName_();

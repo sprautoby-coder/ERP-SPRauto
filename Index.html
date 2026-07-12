@@ -1347,7 +1347,7 @@
 
       <!-- Услуга -->
       <div class="form-row">
-        <label class="form-label">Услуга *</label>
+        <label class="form-label">Услуга (основная) *</label>
         <select class="form-select" id="ord-service" onchange="onOrdServiceChange()">
           <option value="">— выбрать —</option>
           <option value="PPF">Оклейка PPF</option>
@@ -1358,6 +1358,11 @@
           <option value="SOUND">Шумоизоляция</option>
           <option value="CHEMIE">Химчистка</option>
         </select>
+      </div>
+      <!-- Дополнительные услуги (несколько на одно авто) -->
+      <div class="form-row" style="margin-top:-4px">
+        <label class="form-label">Доп. услуги <span style="color:var(--text3)">(если на авто делается несколько)</span></label>
+        <div id="ord-extra-services" style="display:flex;flex-wrap:wrap;gap:6px"></div>
       </div>
 
       <!-- Тип заказчика -->

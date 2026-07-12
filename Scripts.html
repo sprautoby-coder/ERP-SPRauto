@@ -287,6 +287,12 @@ function managerOptionsHtml_(selected, placeholder){
   return opts;
 }
 
+// Определение состава услуг заказа (для тонировочных/оклеечных блоков карточки)
+function svcHasTint_(s){ return /тонир|tint/i.test(String(s||'')); }
+function svcHasOkl_(s){ return /оклей|ppf|антихром|полиров|керам|шумо|антикор|химч|защит/i.test(String(s||'')); }
+// «Чистая тонировка» — только тонировка, без оклейки/прочего (тогда показываем блок плёнок)
+function isTintOnly_(s){ return svcHasTint_(s) && !svcHasOkl_(s); }
+
 function fillOrderEmployees() {
   var employees = App.employees || [];
 
@@ -1597,8 +1603,18 @@ function fillServiceDropdowns() {
 
   // Форма заказа — value = код услуги
   var ord = document.getElementById('ord-service');
-  if (ord) ord.innerHTML = active.map(function(s){
-    return '<option value="' + s.code + '">' + (s.icon ? s.icon + ' ' : '') + s.name + '</option>';
+  if (ord) {
+    var curOrd = ord.value;
+    ord.innerHTML = '<option value="">— выбрать —</option>' + active.map(function(s){
+      return '<option value="' + s.code + '">' + (s.icon ? s.icon + ' ' : '') + s.name + '</option>';
+    }).join('');
+    ord.value = curOrd;
+  }
+
+  // Доп. услуги — чекбоксы (можно выбрать несколько на одно авто)
+  var extra = document.getElementById('ord-extra-services');
+  if (extra) extra.innerHTML = active.map(function(s){
+    return '<label class="svc-chip"><input type="checkbox" class="ord-extra-svc" value="' + s.code + '"> ' + (s.icon ? s.icon + ' ' : '') + s.name + '</label>';
   }).join('');
 
   // Фильтр заказов — value = название (в заказах хранится название услуги)
@@ -4623,6 +4639,12 @@ function submitNewOrderProceed() {
   var name    = ((document.getElementById('ord-client-name') || {}).value || '').trim();
   var price   = Number((document.getElementById('ord-price') || {}).value || 0);
 
+  // Все услуги заказа: основная + отмеченные дополнительные (без повторов)
+  var serviceCodes = [service];
+  document.querySelectorAll('.ord-extra-svc:checked').forEach(function(cb){
+    if (cb.value && serviceCodes.indexOf(cb.value) < 0) serviceCodes.push(cb.value);
+  });
+
   var payType     = App._orderPayType || '';
   var duePay      = (document.getElementById('ord-duepay') || {}).value || '';
   var prepay      = Number((document.getElementById('ord-prepay') || {}).value || 0);
@@ -4632,7 +4654,8 @@ function submitNewOrderProceed() {
   var clientType = App._orderClientType || 'физ';
 
   var payload = {
-    service:     service,
+    service:     service,          // основная услуга — для номера договора
+    serviceCodes: serviceCodes,    // все услуги заказа (для поля «Услуга»)
     clientId:    (document.getElementById('ord-client-id')    || {}).value || '',
     clientName:  name,
     clientPhone: (document.getElementById('ord-client-phone') || {}).value || '',
@@ -4670,6 +4693,7 @@ function submitNewOrderProceed() {
      'ord-cl-unp','ord-cl-director','ord-cl-address','ord-cl-postal','ord-cl-bank'].forEach(function(id){
       var el = document.getElementById(id); if (el) el.value = '';
     });
+    document.querySelectorAll('.ord-extra-svc:checked').forEach(function(cb){ cb.checked = false; });
     setOrderClientType('физ', document.getElementById('ord-ctype-phys'));
     var found = document.getElementById('ord-client-found'); if (found) found.style.display = 'none';
     var preview = document.getElementById('ord-finance-preview'); if (preview) preview.style.display = 'none';
@@ -6798,7 +6822,7 @@ function renderOrderCard(order) {
             cvInput_('VIN', 'cv-vin', order['VIN']) +
             cvInput_('Год выпуска', 'cv-year', order['Год выпуска']) +
             cvInput_('Пробег, км', 'cv-mileage', order['Пробег']) +
-            (/тонир|tint/i.test(order['Услуга']||'')
+            (isTintOnly_(order['Услуга']||'')
               ? ''  /* для тонировки плёнка и светопропускаемость — в отдельном блоке ниже */
               : '<div class="cardveh-field"><label>Комплекс оклейки</label>' + complexSelectHtml_(order['Комплекс']) + '</div>' +
                 cvInput_('Кол-во элементов', 'cv-elements-count', order['Кол-во элементов']) +
@@ -6813,7 +6837,7 @@ function renderOrderCard(order) {
 
         // Материалы: для тонировки — свой блок (плёнка + светопропускаемость),
         // для оклейки — таблица расхода плёнки в м².
-        (/тонир|tint/i.test(order['Услуга']||'')
+        (isTintOnly_(order['Услуга']||'')
           ? tintFilmSectionHtml_(order)
           : '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden">' +
               '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">' +
