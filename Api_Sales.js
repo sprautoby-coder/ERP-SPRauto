@@ -91,6 +91,11 @@ function createSale(payload) {
     items.forEach(function(it) { total += (Number(it.qty) || 0) * (Number(it.price) || 0); });
     total = saleR2_(total);
 
+    // Менеджер и бонус (по умолчанию 5%)
+    var manager  = payload.manager || '';
+    var bonusPct = (payload.bonusPct === undefined || payload.bonusPct === '') ? 5 : (Number(payload.bonusPct) || 0);
+    var bonusAmt = saleR2_(total * bonusPct / 100);
+
     // Первичная оплата: Нал/Безнал → сразу вся сумма; Отсрочка/Рассрочка → предоплата (или 0)
     var paid;
     if (payload.paid !== undefined && payload.paid !== '') paid = saleR2_(Number(payload.paid) || 0);
@@ -107,6 +112,7 @@ function createSale(payload) {
       'Клиент ID': payload.clientId || '', 'Клиент': payload.clientName || '',
       'Телефон': payload.phone || '', 'Способ оплаты': payType,
       'Итого': total, 'Оплачено': 0, 'Статус оплаты': 'Не оплачен',
+      'Менеджер': manager, 'Бонус %': bonusPct, 'Бонус сумма': bonusAmt,
       'Срок оплаты': payload.dueDate || '', 'Комментарий': payload.comment || '',
       'Удалён': '', 'Создан': now, 'Обновлён': now,
     };

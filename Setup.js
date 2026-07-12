@@ -520,9 +520,20 @@ function addSalesSheets() {
       sheet.setFrozenRows(1);
       sheet.autoResizeColumns(1, cols.length);
       created.push(name);
+    } else {
+      // Лист есть — добьём недостающие колонки (напр. Менеджер/Бонус)
+      let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      cols.forEach(function(col) {
+        if (headers.indexOf(col) >= 0) return;
+        const lastCol = sheet.getLastColumn();
+        sheet.insertColumnAfter(lastCol);
+        sheet.getRange(1, lastCol + 1).setValue(col)
+          .setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff');
+        headers.push(col);
+      });
     }
   });
-  return created.length ? ('Созданы листы: ' + created.join(', ')) : 'Листы продаж уже есть';
+  return created.length ? ('Созданы листы: ' + created.join(', ')) : 'Листы продаж проверены (колонки актуальны)';
 }
 
 /**
@@ -848,6 +859,7 @@ function getDatabaseSchema() {
       'ID', 'Дата', 'Клиент ID', 'Клиент', 'Телефон',
       'Способ оплаты',          // Нал / Безнал / Отсрочка / Рассрочка
       'Итого', 'Оплачено', 'Статус оплаты',   // Не оплачен / Частично / Оплачен
+      'Менеджер', 'Бонус %', 'Бонус сумма',   // менеджер продажи и его бонус
       'Срок оплаты', 'Комментарий', 'Удалён', 'Создан', 'Обновлён'
     ],
     SALE_ITEMS: [

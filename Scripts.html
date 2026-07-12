@@ -258,31 +258,41 @@ function openModal(id) {
   }
 }
 
+// ─── ВЫБОР МЕНЕДЖЕРА: любой сотрудник, но по приоритету должностей ───────────
+// Порядок: Менеджер → Администратор → Зам.директора → Директор → остальные.
+function empName_(e){ return e['ФИО'] || e['Имя'] || ''; }
+function empRolePriority_(e){
+  var roles = ((e['Основная должность'] || '') + ' ' + (e['Доп. роли'] || '')).toLowerCase();
+  if (/менеджер/.test(roles))            return 1;
+  if (/админ/.test(roles))               return 2;
+  if (/зам[\s.\-]*директор/.test(roles)) return 3;
+  if (/директор/.test(roles))            return 4;
+  return 5;
+}
+// Все сотрудники, отсортированные по приоритету должности, затем по алфавиту
+function employeesByRolePriority_(){
+  return (App.employees || []).slice().sort(function(a, b){
+    var pa = empRolePriority_(a), pb = empRolePriority_(b);
+    if (pa !== pb) return pa - pb;
+    return String(empName_(a)).localeCompare(String(empName_(b)), 'ru');
+  });
+}
+// HTML <option>-ов для селекта менеджера (любой сотрудник, приоритет должностей)
+function managerOptionsHtml_(selected, placeholder){
+  var opts = '<option value="">' + (placeholder || '— выбрать —') + '</option>';
+  employeesByRolePriority_().forEach(function(e){
+    var n = empName_(e); if (!n) return;
+    opts += '<option value="' + String(n).replace(/"/g,'&quot;') + '"' + (String(selected) === String(n) ? ' selected' : '') + '>' + n + '</option>';
+  });
+  return opts;
+}
+
 function fillOrderEmployees() {
   var employees = App.employees || [];
 
-  // Менеджер — select
+  // Менеджер — select (любой сотрудник, по приоритету должностей)
   var selMgr = document.getElementById('ord-manager');
-  if (selMgr) {
-    selMgr.innerHTML = '<option value="">— выбрать —</option>';
-    employees.forEach(function(e) {
-      var roles = (e['Основная должность'] || '') + ',' + (e['Доп. роли'] || '');
-      if (!/менеджер|администратор|директор/i.test(roles)) return;
-      var opt = document.createElement('option');
-      opt.value = e['ФИО'] || e['Имя'] || '';
-      opt.textContent = e['ФИО'] || e['Имя'] || '';
-      selMgr.appendChild(opt);
-    });
-    // Если фильтр дал 0 результатов — показать всех
-    if (selMgr.options.length <= 1) {
-      employees.forEach(function(e) {
-        var opt = document.createElement('option');
-        opt.value = e['ФИО'] || e['Имя'] || '';
-        opt.textContent = e['ФИО'] || e['Имя'] || '';
-        selMgr.appendChild(opt);
-      });
-    }
-  }
+  if (selMgr) selMgr.innerHTML = managerOptionsHtml_(selMgr.value);
 
   // Мастера — заменяем текстовое поле на select с множественным выбором
   var masterWrap = document.getElementById('ord-masters-wrap');
@@ -4862,6 +4872,11 @@ function ensureClientsLoaded_(cb){
   google.script.run.withSuccessHandler(function(r){ App.clients=(r&&r.ok)?(r.data||[]):[]; if(cb)cb(); })
     .withFailureHandler(function(){ if(cb)cb(); }).getClients({});
 }
+function ensureEmployeesLoaded_(cb){
+  if (App.employees && App.employees.length){ if(cb)cb(); return; }
+  google.script.run.withSuccessHandler(function(r){ App.employees=(r&&r.ok)?(r.data||[]):[]; App._teamList=App.employees; if(cb)cb(); })
+    .withFailureHandler(function(){ if(cb)cb(); }).getEmployees(false);
+}
 
 function loadSales(force){
   var tbody=document.getElementById('sales-tbody');
@@ -4913,9 +4928,10 @@ function blankSaleItem_(){ return { materialId:'', name:'', unit:'пог.м', qt
 function openNewSale(){
   ensureClientsLoaded_(function(){ fillSaleClientsDatalist_(); });
   ensureMaterialsLoaded_(function(){ fillSaleMaterialsDatalist_(); });
+  ensureEmployeesLoaded_(function(){ var m=document.getElementById('sale-manager'); if(m) m.innerHTML=managerOptionsHtml_(''); });
   var iso=new Date().toISOString().slice(0,10);
   var set=function(id,v){var e=document.getElementById(id); if(e)e.value=v;};
-  set('sale-date',iso); set('sale-paytype','Нал'); set('sale-client-search',''); set('sale-client-id',''); set('sale-prepay','');
+  set('sale-date',iso); set('sale-paytype','Нал'); set('sale-client-search',''); set('sale-client-id',''); set('sale-prepay',''); set('sale-bonus','5');
   var ch=document.getElementById('sale-client-chosen'); if(ch) ch.textContent='';
   App._saleItems=[ blankSaleItem_() ];
   renderSaleItems(); onSalePayTypeChange();
@@ -5059,8 +5075,10 @@ function submitNewSale(){
   if(!clientName){ toast('Укажите клиента','error'); return; }
   var btn=document.getElementById('sale-submit-btn'); if(btn){btn.disabled=true;btn.textContent='Проводим…';}
   var restore=function(){ if(btn){btn.disabled=false;btn.textContent='Провести продажу';} };
+  var manager=(document.getElementById('sale-manager')||{}).value||'';
+  var bonusPct=(document.getElementById('sale-bonus')||{}).value;
   var doCreate=function(cid,cname,phone){
-    var payload={ date:date, clientId:cid, clientName:cname, phone:phone||'', payType:payType, items:items };
+    var payload={ date:date, clientId:cid, clientName:cname, phone:phone||'', payType:payType, items:items, manager:manager, bonusPct:(bonusPct===''?5:Number(bonusPct)||0) };
     if((payType==='Отсрочка'||payType==='Рассрочка') && prepay!=='') payload.paid=Number(prepay)||0;
     google.script.run.withSuccessHandler(function(resp){
       restore();
@@ -5094,8 +5112,12 @@ function renderSaleCard(d){
   var rows=items.map(function(it){ return '<tr><td>'+(it['Название']||'')+'</td><td style="text-align:center">'+(it['Единица']||'')+'</td><td style="text-align:right">'+(it['Кол-во']||0)+'</td><td style="text-align:right">'+salesFmt_(it['Цена'])+'</td><td style="text-align:right;font-weight:600">'+salesFmt_(it['Сумма'])+'</td></tr>'; }).join('')
     || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:8px">Нет позиций</td></tr>';
   var debt=Number(s._debt)||0;
+  var bonusLine = (s['Менеджер'] || s['Бонус сумма'])
+    ? '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:8px"><span>Менеджер: <b style="color:var(--text)">'+(s['Менеджер']||'—')+'</b></span><span>Бонус '+(s['Бонус %']||0)+'% = <b style="color:var(--text)">'+salesFmt_(s['Бонус сумма'])+'</b></span></div>'
+    : '';
   body.innerHTML=
     '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:10px"><span style="color:var(--text2)">'+(s['Дата']||'')+' · '+(s['Способ оплаты']||'')+'</span><span style="font-weight:600">'+(s['Клиент']||'')+(s['Телефон']?' · '+s['Телефон']:'')+'</span></div>'+
+    bonusLine+
     '<table class="data-table" style="border:1px solid var(--border);border-radius:8px"><thead><tr><th>Материал</th><th style="text-align:center">Ед.</th><th style="text-align:right">Кол-во</th><th style="text-align:right">Цена</th><th style="text-align:right">Сумма</th></tr></thead><tbody>'+rows+'</tbody></table>'+
     '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;text-align:center">'+
       '<div><div style="font-size:11px;color:var(--text3)">Итого</div><div style="font-weight:700;font-size:16px">'+salesFmt_(s._total)+'</div></div>'+
@@ -7259,10 +7281,7 @@ function renderCardPersonnel() {
   var mastersList = String(o['Оклейщики'] || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
   var inp  = 'font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:7px;background:var(--inp);color:var(--text);width:100%';
 
-  var mgrOpts = '<option value="">— менеджер —</option>' + emps.map(function(e){
-    var n = e['ФИО'] || e['Имя'] || '';
-    return n ? '<option' + (n === mgr ? ' selected' : '') + '>' + n + '</option>' : '';
-  }).join('');
+  var mgrOpts = managerOptionsHtml_(mgr, '— менеджер —');
 
   var masterChecks = emps.length
     ? emps.map(function(e){
