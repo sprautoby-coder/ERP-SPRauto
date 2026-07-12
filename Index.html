@@ -1516,11 +1516,11 @@
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
         <div class="form-row" style="margin:0">
           <label class="form-label">Менеджер</label>
-          <select class="form-select" id="ord-manager"><option value="">— выбрать —</option></select>
+          <select class="form-select" id="ord-manager" onchange="recalcOrderPreview()"><option value="">— выбрать —</option></select>
         </div>
         <div class="form-row" style="margin:0">
           <label class="form-label">Администратор</label>
-          <select class="form-select" id="ord-admin"><option value="">— выбрать —</option></select>
+          <select class="form-select" id="ord-admin" onchange="recalcOrderPreview()"><option value="">— выбрать —</option></select>
         </div>
         <div class="form-row" style="margin:0;position:relative">
           <label class="form-label">Мастер(а)</label>
@@ -1543,6 +1543,7 @@
           <span id="prev-gross" style="font-weight:600;border-top:1px solid var(--border);padding-top:4px">—</span>
           <span>Бонус менеджера:</span>     <span id="prev-mgr"    style="color:var(--accent)">—</span>
           <span>Бонус мастера:</span>       <span id="prev-master" style="color:var(--accent)">—</span>
+          <span id="prev-admin-lbl" style="display:none">Бонус администратора:</span><span id="prev-admin" style="color:var(--accent);display:none">—</span>
           <span>Маржинальная прибыль:</span><span id="prev-margin" style="font-weight:600;color:var(--success)">—</span>
         </div>
       </div>

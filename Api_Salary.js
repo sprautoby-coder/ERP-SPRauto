@@ -33,12 +33,15 @@ function calcSalaryForPeriod(from, to) {
 
       let managerBonus = 0;
       let masterBonus  = 0;
+      let adminBonus   = 0;
       let orderCount   = 0;
       const ordersList = [];
+      const adminPctEmp = (pct && pct > 0) ? pct : 5;   // % бонуса администратора из карточки (по умолчанию 5)
 
       orders.forEach(function(o) {
         const managers = splitNames_(o['Менеджер'] || '');
         const masters  = splitNames_(o['Оклейщики'] || '');
+        const admins   = splitNames_(o['Администратор'] || '');
         const gross    = Number(o['Валовая прибыль']) || 0;
         const price    = Number(o['Стоимость заказа']) || 0;
         let involved   = false;
@@ -51,6 +54,11 @@ function calcSalaryForPeriod(from, to) {
         if (masters.indexOf(name) >= 0) {
           const share = masters.length > 0 ? gross * 0.35 / masters.length : 0;
           masterBonus += share;
+          involved = true;
+        }
+        if (admins.indexOf(name) >= 0) {
+          const share = admins.length > 0 ? gross * (adminPctEmp / 100) / admins.length : 0;
+          adminBonus += share;
           involved = true;
         }
         if (involved) {
@@ -66,7 +74,7 @@ function calcSalaryForPeriod(from, to) {
         }
       });
 
-      const totalBonus = round2Sal_(managerBonus + masterBonus);
+      const totalBonus = round2Sal_(managerBonus + masterBonus + adminBonus);
       return {
         id:           emp['ID'],
         name:         name,
@@ -75,6 +83,7 @@ function calcSalaryForPeriod(from, to) {
         bonusPct:     pct,
         managerBonus: round2Sal_(managerBonus),
         masterBonus:  round2Sal_(masterBonus),
+        adminBonus:   round2Sal_(adminBonus),
         totalBonus:   totalBonus,
         total:        round2Sal_(salary + totalBonus),
         orderCount:   orderCount,

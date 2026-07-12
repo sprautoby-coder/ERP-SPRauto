@@ -19,7 +19,7 @@
  * и редактируются в любой момент), а НЕ от статуса оплаты. Это единый источник истины.
  * Поддержан и legacy 'Да' для обратной совместимости со старыми вызовами.
  */
-function calcOrderFinance_(price, materialCost, totalExpenses, payType, managersStr, mastersStr) {
+function calcOrderFinance_(price, materialCost, totalExpenses, payType, managersStr, mastersStr, adminName, adminPct) {
   price          = Number(price)          || 0;
   materialCost   = Number(materialCost)   || 0;
   totalExpenses  = Number(totalExpenses)  || 0;
@@ -37,14 +37,35 @@ function calcOrderFinance_(price, materialCost, totalExpenses, payType, managers
   var managerBonusEach  = (managersCount > 0) ? managerBonusTotal / managersCount : 0;
   var masterBonusEach   = (mastersCount  > 0) ? masterBonusTotal  / mastersCount  : 0;
 
-  var marginalProfit = grossProfit - managerBonusTotal - masterBonusTotal;
+  // Бонус администратора: % берём из карточки сотрудника (по умолчанию 5%)
+  var hasAdmin       = !!(adminName && String(adminName).trim());
+  var adminP         = (adminPct === undefined || adminPct === null || adminPct === '') ? 5 : (Number(adminPct) || 0);
+  var adminBonusTotal = hasAdmin ? grossProfit * (adminP / 100) : 0;
+
+  var marginalProfit = grossProfit - managerBonusTotal - masterBonusTotal - adminBonusTotal;
 
   return {
     grossProfit:    round2(grossProfit),
     managerBonus:   round2(managerBonusEach),
     masterBonus:    round2(masterBonusEach),
+    adminBonus:     round2(adminBonusTotal),
     marginalProfit: round2(marginalProfit),
   };
+}
+
+// % бонуса сотрудника из карточки «Сотрудники» (по умолчанию def, обычно 5)
+function getEmployeeBonusPct_(name, def) {
+  def = (def === undefined) ? 5 : def;
+  name = String(name || '').trim();
+  if (!name) return 0;
+  var emps = readSheetAsObjects('DATABASE', 'EMPLOYEES');
+  for (var i = 0; i < emps.length; i++) {
+    if (String(emps[i]['ФИО'] || '').trim() === name) {
+      var p = Number(emps[i]['% бонуса']);
+      return (p && p > 0) ? p : def;
+    }
+  }
+  return def;
 }
 
 function round2(n) {
@@ -239,7 +260,8 @@ function createOrder(payload) {
     // Они задают −15% (если Безнал) и могут редактироваться позже. На статус оплаты не влияют.
     const payType     = payload.payType || payload.beznal || '';
 
-    const finance       = calcOrderFinance_(payload.price, totalMaterialCost, totalExpenses, payType, payload.manager, payload.masters);
+    const adminPct      = getEmployeeBonusPct_(payload.admin, 5);
+    const finance       = calcOrderFinance_(payload.price, totalMaterialCost, totalExpenses, payType, payload.manager, payload.masters, payload.admin, adminPct);
     const contractNum   = generateContractNumber_(payload.service);
     // «Услуга» — все выбранные услуги через запятую (основная + доп.), номер договора — по основной
     const codes         = (payload.serviceCodes && payload.serviceCodes.length) ? payload.serviceCodes : [payload.service];
@@ -277,6 +299,7 @@ function createOrder(payload) {
       'Валовая прибыль':       finance.grossProfit,
       'Бонус менеджера':       finance.managerBonus,
       'Бонус оклейщика':       finance.masterBonus,
+      'Бонус администратора':  finance.adminBonus,
       'Маржинальная прибыль':  finance.marginalProfit,
       'Заметки':               payload.notes || '',
       'Проверено':             'Нет',
@@ -325,9 +348,11 @@ function recalcOrderFinance(orderId) {
       const totalMat = matRows.reduce(function(s, r) { return s + (Number(r['Стоимость']) || 0); }, 0);
       const totalExp = expRows.reduce(function(s, r) { return s + (Number(r['Сумма'])     || 0); }, 0);
 
+      const adminNameR = rowData['Администратор'] || '';
       const finance = calcOrderFinance_(
         rowData['Стоимость заказа'], totalMat, totalExp,
-        rowData['Тип оплаты'], rowData['Менеджер'], rowData['Оклейщики']
+        rowData['Тип оплаты'], rowData['Менеджер'], rowData['Оклейщики'],
+        adminNameR, getEmployeeBonusPct_(adminNameR, 5)
       );
 
       const tz  = Session.getScriptTimeZone();
@@ -339,6 +364,7 @@ function recalcOrderFinance(orderId) {
         'Валовая прибыль':      finance.grossProfit,
         'Бонус менеджера':      finance.managerBonus,
         'Бонус оклейщика':      finance.masterBonus,
+        'Бонус администратора': finance.adminBonus,
         'Маржинальная прибыль': finance.marginalProfit,
         'Обновлён':             now,
       };
@@ -423,21 +449,24 @@ function updateOrder(id, payload) {
 
       // Пересчёт финансов при изменении цены, условий оплаты или персонала
       const needsRecalc = payload.price !== undefined || payload.payType !== undefined
-                       || payload.manager !== undefined || payload.masters !== undefined;
+                       || payload.manager !== undefined || payload.masters !== undefined
+                       || payload.admin !== undefined;
       let financeResult = null;
       if (needsRecalc) {
         const price      = payload.price   !== undefined ? Number(payload.price)  : Number(row['Стоимость заказа']) || 0;
         const payType    = payload.payType !== undefined ? payload.payType         : String(row['Тип оплаты'] || '');
         const manager    = payload.manager !== undefined ? payload.manager         : String(row['Менеджер']   || '');
         const masters    = payload.masters !== undefined ? payload.masters         : String(row['Оклейщики']  || '');
+        const admin      = payload.admin   !== undefined ? payload.admin           : String(row['Администратор'] || '');
         const matCost    = Number(row['Итого материалы']) || 0;
         const expCost    = Number(row['Итого расходы'])   || 0;
-        financeResult    = calcOrderFinance_(price, matCost, expCost, payType, manager, masters);
+        financeResult    = calcOrderFinance_(price, matCost, expCost, payType, manager, masters, admin, getEmployeeBonusPct_(admin, 5));
 
         if (payload.price !== undefined) setCell('Стоимость заказа', price);
         setCell('Валовая прибыль',      financeResult.grossProfit);
         setCell('Бонус менеджера',      financeResult.managerBonus);
         setCell('Бонус оклейщика',      financeResult.masterBonus);
+        setCell('Бонус администратора', financeResult.adminBonus);
         setCell('Маржинальная прибыль', financeResult.marginalProfit);
       }
 
