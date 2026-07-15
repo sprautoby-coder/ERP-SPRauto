@@ -2864,6 +2864,38 @@ function checkSetup() {
     .getSetupStatus();
 }
 
+// Разовая починка дублей ID заказов из интерфейса (без редактора Apps Script)
+function runFixOrderIds() {
+  var btn = document.getElementById('fix-ids-btn');
+  var st  = document.getElementById('maintenance-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Чиним…'; }
+  if (st) { st.textContent = 'Проверяем и устраняем дубли ID заказов…'; st.style.color = 'var(--text2)'; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Починить ID заказов (устранить дубли)'; }
+      if (!resp || !resp.ok) {
+        if (st) { st.textContent = 'Ошибка: ' + (resp?resp.error:''); st.style.color = 'var(--danger)'; }
+        toast('Ошибка: ' + (resp?resp.error:''), 'error');
+        return;
+      }
+      var n = (resp.data && resp.data.fixed) || 0;
+      if (st) {
+        st.textContent = n
+          ? ('Исправлено дублей: ' + n + '. Теперь заказы удаляются по отдельности. Откройте «Заказы» и попробуйте.')
+          : 'Дублей ID не найдено — все заказы уже с уникальными ID.';
+        st.style.color = 'var(--success)';
+      }
+      App.orders = []; App._cardCache = {}; App._dashCache = null; App._debtCache = null;   // пересобрать списки
+      toast(n ? ('Починено ID: ' + n) : 'Дублей не найдено', 'success');
+    })
+    .withFailureHandler(function(e){
+      if (btn) { btn.disabled = false; btn.textContent = 'Починить ID заказов (устранить дубли)'; }
+      if (st) { st.textContent = 'Ошибка: ' + e.message; st.style.color = 'var(--danger)'; }
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .fixDuplicateOrderIds();
+}
+
 function runSetupWizardUI() {
   var btn = document.getElementById('setup-run-btn');
   var el  = document.getElementById('setup-status');

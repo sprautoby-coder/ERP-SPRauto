@@ -317,6 +317,12 @@
           <button class="btn btn-primary" id="setup-run-btn" onclick="runSetupWizardUI()">Запустить настройку</button>
         </div>
       </div>
+      <div class="settings-card">
+        <div class="settings-card-title">🔧 Обслуживание</div>
+        <div class="settings-card-desc">Если заказ не удаляется или «удаление одного цепляет другой» — у заказов совпали ID. Нажмите, чтобы присвоить каждому уникальный ID. Безопасно: строки не удаляются, только переименовываются ID у дублей.</div>
+        <div id="maintenance-status" style="font-size:12.5px;color:var(--text2);margin:8px 0 12px;line-height:1.6"></div>
+        <button class="btn btn-primary" id="fix-ids-btn" onclick="runFixOrderIds()">Починить ID заказов (устранить дубли)</button>
+      </div>
     </div>
     <div style="margin-top:20px"><button class="btn btn-primary" onclick="saveAllSettings()">Сохранить настройки</button></div>
   </div>
