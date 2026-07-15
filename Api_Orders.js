@@ -606,6 +606,33 @@ function fixDuplicateOrderIds() {
   });
 }
 
+// Быстрая проверка на дубли ID и авто-починка при загрузке приложения.
+// Читает только колонку ID; чинит (fixDuplicateOrderIds) лишь если дубли реально есть.
+// Всё в try — при любой ошибке молча пропускаем, запуск приложения не ломаем.
+function autoFixOrderIdsIfNeeded_() {
+  try {
+    var sheet = getTab('DATABASE', 'ORDERS');
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 3) return { fixed: 0 };   // 0–1 заказ — дублей быть не может
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var idIdx = headers.indexOf('ID');
+    if (idIdx < 0) return { fixed: 0 };
+    var ids = sheet.getRange(2, idIdx + 1, lastRow - 1, 1).getValues();
+    var seen = {}, hasDup = false;
+    for (var i = 0; i < ids.length; i++) {
+      var v = String(ids[i][0] || '');
+      if (!v) continue;
+      if (seen[v]) { hasDup = true; break; }
+      seen[v] = true;
+    }
+    if (!hasDup) return { fixed: 0 };
+    var res = fixDuplicateOrderIds();   // есть дубли — чиним
+    return (res && res.data) ? res.data : { fixed: 0 };
+  } catch (e) {
+    return { fixed: 0, error: e.message };
+  }
+}
+
 // Найти строку заказа по ID; возвращает { rowNum, headers, data } или null
 function findOrderRow_(sheet, id) {
   var data    = sheet.getDataRange().getValues();

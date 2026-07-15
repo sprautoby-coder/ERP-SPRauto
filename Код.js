@@ -28,6 +28,9 @@ function initApp() {
     var empResp = getEmployees(true);
     var employees = (empResp && empResp.ok) ? empResp.data : [];
 
+    // Авто-починка дублей ID заказов (наследие старой генерации) — молча, безопасно
+    try { autoFixOrderIdsIfNeeded_(); } catch (e) {}
+
     return {
       brand: brand,
       config: {
