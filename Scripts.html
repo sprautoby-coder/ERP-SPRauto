@@ -1782,12 +1782,16 @@ function loadKassa(force) {
   if (inp && inp.value) App._kassaDate = inp.value;
 
   var ops = document.getElementById('kassa-ops');
-  if (ops && force) ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</div>';
+  // Мгновенно из кэша той же даты, свежие данные — в фоне
+  if (App._kassaCache && App._kassaCache.date === App._kassaDate) { App._kassa = App._kassaCache.data; renderKassa(App._kassaCache.data); }
+  else if (ops && force) ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</div>';
 
+  var reqDate = App._kassaDate;
   google.script.run
     .withSuccessHandler(function(resp){
-      if (!resp || !resp.ok) { if (ops) ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">' + (resp?resp.error:'Ошибка') + '</div>'; return; }
+      if (!resp || !resp.ok) { if (!App._kassaCache && ops) ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">' + (resp?resp.error:'Ошибка') + '</div>'; return; }
       App._kassa = resp.data;
+      App._kassaCache = { date: reqDate, data: resp.data };
       renderKassa(resp.data);
     })
     .withFailureHandler(function(e){ if (ops) ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">' + e.message + '</div>'; })
@@ -5817,13 +5821,23 @@ function deleteOrderFromDash(id) {
 
 function loadFinance() {
   var range = getPeriodRangeFromUI('fin');
-
-  var fmtBr = function(n){ return (Math.round(Number(n||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+  var key   = (range.from || '') + '_' + (range.to || '');
+  // Мгновенно из кэша того же периода, свежие данные — в фоне
+  if (App._finCache && App._finCache.key === key) renderFinance_(App._finCache.data);
 
   google.script.run
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) return;
-      var d = resp.data;
+      App._finCache = { key: key, data: resp.data };
+      renderFinance_(resp.data);
+    })
+    .withFailureHandler(function(){})
+    .getDashboardData(range);
+}
+
+function renderFinance_(d) {
+  var fmtBr = function(n){ return (Math.round(Number(n||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+  {
       var k = d.kpi || {};
       var set = function(id, val){ var el = document.getElementById(id); if(el) el.textContent = val; };
       set('fin-revenue',  fmtBr(k.revenue));
@@ -5860,9 +5874,7 @@ function loadFinance() {
         }).join('');
         expTbody.innerHTML = expRows || '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:16px">Нет расходов</td></tr>';
       }
-    })
-    .withFailureHandler(function(){})
-    .getDashboardData(range);
+  }
 }
 
 function getPeriodRange(period) {
@@ -5967,10 +5979,17 @@ function toggleExpCompare() {
 
 function loadExpenses() {
   var tbody = document.getElementById('expenses-tbody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</td></tr>';
-
   var range  = getPeriodRangeFromUI('exp');
   var filter = { from: range.from || null, to: range.to || null };
+  var expKey = (filter.from || '') + '_' + (filter.to || '');
+
+  // Простой режим: мгновенно из кэша того же периода, свежие данные — в фоне
+  if (!App._expCompare && App._expCache && App._expCache.key === expKey) {
+    App._expenses = App._expCache.data;
+    renderExpensesTable(App._expenses); updateExpensesKpi(App._expenses, null);
+  } else if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</td></tr>';
+  }
 
   if (App._expCompare) {
     // Два параллельных запроса
@@ -6010,6 +6029,7 @@ function loadExpenses() {
           return;
         }
         App._expenses = resp.data || [];
+        App._expCache = { key: expKey, data: App._expenses };
         renderExpensesTable(App._expenses);
         updateExpensesKpi(App._expenses, null);
       })
@@ -6238,18 +6258,21 @@ function deleteExp(id) {
 
 function loadDebt() {
   var tbody = document.getElementById('debt-tbody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</td></tr>';
+  // Мгновенно из кэша (если уже открывали), свежие данные подтянем в фоне
+  if (App._debtRows) renderDebtTable(App._debtRows);
+  else if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--text3)">Загрузка...</td></tr>';
 
   google.script.run
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) {
-        if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--danger)">' + (resp ? resp.error : 'Ошибка загрузки') + '</td></tr>';
+        if (!App._debtRows && tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--danger)">' + (resp ? resp.error : 'Ошибка загрузки') + '</td></tr>';
         return;
       }
-      renderDebtTable(resp.data || []);
+      App._debtRows = resp.data || [];
+      renderDebtTable(App._debtRows);
     })
     .withFailureHandler(function(e) {
-      if (tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--danger)">' + e.message + '</td></tr>';
+      if (!App._debtRows && tbody) tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:var(--danger)">' + e.message + '</td></tr>';
     })
     .getDebtOrders();
 }
@@ -6572,6 +6595,22 @@ function saveComplexesCatalogUI() {
 
 function loadDDS() {
   var range = getPeriodRangeFromUI('dds');
+  var key   = (range.from || '') + '_' + (range.to || '');
+  // Мгновенно из кэша того же периода, свежие данные — в фоне
+  if (App._ddsCache && App._ddsCache.key === key) renderDDS_(App._ddsCache.data);
+
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp||!resp.ok) return;
+      App._ddsCache = { key: key, data: resp.data };
+      App._ddsData = resp.data;
+      renderDDS_(resp.data);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка ДДС: '+e.message,'error'); })
+    .getDDS(range.from||null, range.to||null);
+}
+
+function renderDDS_(d) {
   var fmt    = function(n){ return (Number(n)||0).toLocaleString('ru') + ' ' + CUR; };
   var set    = function(id, v, color) {
     var el = document.getElementById(id);
@@ -6579,12 +6618,7 @@ function loadDDS() {
     el.textContent = v;
     if (color) el.style.color = color;
   };
-
-  google.script.run
-    .withSuccessHandler(function(resp) {
-      if (!resp||!resp.ok) return;
-      var d = resp.data;
-      var s = d.summary;
+  var s = d.summary;
 
       // Касса
       set('dds-nal',     fmt(s.totalNal),    'var(--success)');
@@ -6632,11 +6666,6 @@ function loadDDS() {
               '<td style="text-align:right;font-weight:600;color:var(--danger)">' + (Number(r.amount)||0).toLocaleString('ru') + ' ' + CUR + '</td></tr>';
           }).join('')
         : '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:12px">Нет расходов</td></tr>';
-
-      App._ddsData = d;
-    })
-    .withFailureHandler(function(e){ toast('Ошибка ДДС: '+e.message,'error'); })
-    .getDDS(range.from||null, range.to||null);
 }
 
 /* ===== ОПЛАТА ЗАКАЗА ===== */
