@@ -3603,19 +3603,29 @@ function bulkDeleteSelectedOrders() {
   if (!ids.length) return;
   uiConfirm('Удалить выбранные заказы (' + ids.length + ' шт.)?\n\nОни скроются со всех списков и досок. Вернуть можно из «Корзины».',
     function() {
-      var done = 0, failed = 0;
+      var idSet = {}; ids.forEach(function(x){ idSet[String(x)] = true; });
+      // Оптимистично: сразу убираем строки и перерисовываем — без скелетона и без рефетча
+      var removed = (App.orders || []).filter(function(o){ return idSet[String(o['ID'])]; });
+      App.orders = (App.orders || []).filter(function(o){ return !idSet[String(o['ID'])]; });
+      App._selOrders = {};
+      App._dashCache = null; App._debtCache = null; App._cardCache = {};  // пересчитаются при заходе
+      filterOrders(); loadOrdersKpi();
+      toast('Удалено заказов: ' + ids.length + ' (в Корзине)', 'success');
+
+      // Серверные вызовы — в фоне; не удалённые из-за ошибки возвращаем в список
+      var done = 0, failed = 0, failedIds = {};
       var finish = function() {
         if (done + failed < ids.length) return;
-        App.orders = []; App._dashCache = null; App._debtCache = null; App._cardCache = {};
-        App._selOrders = {};
-        if (failed) toast('Удалено: ' + done + ', ошибок: ' + failed, failed === ids.length ? 'error' : 'success');
-        else toast('Удалено заказов: ' + done + ' (в Корзине)', 'success');
-        loadOrders(true);
+        if (failed) {
+          var back = removed.filter(function(o){ return failedIds[String(o['ID'])]; });
+          if (back.length) { App.orders = back.concat(App.orders || []); filterOrders(); loadOrdersKpi(); }
+          toast('Не удалось удалить: ' + failed + ' — вернул в список', 'error');
+        }
       };
       ids.forEach(function(oid) {
         google.script.run
-          .withSuccessHandler(function(resp){ if (resp && resp.ok) done++; else failed++; finish(); })
-          .withFailureHandler(function(){ failed++; finish(); })
+          .withSuccessHandler(function(resp){ if (resp && resp.ok) done++; else { failed++; failedIds[String(oid)] = true; } finish(); })
+          .withFailureHandler(function(){ failed++; failedIds[String(oid)] = true; finish(); })
           .softDeleteOrder(oid);
       });
     },
@@ -4281,18 +4291,22 @@ function deleteOrderFromKanban(oid) {
   var sum = order ? (Number(order['Стоимость заказа']) || 0) : 0;
   uiConfirm('Удалить заказ ' + num + (sum ? (' на ' + sum.toLocaleString('ru') + ' ' + CUR) : '') + '?\n\nЗаказ скроется со всех досок и списков. Его можно вернуть из «Корзины».',
     function() {
+      // Оптимистично: убираем сразу, серверный вызов в фоне, откат при ошибке
+      var removed = order;
+      App.orders = App.orders.filter(function(o){ return o['ID'] !== oid; });
+      if (App._kanbanOrder) Object.keys(App._kanbanOrder).forEach(function(s){
+        App._kanbanOrder[s] = (App._kanbanOrder[s] || []).filter(function(id){ return id !== oid; });
+      });
+      App._dashCache = null; App._cardCache = {}; App._debtCache = null;
+      filterOrders();
+      toast('Заказ удалён (в Корзине)', 'success');
+      var restore = function(msg){
+        if (removed) { App.orders = [removed].concat(App.orders || []); filterOrders(); }
+        toast(msg, 'error');
+      };
       google.script.run
-        .withSuccessHandler(function(resp){
-          if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
-          App.orders = App.orders.filter(function(o){ return o['ID'] !== oid; });
-          if (App._kanbanOrder) Object.keys(App._kanbanOrder).forEach(function(s){
-            App._kanbanOrder[s] = (App._kanbanOrder[s] || []).filter(function(id){ return id !== oid; });
-          });
-          App._dashCache = null; App._cardCache = {};
-          filterOrders();
-          toast('Заказ удалён (в Корзине)', 'success');
-        })
-        .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+        .withSuccessHandler(function(resp){ if (!resp || !resp.ok) restore('Не удалось удалить — вернул заказ: ' + (resp ? resp.error : '')); })
+        .withFailureHandler(function(e){ restore('Ошибка: ' + e.message + ' — вернул заказ'); })
         .softDeleteOrder(oid);
     },
     { title: 'Удалить заказ', okText: 'Удалить', danger: true });
@@ -5773,17 +5787,25 @@ function deleteOrderFromDash(id) {
   var sum = o ? (Number(o.price) || 0) : 0;
   uiConfirm('Удалить заказ ' + num + (sum ? (' на ' + sum.toLocaleString('ru') + ' ' + CUR) : '') + '?\n\nЗаказ скроется со всех списков и досок. Его можно вернуть из «Корзины».',
     function() {
+      // Оптимистично: убираем из списка недавних сразу, сервер — в фоне, откат при ошибке
+      var removedRecent = o;
+      if (App._dashCache && App._dashCache.data && App._dashCache.data.recentOrders) {
+        App._dashCache.data.recentOrders = App._dashCache.data.recentOrders.filter(function(x){ return String(x.id) !== String(id); });
+      }
+      App.orders = (App.orders || []).filter(function(x){ return String(x['ID']) !== String(id); });
+      App._debtCache = null; App._cardCache = {};
+      renderDashboard(false);   // из обновлённого кэша — без скелетона и без ожидания сервера
+      toast('Заказ удалён (в Корзине)', 'success');
+      var restore = function(msg){
+        if (removedRecent && App._dashCache && App._dashCache.data && App._dashCache.data.recentOrders) {
+          App._dashCache.data.recentOrders.unshift(removedRecent);
+          renderDashboard(false);
+        }
+        toast(msg, 'error');
+      };
       google.script.run
-        .withSuccessHandler(function(resp){
-          if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
-          if (App._dashCache && App._dashCache.data && App._dashCache.data.recentOrders) {
-            App._dashCache.data.recentOrders = App._dashCache.data.recentOrders.filter(function(x){ return String(x.id) !== String(id); });
-          }
-          App.orders = []; App._debtCache = null; App._cardCache = {};
-          toast('Заказ удалён (в Корзине)', 'success');
-          renderDashboard(true);   // пересчитать KPI и список с сервера
-        })
-        .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+        .withSuccessHandler(function(resp){ if (!resp || !resp.ok) restore('Не удалось удалить — вернул заказ: ' + (resp ? resp.error : '')); })
+        .withFailureHandler(function(e){ restore('Ошибка: ' + e.message + ' — вернул заказ'); })
         .softDeleteOrder(id);
     },
     { title: 'Удалить заказ', okText: 'Удалить', danger: true });
