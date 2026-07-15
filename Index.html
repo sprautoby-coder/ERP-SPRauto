@@ -1532,12 +1532,12 @@
           <label class="form-label">Администратор</label>
           <select class="form-select" id="ord-admin" onchange="recalcOrderPreview()"><option value="">— выбрать —</option></select>
         </div>
-        <div class="form-row" style="margin:0;position:relative">
+        <div class="form-row" style="margin:0;position:relative;align-self:start">
           <label class="form-label">Мастер(а)</label>
           <button type="button" class="form-input" style="text-align:left;cursor:pointer;color:var(--text2)" onclick="toggleMastersDropdown(event)">
             <span id="ord-masters-label">— выбрать —</span>
           </button>
-          <div id="masters-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:8px;margin-top:4px">
+          <div id="masters-dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:999;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:8px;margin-top:4px;max-height:260px;overflow-y:auto">
             <div id="ord-masters-wrap"></div>
           </div>
           <input type="hidden" id="ord-masters" value="">
