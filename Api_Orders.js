@@ -31,16 +31,18 @@ function calcOrderFinance_(price, materialCost, totalExpenses, payType, managers
   var managersCount = managersStr ? managersStr.split(',').filter(function(s){ return s.trim(); }).length : 0;
   var mastersCount  = mastersStr  ? mastersStr.split(',').filter(function(s){ return s.trim(); }).length  : 0;
 
-  var managerBonusTotal = (managersCount > 0) ? grossProfit * 0.10 : 0;
-  var masterBonusTotal  = (mastersCount  > 0) ? grossProfit * 0.35 : 0;
+  // Ставки бонусов — глобальные из Настроек (менеджер/мастер/администратор)
+  var rates = getBonusRates_();
+
+  var managerBonusTotal = (managersCount > 0) ? grossProfit * (rates.manager / 100) : 0;
+  var masterBonusTotal  = (mastersCount  > 0) ? grossProfit * (rates.master  / 100) : 0;
 
   var managerBonusEach  = (managersCount > 0) ? managerBonusTotal / managersCount : 0;
   var masterBonusEach   = (mastersCount  > 0) ? masterBonusTotal  / mastersCount  : 0;
 
-  // Бонус администратора: % берём из карточки сотрудника (по умолчанию 5%)
-  var hasAdmin       = !!(adminName && String(adminName).trim());
-  var adminP         = (adminPct === undefined || adminPct === null || adminPct === '') ? 5 : (Number(adminPct) || 0);
-  var adminBonusTotal = hasAdmin ? grossProfit * (adminP / 100) : 0;
+  // Бонус администратора: глобальная ставка из Настроек
+  var hasAdmin        = !!(adminName && String(adminName).trim());
+  var adminBonusTotal = hasAdmin ? grossProfit * (rates.admin / 100) : 0;
 
   var marginalProfit = grossProfit - managerBonusTotal - masterBonusTotal - adminBonusTotal;
 
@@ -51,6 +53,29 @@ function calcOrderFinance_(price, materialCost, totalExpenses, payType, managers
     adminBonus:     round2(adminBonusTotal),
     marginalProfit: round2(marginalProfit),
   };
+}
+
+// Глобальные ставки бонусов (%) из листа Настроек. Дефолты: менеджер 10, мастер 35, админ 5.
+// Ключи: manager_bonus_pct / master_bonus_pct / admin_bonus_pct.
+function getBonusRates_() {
+  var def = { manager: 10, master: 35, admin: 5 };
+  try {
+    var sheet = getTab('DATABASE', 'SETTINGS');
+    var lastRow = sheet.getLastRow();
+    if (lastRow < 2) return def;
+    var rows = sheet.getRange(2, 1, lastRow - 1, 2).getValues();
+    var map = {};
+    rows.forEach(function(r){ if (r[0]) map[r[0]] = r[1]; });
+    var num = function(k, d){
+      var v = Number(map[k]);
+      return (map[k] !== undefined && map[k] !== '' && !isNaN(v)) ? v : d;
+    };
+    return {
+      manager: num('manager_bonus_pct', def.manager),
+      master:  num('master_bonus_pct',  def.master),
+      admin:   num('admin_bonus_pct',   def.admin)
+    };
+  } catch (e) { return def; }
 }
 
 // % бонуса сотрудника из карточки «Сотрудники» (по умолчанию def, обычно 5)

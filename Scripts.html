@@ -2984,11 +2984,16 @@ function fillSettingsForm(s) {
   set('set-bank-name','bank_name'); set('set-director','director');
   set('set-clerk','order_clerk'); set('set-warranty','warranty_months');
   set('set-phone','phone'); set('set-email','email');
-  set('set-currency','currency'); set('set-bonus-pool','bonus_pool_pct');
+  set('set-currency','currency');
+  set('set-bonus-manager','manager_bonus_pct'); set('set-bonus-master','master_bonus_pct'); set('set-bonus-admin','admin_bonus_pct');
   set('set-cycle-1','cycle_day_1'); set('set-cycle-2','cycle_day_2');
   set('set-notify-email','notify_email'); set('set-reminder-days','reminder_days_before');
   set('set-reminder-hour','reminder_hour'); set('set-tg-token','telegram_bot_token');
   set('set-tg-chat','telegram_chat_id');
+  // Если ставки бонусов ещё не сохранены в настройках — показываем действующие (из config)
+  var br = (App.config && App.config.bonusRates) || {};
+  var setBonus = function(id, v){ var el = document.getElementById(id); if (el && !el.value && v != null) el.value = v; };
+  setBonus('set-bonus-manager', br.manager); setBonus('set-bonus-master', br.master); setBonus('set-bonus-admin', br.admin);
   loadReminderStatus();
 }
 
@@ -3000,7 +3005,8 @@ function saveAllSettings() {
   g('set-bank-name','bank_name'); g('set-director','director');
   g('set-clerk','order_clerk'); g('set-warranty','warranty_months');
   g('set-phone','phone'); g('set-email','email');
-  g('set-currency','currency'); g('set-bonus-pool','bonus_pool_pct');
+  g('set-currency','currency');
+  g('set-bonus-manager','manager_bonus_pct'); g('set-bonus-master','master_bonus_pct'); g('set-bonus-admin','admin_bonus_pct');
   g('set-cycle-1','cycle_day_1'); g('set-cycle-2','cycle_day_2');
   g('set-notify-email','notify_email'); g('set-reminder-days','reminder_days_before');
   g('set-reminder-hour','reminder_hour'); g('set-tg-token','telegram_bot_token');
@@ -3008,7 +3014,7 @@ function saveAllSettings() {
   if(App.pendingLogoDataUrl) s['logo_dataurl']=App.pendingLogoDataUrl;
   toast('Сохраняем...','info');
   google.script.run
-    .withSuccessHandler(function(resp){if(!resp||!resp.ok){toast('Ошибка','error');return;}toast('✅ Сохранено','success');App.pendingLogoDataUrl=null;if(App.brand){App.brand.companyName=s['company_name']||App.brand.companyName;App.brand.companySlogan=s['company_slogan']||App.brand.companySlogan;if(s['logo_dataurl'])App.brand.logoDataUrl=s['logo_dataurl'];if(s['currency'])App.brand.currency=s['currency'];}applyBrand(App.brand);if(App.currentPage==='orders')loadOrders(true);})
+    .withSuccessHandler(function(resp){if(!resp||!resp.ok){toast('Ошибка','error');return;}toast('✅ Сохранено','success');App.pendingLogoDataUrl=null;if(App.brand){App.brand.companyName=s['company_name']||App.brand.companyName;App.brand.companySlogan=s['company_slogan']||App.brand.companySlogan;if(s['logo_dataurl'])App.brand.logoDataUrl=s['logo_dataurl'];if(s['currency'])App.brand.currency=s['currency'];}if(App.config){App.config.bonusRates={manager:Number(s['manager_bonus_pct'])||10,master:Number(s['master_bonus_pct'])||35,admin:Number(s['admin_bonus_pct'])||5};}applyBrand(App.brand);if(App.currentPage==='orders')loadOrders(true);})
     .withFailureHandler(function(e){toast('Ошибка: '+e.message,'error');})
     .saveSettings(s);
 }
@@ -4745,16 +4751,12 @@ function recalcOrderPreview() {
   var gross      = price - totalMat - totalExp - bezDisc;
   var mgrCount   = manager ? 1 : 0;
   var mstrCount  = masters.split(',').filter(function(s){ return s.trim(); }).length;
-  var mgrBonus   = mgrCount  > 0 ? gross * 0.10 / mgrCount  : 0;
-  var mstrBonus  = mstrCount > 0 ? gross * 0.35 / mstrCount : 0;
-  // Бонус администратора: % из карточки сотрудника (App.employees), по умолчанию 5
-  var adminPct   = 5;
-  if (admin) {
-    var ae = (App.employees || []).find(function(e){ return (e['ФИО']||e['Имя']||'') === admin; });
-    if (ae && Number(ae['% бонуса']) > 0) adminPct = Number(ae['% бонуса']);
-  }
-  var admBonus   = admin ? gross * (adminPct/100) : 0;
-  var margin     = gross - (mgrCount > 0 ? gross * 0.10 : 0) - (mstrCount > 0 ? gross * 0.35 : 0) - admBonus;
+  // Ставки бонусов — глобальные из Настроек (те же, что на сервере)
+  var rates      = (App.config && App.config.bonusRates) || { manager:10, master:35, admin:5 };
+  var mgrBonus   = mgrCount  > 0 ? gross * (rates.manager/100) / mgrCount  : 0;
+  var mstrBonus  = mstrCount > 0 ? gross * (rates.master/100)  / mstrCount : 0;
+  var admBonus   = admin ? gross * (rates.admin/100) : 0;
+  var margin     = gross - (mgrCount > 0 ? gross * (rates.manager/100) : 0) - (mstrCount > 0 ? gross * (rates.master/100) : 0) - admBonus;
 
   document.getElementById('prev-gross').textContent  = fmt(gross)     + ' ' + CUR;
   document.getElementById('prev-mgr').textContent    = fmt(mgrBonus)  + ' ' + CUR;

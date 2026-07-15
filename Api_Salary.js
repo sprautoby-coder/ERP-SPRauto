@@ -44,6 +44,9 @@ function calcSalaryForPeriod(from, to) {
       paidByEmp[empId] = (paidByEmp[empId] || 0) + (Number(e['Сумма']) || 0);
     });
 
+    // Глобальные ставки бонусов из Настроек (менеджер/мастер/администратор)
+    const rates = getBonusRates_();
+
     const result = employees.map(function(emp) {
       const name   = emp['ФИО'] || '';
       const salary = Number(emp['Базовая ставка']) || 0;
@@ -54,7 +57,6 @@ function calcSalaryForPeriod(from, to) {
       let adminBonus   = 0;
       let orderCount   = 0;
       const ordersList = [];
-      const adminPctEmp = (pct && pct > 0) ? pct : 5;   // % бонуса администратора из карточки (по умолчанию 5)
 
       orders.forEach(function(o) {
         const managers = splitNames_(o['Менеджер'] || '');
@@ -65,17 +67,17 @@ function calcSalaryForPeriod(from, to) {
         let involved   = false;
 
         if (managers.indexOf(name) >= 0) {
-          const share = managers.length > 0 ? gross * 0.10 / managers.length : 0;
+          const share = managers.length > 0 ? gross * (rates.manager / 100) / managers.length : 0;
           managerBonus += share;
           involved = true;
         }
         if (masters.indexOf(name) >= 0) {
-          const share = masters.length > 0 ? gross * 0.35 / masters.length : 0;
+          const share = masters.length > 0 ? gross * (rates.master / 100) / masters.length : 0;
           masterBonus += share;
           involved = true;
         }
         if (admins.indexOf(name) >= 0) {
-          const share = admins.length > 0 ? gross * (adminPctEmp / 100) / admins.length : 0;
+          const share = admins.length > 0 ? gross * (rates.admin / 100) / admins.length : 0;
           adminBonus += share;
           involved = true;
         }

@@ -45,6 +45,7 @@ function initApp() {
         currencies: CONFIG.CURRENCIES,
         expenseCategories: getExpenseCategoriesSafe_(),
         inventoryCategories: CONFIG.INVENTORY_CATEGORIES,
+        bonusRates: getBonusRates_(),
         leadSources: CONFIG.LEAD_SOURCES
       },
       employees: employees
@@ -61,6 +62,7 @@ function getClientConfig() {
     services: CONFIG.SERVICES,
     currencies: CONFIG.CURRENCIES,
     expenseCategories: getExpenseCategoriesSafe_(),
-    inventoryCategories: CONFIG.INVENTORY_CATEGORIES
+    inventoryCategories: CONFIG.INVENTORY_CATEGORIES,
+    bonusRates: getBonusRates_()
   };
 }

@@ -277,7 +277,10 @@
         <div class="form-row"><label class="form-label">Валюта</label>
           <select class="form-select" id="set-currency"><option value="BYN">BYN (Br)</option><option value="RUB">RUB (₽)</option><option value="USD">USD ($)</option><option value="EUR">EUR (€)</option></select>
         </div>
-        <div class="form-row"><label class="form-label">% фонда бонусов</label><input class="form-input" id="set-bonus-pool" type="number" placeholder="35"></div>
+        <div class="form-row"><label class="form-label">Бонус менеджера, %</label><input class="form-input" id="set-bonus-manager" type="number" min="0" max="100" placeholder="10"></div>
+        <div class="form-row"><label class="form-label">Бонус мастера, %</label><input class="form-input" id="set-bonus-master" type="number" min="0" max="100" placeholder="35"></div>
+        <div class="form-row"><label class="form-label">Бонус администратора, %</label><input class="form-input" id="set-bonus-admin" type="number" min="0" max="100" placeholder="5"></div>
+        <div style="font-size:11px;color:var(--text3);margin-top:-4px">Проценты берутся от валовой прибыли заказа. Применяются к расчёту заказов и Расчёту ЗП.</div>
         <div class="form-row"><label class="form-label">День 1-го цикла ЗП</label><input class="form-input" id="set-cycle-1" type="number" placeholder="5"></div>
         <div class="form-row"><label class="form-label">День 2-го цикла ЗП</label><input class="form-input" id="set-cycle-2" type="number" placeholder="20"></div>
       </div>
