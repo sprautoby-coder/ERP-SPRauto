@@ -64,8 +64,37 @@ var PAGE_TITLES = {
 function toggleSidebar() { document.body.classList.toggle('sidebar-open'); }
 function closeSidebar()  { document.body.classList.remove('sidebar-open'); }
 
+// Отслеживание черновика нового заказа + перехват кнопки «назад» (мышь/браузер),
+// чтобы приложение не «вылетало» и незаконченный заказ не терялся.
+function setupNavGuards_() {
+  var om = document.getElementById('modal-new-order');
+  if (om) {
+    // любое изменение поля формы заказа помечает черновик как «в работе»
+    om.addEventListener('input',  function(){ App._orderDirty = true; });
+    om.addEventListener('change', function(){ App._orderDirty = true; });
+  }
+  // «Назад» (мышь/браузер): вместо выхода из приложения закрываем модалку или
+  // возвращаемся на дашборд. В песочнице iframe History API может быть недоступен —
+  // тогда всё просто работает как раньше (try/catch).
+  try {
+    history.pushState({ app: 1 }, '');   // буфер, чтобы первая «назад» попала к обработчику
+    window.addEventListener('popstate', function() {
+      if (App._modalStack && App._modalStack.length) {
+        closeAllModals();
+        App._orderDirty = false; App._orderResume = false;   // «назад» закрыл модалку — черновик не возобновляем
+      } else if (App.currentPage && App.currentPage !== 'dashboard') {
+        goPage('dashboard');
+      }
+      try { history.pushState({ app: 1 }, ''); } catch (e) {}   // всегда восстанавливаем буфер — приложение не выходит
+    });
+  } catch (e) {}
+}
+
 function goPage(name) {
   closeSidebar();   // на мобильном закрываем меню при выборе пункта
+  // Уходим с открытого черновика нового заказа — запомним, чтобы вернуть его
+  var _ordM = document.getElementById('modal-new-order');
+  if (_ordM && _ordM.classList.contains('open') && App._orderDirty) App._orderResume = true;
   // Досохраняем несохранённые правки карточки и инлайн-редакторов перед уходом
   if (typeof flushCard_ === 'function') flushCard_();
   if (typeof flushAllInline_ === 'function') flushAllInline_();
@@ -121,6 +150,8 @@ function goPage(name) {
 
   window.scrollTo(0,0);
   loadCurrentPage();
+  // Возвращаемся к незаконченному черновику заказа при заходе на «Заказы»
+  if (name === 'orders' && App._orderResume) openModal('modal-new-order');
 }
 
 document.querySelectorAll('.nav-item').forEach(function(el){
@@ -233,7 +264,11 @@ function openModal(id) {
 
   if (id === 'modal-new-order') {
     App._aptPendingLink = null;  // сброс возможной висящей привязки записи (выставится заново в orderFromAppointment)
-    if (!App.employees || App.employees.length === 0) {
+    if (App._orderResume) {
+      // Возобновляем незаконченный черновик: значения полей в DOM целы —
+      // НЕ переинициализируем и не сбрасываем, просто показываем как было.
+      App._orderResume = false;
+    } else if (!App.employees || App.employees.length === 0) {
       google.script.run
         .withSuccessHandler(function(resp) {
           App.employees = (resp && resp.ok && resp.data) ? resp.data : [];
@@ -4721,6 +4756,24 @@ function onOrdComplexSelect() {
   }
 }
 
+// Явное закрытие формы нового заказа (× / Отмена): сбрасываем черновик полностью
+function cancelNewOrder() {
+  App._orderDirty = false; App._orderResume = false;
+  ['ord-service','ord-client-phone','ord-client-name','ord-client-id','ord-car','ord-vin',
+   'ord-price','ord-masters','ord-notes','ord-prepay','ord-complex','ord-elements','ord-elements-count',
+   'ord-cl-unp','ord-cl-director','ord-cl-address','ord-cl-postal','ord-cl-bank'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.querySelectorAll('.ord-extra-svc:checked').forEach(function(cb){ cb.checked = false; });
+  var found = document.getElementById('ord-client-found'); if (found) found.style.display = 'none';
+  var preview = document.getElementById('ord-finance-preview'); if (preview) preview.style.display = 'none';
+  App._orderPayType = '';
+  var hid = document.getElementById('ord-paytype'); if (hid) hid.value = '';
+  setOrderClientType('физ', document.getElementById('ord-ctype-phys'));
+  initOrderForm();
+  closeModal('modal-new-order');
+}
+
 function submitNewOrder() {
   var service = (document.getElementById('ord-service') || {}).value;
   var name    = ((document.getElementById('ord-client-name') || {}).value || '').trim();
@@ -4808,6 +4861,7 @@ function submitNewOrderProceed() {
     var found = document.getElementById('ord-client-found'); if (found) found.style.display = 'none';
     var preview = document.getElementById('ord-finance-preview'); if (preview) preview.style.display = 'none';
     App._orderPayType = '';
+    App._orderDirty = false; App._orderResume = false;   // заказ создан — черновик завершён
     initOrderForm();
     var hid = document.getElementById('ord-paytype'); if (hid) hid.value = '';
     var duepayEl = document.getElementById('ord-duepay'); if (duepayEl) duepayEl.value = '';
@@ -7968,6 +8022,7 @@ function printWorkCard()      { printDoc_('generateWorkCardHtml'); }
 /* ===== ИНИЦИАЛИЗАЦИЯ ===== */
 function init() {
   refreshSync();
+  setupNavGuards_();
   var lbl = document.getElementById('theme-label');
   if (lbl) lbl.textContent = App._theme === 'dark' ? 'Светлая тема' : 'Тёмная тема';
 
