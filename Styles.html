@@ -167,6 +167,8 @@ body {
 .sync-dot { width:6px; height:6px; background:var(--green); border-radius:50%; animation:pulse 2s infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 .topbar-right { display:flex; align-items:center; gap:8px; }
+/* Все кнопки в шапке — одной высоты (38px), чтобы верхний правый угол был ровным */
+.topbar-right .btn { height:38px; padding:0 14px; line-height:1; }
 .currency-badge { display:inline-flex; align-items:center; gap:4px; padding:5px 9px; border-radius:7px; background:var(--bg-card2); border:1px solid var(--border); font-size:11px; font-weight:700; color:var(--text2); cursor:pointer; transition:var(--t); }
 .currency-badge:hover { border-color:var(--border-h); color:var(--accent); }
 
