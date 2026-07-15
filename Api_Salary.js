@@ -26,6 +26,24 @@ function calcSalaryForPeriod(from, to) {
         return true;
       });
 
+    // Уже выданная зарплата за период: расходы категорий с флагом «Вычитать из ЗП»
+    // (напр. «Зарплата»), привязанные к сотруднику. «Зарплата за предыдущий период»
+    // сюда НЕ входит — она гасит долг прошлого периода и текущий бонус не уменьшает.
+    const deductSet  = getSalaryDeductCategorySet_();
+    const paidByEmp  = {};
+    readSheetAsObjects('DATABASE', 'EXPENSES').forEach(function(e){
+      if (!e['ID']) return;
+      if (!deductSet[String(e['Категория'] || '').trim()]) return;
+      const empId = String(e['Связан с сотрудником'] || '').trim();
+      if (!empId) return;
+      if (from || to) {
+        const d = parseSalDate_(e['Дата']);
+        if (from && d && d < new Date(from)) return;
+        if (to   && d && d > new Date(to))   return;
+      }
+      paidByEmp[empId] = (paidByEmp[empId] || 0) + (Number(e['Сумма']) || 0);
+    });
+
     const result = employees.map(function(emp) {
       const name   = emp['ФИО'] || '';
       const salary = Number(emp['Базовая ставка']) || 0;
@@ -74,7 +92,8 @@ function calcSalaryForPeriod(from, to) {
         }
       });
 
-      const totalBonus = round2Sal_(managerBonus + masterBonus + adminBonus);
+      const totalBonus  = round2Sal_(managerBonus + masterBonus + adminBonus);
+      const salaryPaid  = round2Sal_(paidByEmp[String(emp['ID'])] || 0);   // уже выдано за период
       return {
         id:           emp['ID'],
         name:         name,
@@ -85,7 +104,9 @@ function calcSalaryForPeriod(from, to) {
         masterBonus:  round2Sal_(masterBonus),
         adminBonus:   round2Sal_(adminBonus),
         totalBonus:   totalBonus,
-        total:        round2Sal_(salary + totalBonus),
+        salaryPaid:   salaryPaid,
+        // К выплате = ставка + бонус − уже выданная ЗП; может быть отрицательным (переплата)
+        total:        round2Sal_(salary + totalBonus - salaryPaid),
         orderCount:   orderCount,
         orders:       ordersList,
       };

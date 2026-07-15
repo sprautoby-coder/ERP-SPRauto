@@ -219,7 +219,7 @@ function getDebtOrders() {
     const cancelledSet = getCancelledStatusSet_();
 
     orders.forEach(function(o) {
-      if (!o['ID'] || cancelledSet[o['Статус']]) return;
+      if (!o['ID'] || String(o['Удалён'] || '') === 'Да' || cancelledSet[o['Статус']]) return; // мягко удалённые не учитываем
 
       // Статус оплаты с откатом на legacy «Безнал» для старых строк
       let payStatus = String(o['Статус оплаты'] || '').trim();

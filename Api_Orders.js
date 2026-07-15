@@ -237,8 +237,7 @@ function createOrder(payload) {
     }
 
     const sheet    = getTab('DATABASE', 'ORDERS');
-    const lastRow  = sheet.getLastRow();
-    const id       = 'ЗАК-' + String(lastRow).padStart(5, '0');
+    const id       = generateOrderId_(sheet);
     const tz       = Session.getScriptTimeZone();
     const nowStr   = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy HH:mm');
     const todayStr = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy');
@@ -553,6 +552,58 @@ function ensureOrderColumn_(sheet, name) {
   sheet.getRange(1, lastCol + 1).setValue(name)
     .setFontWeight('bold').setBackground('#1a2230').setFontColor('#ffffff');
   return lastCol;   // индекс новой колонки (0-based) = старое число столбцов
+}
+
+// Сгенерировать гарантированно уникальный ID заказа (ЗАК-NNNNN).
+// НЕ основан на номере строки: берём максимальный существующий номер +1 и
+// пропускаем уже занятые. Устойчиво к удалениям строк и коллизиям ID.
+function generateOrderId_(sheet) {
+  var data  = sheet.getDataRange().getValues();
+  var idIdx = data[0].indexOf('ID');
+  var used  = {};
+  var maxN  = 0;
+  for (var i = 1; i < data.length; i++) {
+    var v = String((idIdx >= 0 ? data[i][idIdx] : '') || '');
+    if (v) used[v] = true;
+    var m = v.match(/(\d+)\s*$/);
+    if (m) { var n = parseInt(m[1], 10); if (n > maxN) maxN = n; }
+  }
+  var next = maxN + 1, id;
+  do { id = 'ЗАК-' + String(next).padStart(5, '0'); next++; } while (used[id]);
+  return id;
+}
+
+/**
+ * Разовый ремонт: находит заказы с одинаковыми или пустыми ID и присваивает
+ * дубликатам новые уникальные ID. Первое вхождение каждого ID остаётся как есть
+ * (за ним сохраняются связанные платежи/график/материалы). Ничего не удаляет.
+ * Запускать вручную из редактора Apps Script один раз.
+ */
+function fixDuplicateOrderIds() {
+  return safeCall(function() {
+    var sheet = getTab('DATABASE', 'ORDERS');
+    var data  = sheet.getDataRange().getValues();
+    var idIdx = data[0].indexOf('ID');
+    if (idIdx < 0) throw new Error('Нет колонки ID в листе Заказы');
+    var seen = {}, maxN = 0;
+    for (var i = 1; i < data.length; i++) {
+      var m = String(data[i][idIdx] || '').match(/(\d+)\s*$/);
+      if (m) { var nn = parseInt(m[1], 10); if (nn > maxN) maxN = nn; }
+    }
+    var next = maxN + 1, fixed = [];
+    for (var r = 1; r < data.length; r++) {
+      var id = String(data[r][idIdx] || '');
+      if (id && !seen[id]) { seen[id] = true; continue; }   // первое вхождение — не трогаем
+      var newId;                                            // дубликат/пустой → новый уникальный
+      do { newId = 'ЗАК-' + String(next).padStart(5, '0'); next++; } while (seen[newId]);
+      seen[newId] = true;
+      sheet.getRange(r + 1, idIdx + 1).setValue(newId);
+      fixed.push({ row: r + 1, from: id, to: newId });
+    }
+    bumpDataVersion_();
+    logActivity('Ремонт ID заказов: исправлено ' + fixed.length, 'Заказ', '', '', JSON.stringify(fixed));
+    return { fixed: fixed.length, details: fixed };
+  });
 }
 
 // Найти строку заказа по ID; возвращает { rowNum, headers, data } или null

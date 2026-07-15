@@ -116,7 +116,7 @@
       <div class="quick-actions-grid">
         <button class="qa-btn qa-btn-primary" onclick="openModal('modal-new-order')"><div class="qa-icon">📋</div><div class="qa-label">Новый заказ</div><div class="qa-sub">Оклейка, тонировка...</div></button>
         <button class="qa-btn" onclick="openModal('modal-new-client')"><div class="qa-icon">👤</div><div class="qa-label">Новый клиент</div><div class="qa-sub">Физ. или юр. лицо</div></button>
-        <button class="qa-btn" onclick="openModal('modal-new-expense')"><div class="qa-icon">💸</div><div class="qa-label">Записать расход</div><div class="qa-sub">Материалы, аренда...</div></button>
+        <button class="qa-btn" onclick="openExpenseModal()"><div class="qa-icon">💸</div><div class="qa-label">Записать расход</div><div class="qa-sub">Материалы, аренда...</div></button>
         <button class="qa-btn" onclick="goPage('team')"><div class="qa-icon">👥</div><div class="qa-label">Команда</div><div class="qa-sub">Сотрудники и ЗП</div></button>
       </div>
     </div>
@@ -297,6 +297,16 @@
           <button class="btn btn-primary" id="reminder-toggle-btn" onclick="toggleReminders()">Включить ежедневно</button>
         </div>
         <div style="font-size:11px;color:var(--text3);margin-top:8px">При первом включении Google попросит разрешение на отправку почты — подтвердите один раз.</div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-title">🏷️ Категории расходов</div>
+        <div class="settings-card-desc">Добавляйте, переименовывайте и удаляйте категории. Флаг «Вычитать из ЗП» — категории вида «Зарплата», сумма которых вычитается из расчёта ЗП сотрудника за период.</div>
+        <div id="exp-cat-list" style="margin:8px 0 12px">Загрузка…</div>
+        <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center">
+          <input class="form-input" id="new-exp-cat-name" placeholder="Название категории" style="margin:0">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12.5px;white-space:nowrap"><input type="checkbox" id="new-exp-cat-deduct"> вычитать из ЗП</label>
+          <button class="btn btn-primary" onclick="addExpCategory()" style="white-space:nowrap">+ Добавить</button>
+        </div>
       </div>
       <div class="settings-card">
         <div class="settings-card-title">⚙️ Мастер первого запуска</div>
@@ -529,7 +539,7 @@
           <input type="date" class="form-input" id="exp-cmp-to"   onchange="loadExpenses()" style="height:36px;font-size:13px;width:138px">
         </div>
       </div>
-      <button class="btn btn-primary" onclick="openModal('modal-new-expense')" style="white-space:nowrap">+ Добавить расход</button>
+      <button class="btn btn-primary" onclick="openExpenseModal()" style="white-space:nowrap">+ Добавить расход</button>
     </div>
 
     <!-- KPI с дельтой при сравнении -->
@@ -1853,21 +1863,16 @@
       </div>
       <div class="form-row" style="margin-top:12px">
         <label class="form-label">Категория *</label>
-        <select class="form-select" id="exp-category">
+        <select class="form-select" id="exp-category" onchange="toggleExpenseEmployee_()">
           <option value="">— выбрать —</option>
-          <option>Материалы</option>
-          <option>Аренда</option>
-          <option>Коммунальные</option>
-          <option>Зарплата</option>
-          <option>Бонусы</option>
-          <option>Маркетинг</option>
-          <option>Налоги</option>
-          <option>Транспорт</option>
-          <option>Инструмент</option>
-          <option>Закупка товаров</option>
-          <option>Изъятие владельца</option>
-          <option>Прочее</option>
         </select>
+      </div>
+      <div class="form-row" id="exp-employee-row" style="display:none">
+        <label class="form-label">Сотрудник (для вычета из ЗП) *</label>
+        <select class="form-select" id="exp-employee">
+          <option value="">— выбрать —</option>
+        </select>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">Эта выплата вычтется из «Итого к выплате» сотрудника за период.</div>
       </div>
       <div class="form-row">
         <label class="form-label">Описание</label>

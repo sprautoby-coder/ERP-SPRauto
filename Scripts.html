@@ -2702,6 +2702,102 @@ function loadSettings() {
     .withSuccessHandler(function(resp){ if(resp&&resp.ok){App.settings=resp.data||{};fillSettingsForm(App.settings);} })
     .withFailureHandler(function(e){ toast('Ошибка настроек: '+e.message,'error'); })
     .getSettings();
+  renderExpenseCategories();
+}
+
+/* ===== КАТЕГОРИИ РАСХОДОВ (Настройки) ===== */
+function renderExpenseCategories() {
+  var box = document.getElementById('exp-cat-list');
+  if (!box) return;
+  var cats = expenseCategoryList_();
+  App._expCats = cats;
+  if (!cats.length) { box.innerHTML = '<div style="color:var(--text3);font-size:12.5px">Категорий нет</div>'; return; }
+  box.innerHTML = cats.map(function(c, i){
+    return '<div id="expcat-row-' + i + '" style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--border)">' +
+      '<span style="flex:1;font-size:13px">' + escapeHtml_(c.name) +
+        (c.deduct ? ' <span style="font-size:10px;color:var(--danger);border:1px solid var(--danger);border-radius:8px;padding:0 5px">ЗП</span>' : '') + '</span>' +
+      '<label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text3);white-space:nowrap">' +
+        '<input type="checkbox"' + (c.deduct ? ' checked' : '') + ' onchange="toggleExpCatDeduct(' + i + ',this.checked)"> из ЗП</label>' +
+      '<button class="btn btn-ghost" style="padding:2px 8px;font-size:12px" onclick="startRenameExpCat(' + i + ')" title="Переименовать">✏</button>' +
+      '<button class="btn btn-ghost" style="padding:2px 8px;font-size:12px;color:var(--danger)" onclick="deleteExpCat(' + i + ')" title="Удалить">✕</button>' +
+    '</div>';
+  }).join('');
+}
+
+function refreshExpCategories_() {
+  google.script.run.withSuccessHandler(function(resp){
+    if (resp && resp.ok && App.config) App.config.expenseCategories = resp.data || [];
+    renderExpenseCategories();
+  }).getExpenseCategories();
+}
+
+function addExpCategory() {
+  var name = ((document.getElementById('new-exp-cat-name')||{}).value||'').trim();
+  var deduct = !!(document.getElementById('new-exp-cat-deduct')||{}).checked;
+  if (!name) { toast('Введите название категории','error'); return; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
+      toast('Категория добавлена','success');
+      var i1=document.getElementById('new-exp-cat-name'); if(i1) i1.value='';
+      var i2=document.getElementById('new-exp-cat-deduct'); if(i2) i2.checked=false;
+      refreshExpCategories_();
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
+    .addExpenseCategory({ name: name, deduct: deduct });
+}
+
+function toggleExpCatDeduct(i, deduct) {
+  var c = (App._expCats||[])[i]; if (!c) return;
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp||!resp.ok) toast('Ошибка: '+(resp?resp.error:''),'error');
+      refreshExpCategories_();
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); refreshExpCategories_(); })
+    .updateExpenseCategory({ oldName: c.name, newName: c.name, deduct: !!deduct });
+}
+
+// Инлайн-переименование (без window.prompt — он блокируется в песочнице iframe)
+function startRenameExpCat(i) {
+  var c = (App._expCats||[])[i]; if (!c) return;
+  var row = document.getElementById('expcat-row-' + i); if (!row) return;
+  row.innerHTML =
+    '<input class="form-input" id="expcat-edit-' + i + '" value="' + escapeHtml_(c.name) + '" style="flex:1;margin:0">' +
+    '<button class="btn btn-primary" style="padding:2px 10px;font-size:12px" onclick="saveRenameExpCat(' + i + ')">OK</button>' +
+    '<button class="btn btn-ghost" style="padding:2px 10px;font-size:12px" onclick="renderExpenseCategories()">Отмена</button>';
+  var inp = document.getElementById('expcat-edit-' + i); if (inp) { inp.focus(); inp.select(); }
+}
+
+function saveRenameExpCat(i) {
+  var c = (App._expCats||[])[i]; if (!c) return;
+  var nn = ((document.getElementById('expcat-edit-' + i)||{}).value||'').trim();
+  if (!nn) { toast('Название не может быть пустым','error'); return; }
+  if (nn === c.name) { renderExpenseCategories(); return; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
+      toast('Переименовано','success');
+      refreshExpCategories_();
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
+    .updateExpenseCategory({ oldName: c.name, newName: nn, deduct: c.deduct });
+}
+
+function deleteExpCat(i) {
+  var c = (App._expCats||[])[i]; if (!c) return;
+  uiConfirm('Удалить категорию «' + c.name + '»?\n\nУже записанные расходы этой категории останутся с прежним названием.',
+    function(){
+      google.script.run
+        .withSuccessHandler(function(resp){
+          if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
+          toast('Категория удалена','success');
+          refreshExpCategories_();
+        })
+        .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
+        .deleteExpenseCategory(c.name);
+    },
+    { title:'Удалить категорию', okText:'Удалить', danger:true });
 }
 
 /* ===== МАСТЕР ПЕРВОГО ЗАПУСКА ===== */
@@ -5913,11 +6009,74 @@ function updateExpensesKpi(list, compare) {
   }
 }
 
+// Список категорий расходов (нормализованный: [{name, deduct}])
+function expenseCategoryList_() {
+  var cats = (App.config && App.config.expenseCategories) || [];
+  return cats.map(function(c){ return (typeof c === 'string') ? { name: c, deduct: false } : c; });
+}
+
+// Открыть форму расхода: заполнить категории, спрятать выбор сотрудника
+function openExpenseModal() {
+  fillExpenseCategoryOptions_();
+  toggleExpenseEmployee_();
+  openModal('modal-new-expense');
+}
+
+function fillExpenseCategoryOptions_() {
+  var sel = document.getElementById('exp-category');
+  if (!sel) return;
+  var cur = sel.value;
+  var html = ['<option value="">— выбрать —</option>'];
+  expenseCategoryList_().forEach(function(c){
+    html.push('<option' + (c.deduct ? ' data-deduct="1"' : '') + '>' + c.name + '</option>');
+  });
+  sel.innerHTML = html.join('');
+  if (cur) sel.value = cur;
+}
+
+// Показать выбор сотрудника только для «зарплатных» категорий (вычитаемых из ЗП)
+function toggleExpenseEmployee_() {
+  var sel = document.getElementById('exp-category');
+  var row = document.getElementById('exp-employee-row');
+  if (!sel || !row) return;
+  var opt = sel.options[sel.selectedIndex];
+  var isSalary = !!(opt && opt.getAttribute('data-deduct') === '1');
+  row.style.display = isSalary ? '' : 'none';
+  if (isSalary) fillExpenseEmployees_();
+}
+
+function fillExpenseEmployees_() {
+  var sel = document.getElementById('exp-employee');
+  if (!sel) return;
+  var render = function(list){
+    var cur = sel.value;
+    var html = ['<option value="">— выбрать —</option>'];
+    (list || []).forEach(function(e){
+      var nm = e['ФИО'] || e['Имя'] || '';
+      if (!nm || !e['ID']) return;
+      html.push('<option value="' + e['ID'] + '">' + nm + '</option>');
+    });
+    sel.innerHTML = html.join('');
+    if (cur) sel.value = cur;
+  };
+  if (App.employees && App.employees.length) { render(App.employees); return; }
+  google.script.run.withSuccessHandler(function(resp){
+    App.employees = (resp && resp.ok && resp.data) ? resp.data : [];
+    render(App.employees);
+  }).getEmployees(true);
+}
+
 function submitNewExpense() {
   var amount   = Number((document.getElementById('exp-amount')   ||{}).value||0);
   var category = ((document.getElementById('exp-category')||{}).value||'').trim();
   if (!amount)   { toast('Укажите сумму','error'); return; }
   if (!category) { toast('Выберите категорию','error'); return; }
+
+  // Для «зарплатных» категорий обязателен сотрудник — иначе вычесть не из кого
+  var empRow = document.getElementById('exp-employee-row');
+  var isSalary = empRow && empRow.style.display !== 'none';
+  var employeeId = isSalary ? ((document.getElementById('exp-employee')||{}).value||'').trim() : '';
+  if (isSalary && !employeeId) { toast('Выберите сотрудника для вычета из ЗП','error'); return; }
 
   // Установим сегодня если дата пустая
   var dateEl = document.getElementById('exp-date');
@@ -5933,6 +6092,7 @@ function submitNewExpense() {
     description: ((document.getElementById('exp-description')||{}).value||'').trim(),
     payMethod:   (document.getElementById('exp-pay-method')||{}).value||'Нал',
     orderId:     ((document.getElementById('exp-order-id')||{}).value||'').trim(),
+    employeeId:  employeeId,
   };
 
   var btn = document.getElementById('exp-submit-btn');
@@ -6598,7 +6758,8 @@ function renderSalary(data, periodLabel) {
         '<div><span style="color:var(--text3)">Бонус менеджер: </span><b style="color:var(--accent)">' + fmt(e.managerBonus) + '</b></div>' +
         '<div><span style="color:var(--text3)">Бонус мастер: </span><b style="color:var(--accent)">' + fmt(e.masterBonus) + '</b></div>' +
         (Number(e.adminBonus) > 0 ? '<div><span style="color:var(--text3)">Бонус админ.: </span><b style="color:var(--accent)">' + fmt(e.adminBonus) + '</b></div>' : '') +
-        '<div><span style="color:var(--text3)">Итого: </span><b style="font-size:15px;color:var(--success)">' + fmt(e.total) + '</b></div>' +
+        (Number(e.salaryPaid) > 0 ? '<div><span style="color:var(--text3)">Выдано (ЗП): </span><b style="color:var(--danger)">−' + fmt(e.salaryPaid) + '</b></div>' : '') +
+        '<div><span style="color:var(--text3)">' + (Number(e.total) < 0 ? 'Переплата: ' : 'Итого: ') + '</span><b style="font-size:15px;color:' + (Number(e.total) < 0 ? 'var(--danger)' : 'var(--success)') + '">' + fmt(e.total) + '</b></div>' +
       '</div>' +
       (orderRows ? '<div style="font-size:11px;color:var(--text3);margin-bottom:4px">Участвовал в заказах:</div>' + orderRows : '') +
     '</div>';
@@ -6654,7 +6815,21 @@ App._currentOrderId = null;
 App._cardCache = {};   // кэш карточек по orderId (мгновенное повторное открытие)
 
 // перерисовать карточку после правки: сбросить кэш этого заказа и открыть заново
-function reopenCard(id) { if (id && App._cardCache) delete App._cardCache[id]; openOrderCard(id); }
+// Мягкое обновление ОТКРЫТОЙ карточки: НЕ стираем кэш и НЕ показываем пустой
+// скелетон (из-за него была «пропажа» карточки на 1–2 сек). Текущая карточка
+// остаётся на экране, свежие данные тихо подгружаются в фоне и заменяют её.
+function reopenCard(id) {
+  if (!id) return;
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (resp && resp.ok && resp.data) {
+        App._cardCache[id] = resp.data;
+        if (App._currentOrderId === id && App.currentPage === 'order-card') renderOrderCard(resp.data);
+      }
+    })
+    .withFailureHandler(function(){})
+    .getOrderFull(id);
+}
 
 function cardSkeleton_() {
   return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">' +
@@ -7500,22 +7675,34 @@ function verifyOrderCard(orderId) {
 
 /* --- Карточка заказа: смена условий оплаты / срока --- */
 function updateOrderCardField(orderId, payload) {
+  var o = App._currentOrder;
+  if (o && payload && payload.payType !== undefined) o['Тип оплаты'] = payload.payType;  // модель сразу
   google.script.run
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
-      toast('Сохранено', 'success');
-      reopenCard(orderId);
+      // Мгновенно обновляем «Финансовый итог» из ответа (Безнал −15%, пересчёт бонусов)
+      if (o && resp.data && resp.data.finance) {
+        var f = resp.data.finance;
+        o['Валовая прибыль']=f.grossProfit; o['Бонус менеджера']=f.managerBonus;
+        o['Бонус оклейщика']=f.masterBonus; o['Бонус администратора']=f.adminBonus; o['Маржинальная прибыль']=f.marginalProfit;
+        var box=document.getElementById('card-fin-box'); if(box) box.innerHTML=renderCardFinance_(o);
+      }
+      App.orders = []; App._dashCache = null; App._debtCache = null;
+      reopenCard(orderId);   // мягко подтянуть блок графика под новый тип оплаты (без мигания)
     })
     .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
     .updateOrder(orderId, payload);
 }
 
 function setOrderCardDueDate(orderId, val) {
+  var o = App._currentOrder;
+  if (o) o['Срок оплаты'] = isoToDdmmyyyy_(val);   // модель сразу — значение уже в поле даты
   google.script.run
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
-      toast('Срок оплаты сохранён', 'success');
-      reopenCard(orderId);
+      App.orders = []; App._dashCache = null; App._debtCache = null;
+      if (App._cardCache && o) App._cardCache[orderId] = o;   // держим кэш свежим
+      // без перерисовки карточки — ничего визуально от срока оплаты не зависит
     })
     .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
     .setOrderDueDate(orderId, val);

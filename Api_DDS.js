@@ -71,7 +71,7 @@ function getDDS(from, to) {
     // ДЕБИТОРКА = непогашенный остаток по неоплаченным/частичным заказам
     const cancelledSet = getCancelledStatusSet_();
     orders.forEach(function(o) {
-      if (!o['ID'] || !inPeriod(o['Дата'])) return;
+      if (!o['ID'] || String(o['Удалён'] || '') === 'Да' || !inPeriod(o['Дата'])) return; // мягко удалённые не учитываем
       const status = o['Статус'] || '';
       if (cancelledSet[status]) return;
 

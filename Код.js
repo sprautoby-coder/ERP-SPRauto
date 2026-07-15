@@ -40,7 +40,7 @@ function initApp() {
         orderStatuses: getOrderStatuses(),
         kanbanOrder: getKanbanOrder(),
         currencies: CONFIG.CURRENCIES,
-        expenseCategories: CONFIG.EXPENSE_CATEGORIES,
+        expenseCategories: getExpenseCategoriesSafe_(),
         inventoryCategories: CONFIG.INVENTORY_CATEGORIES,
         leadSources: CONFIG.LEAD_SOURCES
       },
@@ -57,7 +57,7 @@ function getClientConfig() {
     positions: CONFIG.POSITIONS,
     services: CONFIG.SERVICES,
     currencies: CONFIG.CURRENCIES,
-    expenseCategories: CONFIG.EXPENSE_CATEGORIES,
+    expenseCategories: getExpenseCategoriesSafe_(),
     inventoryCategories: CONFIG.INVENTORY_CATEGORIES
   };
 }
