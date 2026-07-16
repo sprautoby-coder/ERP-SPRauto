@@ -2891,6 +2891,69 @@ function runInspectImport() {
     .inspectImportSheets();
 }
 
+function impShowOut_(text) {
+  var out = document.getElementById('import-inspect-out');
+  if (out) { out.style.display = 'block'; out.value = text; }
+}
+
+// Резервная копия листа «Заказы»
+function runBackupOrders() {
+  var btn = document.getElementById('backup-orders-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Копирую…'; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = '1. Резервная копия заказов'; }
+      if (!resp || !resp.ok) { impShowOut_('Ошибка бэкапа: ' + (resp?resp.error:'')); return; }
+      impShowOut_('✓ Создана резервная копия листа: ' + resp.data.name + '\nМожно приступать к предпросмотру импорта.');
+      toast('Бэкап создан: ' + resp.data.name, 'success');
+    })
+    .withFailureHandler(function(e){ if (btn){btn.disabled=false;btn.textContent='1. Резервная копия заказов';} impShowOut_('Ошибка: ' + e.message); })
+    .backupOrdersSheet();
+}
+
+// Импорт заказов: dryRun=true — предпросмотр, false — выполнить
+function runImportOrders(dryRun) {
+  var run = function() {
+    var btnP = document.getElementById('import-preview-btn');
+    var btnR = document.getElementById('import-run-btn');
+    var btn = dryRun ? btnP : btnR;
+    var label = dryRun ? '2. Предпросмотр импорта' : '3. Выполнить импорт';
+    if (btn) { btn.disabled = true; btn.textContent = dryRun ? 'Считаю…' : 'Импортирую…'; }
+    impShowOut_(dryRun ? 'Считаю, что попадёт под импорт…' : 'Создаю заказы… (может занять до минуты)');
+    google.script.run
+      .withSuccessHandler(function(resp){
+        if (btn) { btn.disabled = false; btn.textContent = label; }
+        if (!resp || !resp.ok) { impShowOut_('Ошибка: ' + (resp?resp.error:'нет ответа')); return; }
+        var d = resp.data;
+        var lines = [];
+        lines.push(dryRun ? '=== ПРЕДПРОСМОТР (ничего не создано) ===' : '=== ИМПОРТ ВЫПОЛНЕН ===');
+        lines.push('Дата отсечки: ≥ ' + d.fromDate);
+        lines.push('');
+        lines.push('Тонировка: подходит ' + d.tint.matched + ', создано ' + d.tint.created + ', пропущено(дубли) ' + d.tint.skipped);
+        lines.push('Оклейка:   подходит ' + d.ppf.matched  + ', создано ' + d.ppf.created  + ', пропущено(дубли) ' + d.ppf.skipped);
+        lines.push('ИТОГО подходит: ' + d.totalMatched + ', создано: ' + d.totalCreated + ', пропущено: ' + d.totalSkipped);
+        var errs = (d.tint.errors || []).concat(d.ppf.errors || []);
+        if (errs.length) { lines.push(''); lines.push('Ошибки (' + errs.length + '):'); lines.push(errs.slice(0,20).join('\n')); }
+        if (dryRun) {
+          lines.push('');
+          lines.push('--- Примеры того, что будет создано (по 3 на услугу): ---');
+          lines.push('ТОНИРОВКА:'); lines.push(JSON.stringify(d.tint.samples, null, 2));
+          lines.push('ОКЛЕЙКА:');   lines.push(JSON.stringify(d.ppf.samples, null, 2));
+          lines.push('');
+          lines.push('Проверьте маппинг. Если всё верно — жмите «3. Выполнить импорт».');
+        }
+        impShowOut_(lines.join('\n'));
+        toast(dryRun ? ('Подходит заказов: ' + d.totalMatched) : ('Создано заказов: ' + d.totalCreated), 'success');
+        if (!dryRun) { App.orders = []; App._cardCache = {}; App._dashCache = null; App._debtCache = null; App._finCache = null; }
+      })
+      .withFailureHandler(function(e){ if (btn){btn.disabled=false;btn.textContent=label;} impShowOut_('Ошибка: ' + e.message + '\n(Если это таймаут — просто нажмите «Выполнить» ещё раз, дубли пропустятся.)'); })
+      .importOrders({ dryRun: dryRun });
+  };
+  if (dryRun) run();
+  else uiConfirm('Создать заказы из таблиц (с датой ≥ 10.07.2026)?\n\nСделайте сначала резервную копию (кнопка 1). Повторный запуск безопасен — дубли пропускаются.',
+    run, { title: 'Импорт заказов', okText: 'Импортировать', danger: false });
+}
+
 // Разовая починка дублей ID заказов из интерфейса (без редактора Apps Script)
 function runFixOrderIds() {
   var btn = document.getElementById('fix-ids-btn');

@@ -297,7 +297,7 @@ function createOrder(payload) {
     const data = {
       'ID':                    id,
       'Номер договора':        contractNum,
-      'Дата':                  todayStr,
+      'Дата':                  payload.orderDate || todayStr,   // импорт может задать исходную дату
       'Дата выполнения':       payload.dueDate || '',
       'Статус':                defaultStatus,
       'Клиент ID':             payload.clientId   || '',
