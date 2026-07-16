@@ -300,12 +300,12 @@ function matchPaymentsFromRaschet(opts) {
       raschet.forEach(function(rr) {
         if (rr.used || rr.service !== svc) return;
         if (Math.abs(rr.price - price) > 0.5) return;         // стоимость — точно
+        if (!brandMatch_(o['Авто'], rr.car)) return;          // марка авто ОБЯЗАТЕЛЬНА
         var diff = 1e9;
         if (od)  diff = Math.min(diff, Math.abs(rr.date - od)  / 86400000);
         if (od2) diff = Math.min(diff, Math.abs(rr.date - od2) / 86400000);
         if (diff > 10) return;                                // дата — окно ±10 дней
-        var score = diff - (brandMatch_(o['Авто'], rr.car) ? 3 : 0);
-        if (score < bestScore) { bestScore = score; best = rr; }
+        if (diff < bestScore) { bestScore = diff; best = rr; }
       });
       if (best) {
         best.used = true;
