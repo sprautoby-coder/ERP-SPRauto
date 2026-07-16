@@ -336,7 +336,7 @@ function applyRaschetMatch_(orderId, rr, price, orderDate) {
   if (rr.taxi > 0)     exps.push({ name: 'Такси',    amount: rr.taxi });
   if (rr.armatura > 0) exps.push({ name: 'Арматура', amount: rr.armatura });
   if (exps.length) saveOrderExpenses(orderId, exps);          // заменяет расходы заказа
-  updateOrder(orderId, { payType: rr.beznal ? 'Безнал' : 'Нал', masters: rr.masters, manager: mapManager_(rr.manager) });
+  updateOrder(orderId, { payType: rr.beznal ? 'Безнал' : 'Нал', masters: rr.masters, manager: mapManager_(rr.manager), admin: IMPORT_ADMIN });
   recalcOrderFinance(orderId);                                 // валовая/бонусы с учётом затрат и мастеров
   if (Number(price) > 0) {
     addOrderPayment(orderId, { amount: Number(price), payType: rr.beznal ? 'Безнал' : 'Нал',
