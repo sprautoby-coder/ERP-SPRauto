@@ -253,6 +253,7 @@ function matchPaymentsFromRaschet(opts) {
   opts = opts || {};
   var dryRun = (opts.dryRun !== false);
   return safeCall(function() {
+    bumpDataVersion_();   // читаем заказы живьём, мимо кэша (свежесозданные должны быть видны все)
     // 1) Строки расчёта с датой ≥ 10.07.2026
     var rv = SpreadsheetApp.openById(IMPORT_SRC.raschet).getSheets()[0].getDataRange().getDisplayValues();
     var raschet = [];
@@ -283,7 +284,8 @@ function matchPaymentsFromRaschet(opts) {
           && String(o['Удалён'] || '') !== 'Да';
     });
 
-    var res = { dryRun: dryRun, matched: [], unmatched: [], applied: 0, errors: [] };
+    var res = { dryRun: dryRun, matched: [], unmatched: [], applied: 0, errors: [],
+                candidateCount: orders.length, raschetCount: raschet.length };
 
     orders.forEach(function(o) {
       var svc   = /Тонир/i.test(String(o['Услуга'] || '')) ? 'TINT' : 'PPF';
