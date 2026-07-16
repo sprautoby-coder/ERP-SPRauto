@@ -5,8 +5,9 @@
 
 function getExpenses(filter) {
   return safeCall(function() {
-    const all = readSheetAsObjects('DATABASE', 'EXPENSES');
     filter = filter || {};
+    return cachedRead_('expenses:' + JSON.stringify(filter), 60, function() {
+    const all = readSheetAsObjects('DATABASE', 'EXPENSES');
     return all.filter(function(e) {
       if (!e['ID']) return false;
       if (filter.category && e['Категория'] !== filter.category) return false;
@@ -25,6 +26,7 @@ function getExpenses(filter) {
         if (!desc.includes(q) && !cat.includes(q)) return false;
       }
       return true;
+    });
     });
   });
 }

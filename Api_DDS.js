@@ -19,6 +19,7 @@
  */
 function getDDS(from, to) {
   return safeCall(function() {
+   return cachedRead_('dds:' + (from || '') + '_' + (to || ''), 60, function() {
     const orders   = readSheetAsObjects('DATABASE', 'ORDERS');
     const expenses = readSheetAsObjects('DATABASE', 'EXPENSES');
     const payments = readSheetAsObjects('DATABASE', 'PAYMENTS');
@@ -132,6 +133,7 @@ function getDDS(from, to) {
       expNalRows: sortByDate(expNalRows),
       expBnkRows: sortByDate(expBnkRows),
     };
+   });
   });
 }
 

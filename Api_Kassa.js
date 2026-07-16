@@ -66,6 +66,7 @@ function kr_(n) { return Math.round((Number(n) || 0) * 100) / 100; }
  */
 function getKassa(dateStr) {
   return safeCall(function() {
+   return cachedRead_('kassa:' + kassaDayKey_(dateStr), 60, function() {
     var dayKey  = kassaDayKey_(dateStr);
     var day     = parseKassaDay_(dayKey);
     var settings = getKassaSettings_();
@@ -151,6 +152,7 @@ function getKassa(dateStr) {
       startDate:   settings.startDate,
       startBalance: settings.start,
     };
+   });
   });
 }
 

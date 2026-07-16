@@ -106,7 +106,10 @@ function readSheetAsObjects(bookKey, tabKey) {
     }
     result.push(obj);
   }
-  if (cache && ckey) { try { cache.put(ckey, JSON.stringify(result), 30); } catch (e) { /* > лимита — не кэшируем */ } }
+  // TTL 120с: ключ версионный, любая запись через приложение (bumpDataVersion_) делает
+  // старый ключ недостижимым → устаревания после правок в приложении нет. Дольше кэш живёт
+  // только для повторных ЧТЕНИЙ той же версии (меньше обращений к Sheets на первых заходах).
+  if (cache && ckey) { try { cache.put(ckey, JSON.stringify(result), 120); } catch (e) { /* > лимита — не кэшируем */ } }
   return result;
 }
 
