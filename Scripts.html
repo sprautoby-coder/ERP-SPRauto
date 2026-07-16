@@ -2988,6 +2988,7 @@ function runMatchPayments(dryRun) {
         if (!resp || !resp.ok) { impShowOut_('Ошибка: ' + (resp?resp.error:'нет ответа')); return; }
         var d = resp.data, L = [];
         L.push(dryRun ? '=== ПРЕДПРОСМОТР ОПЛАТ (ничего не применено) ===' : '=== ОПЛАТЫ ПРИМЕНЕНЫ ===');
+        L.push('ДИАГНОСТИКА: всего заказов ' + d.totalOrders + ' | импортированных ' + d.totalImported + ' (оплачено ' + d.importedPaid + ', удалено ' + d.importedDeleted + ')');
         L.push('Заказов-кандидатов: ' + d.candidateCount + ', строк расчёта (≥10.07): ' + d.raschetCount);
         L.push('Сопоставлено: ' + d.matchedCount + ', без пары: ' + d.unmatchedCount + (dryRun ? '' : (', создано платежей: ' + d.applied)));
         if ((d.errors||[]).length) { L.push(''); L.push('Ошибки (' + d.errors.length + '): ' + d.errors.slice(0,15).join(' | ')); }

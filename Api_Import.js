@@ -278,13 +278,17 @@ function matchPaymentsFromRaschet(opts) {
     }
 
     // 2) Импортированные и ещё не оплаченные заказы
-    var orders = readSheetAsObjects('DATABASE', 'ORDERS').filter(function(o) {
-      return o['ID'] && String(o['Заметки'] || '').indexOf('[импорт]') >= 0
-          && String(o['Статус оплаты'] || '') !== 'Оплачен'
-          && String(o['Удалён'] || '') !== 'Да';
+    var allOrders = readSheetAsObjects('DATABASE', 'ORDERS');
+    var imported  = allOrders.filter(function(o){ return o['ID'] && String(o['Заметки'] || '').indexOf('[импорт]') >= 0; });
+    var orders    = imported.filter(function(o) {
+      return String(o['Статус оплаты'] || '') !== 'Оплачен' && String(o['Удалён'] || '') !== 'Да';
     });
 
     var res = { dryRun: dryRun, matched: [], unmatched: [], applied: 0, errors: [],
+                totalOrders:  allOrders.length,
+                totalImported: imported.length,
+                importedPaid:  imported.filter(function(o){ return String(o['Статус оплаты'] || '') === 'Оплачен'; }).length,
+                importedDeleted: imported.filter(function(o){ return String(o['Удалён'] || '') === 'Да'; }).length,
                 candidateCount: orders.length, raschetCount: raschet.length };
 
     orders.forEach(function(o) {
