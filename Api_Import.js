@@ -199,3 +199,115 @@ function importPPF_(out, dryRun, limit, existing) {
     }, dryRun, limit, existing);
   }
 }
+
+// ─── ШАГ 2: ОПЛАТЫ / ПЕРСОНАЛ / ЗАТРАТЫ ИЗ РАСЧЁТНОЙ ТАБЛИЦЫ ──────────────────
+
+function fmtImpD_(d) { return d ? Utilities.formatDate(d, Session.getScriptTimeZone(), 'dd.MM.yyyy') : ''; }
+// Грубое совпадение марки: первое слово одной строки — префикс первого слова другой
+function brandMatch_(a, b) {
+  var f = function(s){ return String(s || '').toLowerCase().replace(/[^a-zа-я0-9 ]/gi, ' ').trim().split(/\s+/)[0] || ''; };
+  var na = f(a), nb = f(b);
+  if (!na || !nb) return false;
+  return na.indexOf(nb) === 0 || nb.indexOf(na) === 0;
+}
+
+/**
+ * Сопоставить импортированные заказы со строками «Расчёт ОКЛЕЙКА» и подтянуть:
+ * нал/безнал + РЕАЛЬНЫЙ платёж (на всю сумму), менеджер, оклейщики, такси, арматура.
+ * Матч по: услуга + стоимость (точно) + дата (±10 дней) + марка (тай-брейк).
+ * @param {Object} opts { dryRun:boolean (по умолч. true) }
+ * Идемпотентно: обрабатываются только импортированные и ещё НЕ оплаченные заказы.
+ */
+function matchPaymentsFromRaschet(opts) {
+  opts = opts || {};
+  var dryRun = (opts.dryRun !== false);
+  return safeCall(function() {
+    // 1) Строки расчёта с датой ≥ 10.07.2026
+    var rv = SpreadsheetApp.openById(IMPORT_SRC.raschet).getSheets()[0].getDataRange().getDisplayValues();
+    var raschet = [];
+    for (var i = 1; i < rv.length; i++) {
+      var row = rv[i];
+      var d   = parseImpDate_(row[1]);
+      var price = parseImpNum_(row[5]);
+      if (!d || d < IMPORT_FROM_DATE || !price) continue;
+      var svc = String(row[4] || '').toLowerCase();
+      raschet.push({
+        used:     false,
+        service:  /тонир/.test(svc) ? 'TINT' : 'PPF',
+        price:    price,
+        date:     d,
+        car:      String(row[2] || '').trim(),
+        beznal:   /да/i.test(String(row[21] || '').trim()),
+        manager:  String(row[23] || '').trim(),
+        masters:  String(row[24] || '').trim(),
+        taxi:     parseImpNum_(row[19]),
+        armatura: parseImpNum_(row[20])
+      });
+    }
+
+    // 2) Импортированные и ещё не оплаченные заказы
+    var orders = readSheetAsObjects('DATABASE', 'ORDERS').filter(function(o) {
+      return o['ID'] && String(o['Заметки'] || '').indexOf('[импорт]') >= 0
+          && String(o['Статус оплаты'] || '') !== 'Оплачен'
+          && String(o['Удалён'] || '') !== 'Да';
+    });
+
+    var res = { dryRun: dryRun, matched: [], unmatched: [], applied: 0, errors: [] };
+
+    orders.forEach(function(o) {
+      var svc   = /Тонир/i.test(String(o['Услуга'] || '')) ? 'TINT' : 'PPF';
+      var price = Number(o['Стоимость заказа']) || 0;
+      var od    = parseImpDate_(o['Дата']);
+      var od2   = parseImpDate_(o['Дата выполнения']);
+      var best = null, bestScore = 1e9;
+      raschet.forEach(function(rr) {
+        if (rr.used || rr.service !== svc) return;
+        if (Math.abs(rr.price - price) > 0.5) return;         // стоимость — точно
+        var diff = 1e9;
+        if (od)  diff = Math.min(diff, Math.abs(rr.date - od)  / 86400000);
+        if (od2) diff = Math.min(diff, Math.abs(rr.date - od2) / 86400000);
+        if (diff > 10) return;                                // дата — окно ±10 дней
+        var score = diff - (brandMatch_(o['Авто'], rr.car) ? 3 : 0);
+        if (score < bestScore) { bestScore = score; best = rr; }
+      });
+      if (best) {
+        best.used = true;
+        res.matched.push({
+          order:   { id: o['ID'], contract: o['Номер договора'], client: o['Клиент'], car: o['Авто'], price: price, date: o['Дата'] },
+          raschet: { car: best.car, price: best.price, date: fmtImpD_(best.date),
+                     payType: best.beznal ? 'Безнал' : 'Нал', manager: best.manager,
+                     masters: best.masters, taxi: best.taxi, armatura: best.armatura },
+          _apply:  best
+        });
+      } else {
+        res.unmatched.push({ id: o['ID'], contract: o['Номер договора'], client: o['Клиент'],
+                             car: o['Авто'], service: svc, price: price, date: o['Дата'] });
+      }
+    });
+
+    if (!dryRun) {
+      res.matched.forEach(function(m) {
+        try { applyRaschetMatch_(m.order.id, m._apply, m.order.price, m.order.date); res.applied++; }
+        catch (e) { res.errors.push((m.order.contract || m.order.id) + ': ' + e.message); }
+      });
+    }
+    res.matched.forEach(function(m) { delete m._apply; });
+    res.matchedCount   = res.matched.length;
+    res.unmatchedCount = res.unmatched.length;
+    return res;
+  });
+}
+
+// Применить одну пару: затраты + персонал + пересчёт + реальный платёж
+function applyRaschetMatch_(orderId, rr, price, orderDate) {
+  var exps = [];
+  if (rr.taxi > 0)     exps.push({ name: 'Такси',    amount: rr.taxi });
+  if (rr.armatura > 0) exps.push({ name: 'Арматура', amount: rr.armatura });
+  if (exps.length) saveOrderExpenses(orderId, exps);          // заменяет расходы заказа
+  updateOrder(orderId, { payType: rr.beznal ? 'Безнал' : 'Нал', masters: rr.masters, manager: rr.manager });
+  recalcOrderFinance(orderId);                                 // валовая/бонусы с учётом затрат и мастеров
+  if (Number(price) > 0) {
+    addOrderPayment(orderId, { amount: Number(price), payType: rr.beznal ? 'Безнал' : 'Нал',
+                               date: orderDate || '', comment: 'Оплата (импорт из расчёта)' });
+  }
+}

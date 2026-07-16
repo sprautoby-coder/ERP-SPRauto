@@ -2954,6 +2954,47 @@ function runImportOrders(dryRun) {
     run, { title: 'Импорт заказов', okText: 'Импортировать', danger: false });
 }
 
+// Шаг 2: сопоставление оплат/персонала/затрат из расчётной таблицы
+function runMatchPayments(dryRun) {
+  var run = function() {
+    var btn = document.getElementById(dryRun ? 'pay-preview-btn' : 'pay-run-btn');
+    var label = dryRun ? '4. Оплаты: предпросмотр' : '5. Оплаты: выполнить';
+    if (btn) { btn.disabled = true; btn.textContent = dryRun ? 'Считаю…' : 'Применяю…'; }
+    impShowOut_(dryRun ? 'Сопоставляю заказы с расчётной таблицей…' : 'Проставляю оплаты и создаю платежи… (может занять до минуты)');
+    google.script.run
+      .withSuccessHandler(function(resp){
+        if (btn) { btn.disabled = false; btn.textContent = label; }
+        if (!resp || !resp.ok) { impShowOut_('Ошибка: ' + (resp?resp.error:'нет ответа')); return; }
+        var d = resp.data, L = [];
+        L.push(dryRun ? '=== ПРЕДПРОСМОТР ОПЛАТ (ничего не применено) ===' : '=== ОПЛАТЫ ПРИМЕНЕНЫ ===');
+        L.push('Сопоставлено: ' + d.matchedCount + ', без пары: ' + d.unmatchedCount + (dryRun ? '' : (', создано платежей: ' + d.applied)));
+        if ((d.errors||[]).length) { L.push(''); L.push('Ошибки (' + d.errors.length + '): ' + d.errors.slice(0,15).join(' | ')); }
+        L.push('');
+        L.push('--- ПАРЫ «заказ ↔ расчёт» (проверьте!) ---');
+        (d.matched||[]).forEach(function(m){
+          L.push(m.order.contract + ' | ' + m.order.client + ' | ' + m.order.car + ' | ' + m.order.price + ' | ' + m.order.date +
+                 '  ⟶  расчёт: ' + m.raschet.car + ' | ' + m.raschet.price + ' | ' + m.raschet.date +
+                 ' | ' + m.raschet.payType + (m.raschet.masters?(' | мастера: '+m.raschet.masters):'') +
+                 (m.raschet.taxi?(' | такси '+m.raschet.taxi):'') + (m.raschet.armatura?(' | арматура '+m.raschet.armatura):''));
+        });
+        if ((d.unmatched||[]).length) {
+          L.push('');
+          L.push('--- БЕЗ ПАРЫ (останутся неоплаченными) ---');
+          d.unmatched.forEach(function(u){ L.push(u.contract + ' | ' + u.client + ' | ' + u.car + ' | ' + u.service + ' | ' + u.price + ' | ' + u.date); });
+        }
+        if (dryRun) { L.push(''); L.push('Проверьте пары. Если всё верно — жмите «5. Оплаты: выполнить».'); }
+        impShowOut_(L.join('\n'));
+        toast(dryRun ? ('Сопоставлено: ' + d.matchedCount) : ('Оплат создано: ' + d.applied), 'success');
+        if (!dryRun) { App.orders = []; App._cardCache = {}; App._dashCache = null; App._debtCache = null; App._finCache = null; App._ddsCache = null; App._kassaCache = null; }
+      })
+      .withFailureHandler(function(e){ if (btn){btn.disabled=false;btn.textContent=label;} impShowOut_('Ошибка: ' + e.message + '\n(Если таймаут — нажмите «Выполнить» ещё раз, уже оплаченные пропустятся.)'); })
+      .matchPaymentsFromRaschet({ dryRun: dryRun });
+  };
+  if (dryRun) run();
+  else uiConfirm('Проставить оплаты по расчётной таблице?\n\nБудут созданы РЕАЛЬНЫЕ платежи (нал→касса, безнал→счёт), подтянуты мастера/менеджер и затраты. Сначала проверьте предпросмотр (кнопка 4).',
+    run, { title: 'Оплаты из расчёта', okText: 'Применить', danger: false });
+}
+
 // Разовая починка дублей ID заказов из интерфейса (без редактора Apps Script)
 function runFixOrderIds() {
   var btn = document.getElementById('fix-ids-btn');

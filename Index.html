@@ -332,6 +332,8 @@
             <button class="btn btn-ghost" id="backup-orders-btn" onclick="runBackupOrders()">1. Резервная копия заказов</button>
             <button class="btn btn-ghost" id="import-preview-btn" onclick="runImportOrders(true)">2. Предпросмотр импорта</button>
             <button class="btn btn-primary" id="import-run-btn" onclick="runImportOrders(false)">3. Выполнить импорт</button>
+            <button class="btn btn-ghost" id="pay-preview-btn" onclick="runMatchPayments(true)">4. Оплаты: предпросмотр</button>
+            <button class="btn btn-primary" id="pay-run-btn" onclick="runMatchPayments(false)">5. Оплаты: выполнить</button>
           </div>
           <div style="font-size:11px;color:var(--text3);margin-top:6px">Импортируются заказы с датой ≥ 10.07.2026. Повторный запуск безопасен — уже созданные пропускаются.</div>
           <textarea id="import-inspect-out" readonly placeholder="Здесь появится результат" style="display:none;width:100%;margin-top:10px;min-height:220px;font-family:monospace;font-size:11px;padding:10px;border:1px solid var(--border);border-radius:8px;background:var(--inp);color:var(--text);white-space:pre;overflow:auto"></textarea>
