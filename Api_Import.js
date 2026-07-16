@@ -415,13 +415,14 @@ function remapImportedMasters(opts) {
     bumpDataVersion_();
     var emps = readSheetAsObjects('DATABASE', 'EMPLOYEES')
       .map(function(e){ return String(e['ФИО'] || '').trim(); }).filter(Boolean);
+    var norm = function(s){ return String(s || '').toLowerCase().replace(/ё/g, 'е'); };
     var resolve = function(tok) {
-      var key  = String(tok || '').toLowerCase().trim();
+      var key  = norm(tok).trim();                 // ё→е, чтобы «артём»/«артем» ловились одинаково
       var frag = MASTER_MAP[key];
       if (!frag) return tok;                       // неизвестное имя — оставляем как есть
-      var f = frag.toLowerCase();
+      var f = norm(frag);
       for (var i = 0; i < emps.length; i++) {
-        if (emps[i].toLowerCase().indexOf(f) >= 0) return emps[i];
+        if (norm(emps[i]).indexOf(f) >= 0) return emps[i];
       }
       return tok;                                  // сотрудник не найден — не трогаем
     };
