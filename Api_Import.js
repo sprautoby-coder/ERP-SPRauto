@@ -47,6 +47,29 @@ function inspectImportSheets() {
 var IMPORT_FROM_STR = '10.07.2026';                 // импортируем только заказы с этой даты
 var IMPORT_FROM_DATE = new Date(2026, 6, 10);       // 10 июля 2026 (месяц 6 = июль)
 
+// Администратор во ВСЕХ импортируемых заказах
+var IMPORT_ADMIN = 'Папкович Игорь Иванович';
+// Короткое имя из расчёта → полное ФИО сотрудника (должно совпадать с карточкой в «Сотрудники»)
+var MANAGER_MAP = {
+  'игорь':   'Папкович Игорь Иванович',
+  'егор':    'Озолов Егор Вячеславович',
+  'татьяна': 'Татьяна Милош'
+};
+// Правило менеджера: если в расчёте есть не-Игорь (Егор/Татьяна) — менеджер он;
+// если только Игорь — менеджер Папкович. Нераспознанное имя возвращаем как есть.
+function mapManager_(raw) {
+  var toks = String(raw || '').toLowerCase().split(/[,\s]+/).map(function(t){ return t.trim(); }).filter(Boolean);
+  var other = [], hasIgor = false;
+  toks.forEach(function(t) {
+    if (t === 'и') return;
+    if (t === 'игорь') { hasIgor = true; return; }
+    if (MANAGER_MAP[t]) other.push(MANAGER_MAP[t]);
+  });
+  if (other.length) return other.join(', ');
+  if (hasIgor)       return MANAGER_MAP['игорь'];
+  return String(raw || '').trim();
+}
+
 // Парсер даты дд.мм.гггг → Date (или null)
 function parseImpDate_(s) {
   var m = String(s || '').trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
@@ -100,8 +123,16 @@ function importOrders(opts) {
       tint: { matched: 0, created: 0, skipped: 0, samples: [], errors: [] },
       ppf:  { matched: 0, created: 0, skipped: 0, samples: [], errors: [] }
     };
-    importTint_(res.tint, dryRun, limit, existing);
-    importPPF_(res.ppf,  dryRun, limit, existing);
+    // Собираем строки обеих услуг и сортируем по дате — заказы создаются в хронологическом порядке
+    var items = [];
+    collectTint_(items);
+    collectPPF_(items);
+    items.sort(function(a, b) { return a.dateObj - b.dateObj; });
+    items.forEach(function(it) {
+      var out = it.service === 'TINT' ? res.tint : res.ppf;
+      out.matched++;
+      importRow_(out, it.payload, dryRun, limit, existing);
+    });
     res.totalMatched = res.tint.matched + res.ppf.matched;
     res.totalCreated = res.tint.created + res.ppf.created;
     res.totalSkipped = res.tint.skipped + res.ppf.skipped;
@@ -123,7 +154,7 @@ function importRow_(out, payload, dryRun, limit, existing) {
   } catch (e) { out.errors.push((payload.clientName || '?') + ': ' + e.message); }
 }
 
-function importTint_(out, dryRun, limit, existing) {
+function collectTint_(items) {
   var sheet = SpreadsheetApp.openById(IMPORT_SRC.tonirovka).getSheets()[0];
   var vals  = sheet.getDataRange().getDisplayValues();   // заголовок — строка 0, данные с 1
   for (var r = 1; r < vals.length; r++) {
@@ -132,9 +163,8 @@ function importTint_(out, dryRun, limit, existing) {
     var dstr = String(row[13] || '').trim();
     var d    = parseImpDate_(dstr);
     if (!name || !d || d < IMPORT_FROM_DATE) continue;
-    out.matched++;
     var film = String(row[14] || '').trim(), light = String(row[15] || '').trim();
-    importRow_(out, {
+    items.push({ service: 'TINT', dateObj: d, payload: {
       orderDate:      dstr,
       service:        'TINT',
       clientType:     'физ',
@@ -149,13 +179,14 @@ function importTint_(out, dryRun, limit, existing) {
       signatory:      String(row[4] || '').trim(),
       passport:       String(row[5] || '').trim(),
       passportIssued: String(row[6] || '').trim(),
+      admin:          IMPORT_ADMIN,
       notes:          ('Плёнка: ' + film + (light ? (', светопропускаемость ' + light + '%') : '')).trim() + ' [импорт]',
       payType:        ''
-    }, dryRun, limit, existing);
+    }});
   }
 }
 
-function importPPF_(out, dryRun, limit, existing) {
+function collectPPF_(items) {
   var sheet = SpreadsheetApp.openById(IMPORT_SRC.okleyka).getSheets()[0];
   var vals  = sheet.getDataRange().getDisplayValues();   // заголовок — строка 2 (индекс 2), данные с 3
   for (var r = 3; r < vals.length; r++) {
@@ -164,7 +195,6 @@ function importPPF_(out, dryRun, limit, existing) {
     var start = String(row[15] || '').trim();            // Начало выполнения работ = дата заказа
     var d     = parseImpDate_(start);
     if (!name || !d || d < IMPORT_FROM_DATE) continue;
-    out.matched++;
     var els   = String(row[14] || '').trim();
     var extra = String(row[24] || '').trim();
     if (extra) els = (els ? els + ', ' : '') + extra;
@@ -174,7 +204,7 @@ function importPPF_(out, dryRun, limit, existing) {
     var note  = (film ? 'Использовано плёнки: ' + film + '. ' : '') +
                 (extraWork ? 'Доп. работы: ' + extraWork + '. ' : '') +
                 (lead ? 'Лид: ' + lead + '. ' : '') + '[импорт]';
-    importRow_(out, {
+    items.push({ service: 'PPF', dateObj: d, payload: {
       orderDate:      start,
       dueDate:        String(row[16] || '').trim(),       // Дата выдачи → Дата выполнения
       service:        'PPF',
@@ -194,9 +224,10 @@ function importPPF_(out, dryRun, limit, existing) {
       signatory:      String(row[4] || '').trim(),
       passport:       String(row[5] || '').trim(),
       passportIssued: String(row[6] || '').trim(),
+      admin:          IMPORT_ADMIN,
       notes:          note,
       payType:        ''
-    }, dryRun, limit, existing);
+    }});
   }
 }
 
@@ -275,7 +306,8 @@ function matchPaymentsFromRaschet(opts) {
         res.matched.push({
           order:   { id: o['ID'], contract: o['Номер договора'], client: o['Клиент'], car: o['Авто'], price: price, date: o['Дата'] },
           raschet: { car: best.car, price: best.price, date: fmtImpD_(best.date),
-                     payType: best.beznal ? 'Безнал' : 'Нал', manager: best.manager,
+                     payType: best.beznal ? 'Безнал' : 'Нал',
+                     manager: mapManager_(best.manager), managerRaw: best.manager,
                      masters: best.masters, taxi: best.taxi, armatura: best.armatura },
           _apply:  best
         });
@@ -304,7 +336,7 @@ function applyRaschetMatch_(orderId, rr, price, orderDate) {
   if (rr.taxi > 0)     exps.push({ name: 'Такси',    amount: rr.taxi });
   if (rr.armatura > 0) exps.push({ name: 'Арматура', amount: rr.armatura });
   if (exps.length) saveOrderExpenses(orderId, exps);          // заменяет расходы заказа
-  updateOrder(orderId, { payType: rr.beznal ? 'Безнал' : 'Нал', masters: rr.masters, manager: rr.manager });
+  updateOrder(orderId, { payType: rr.beznal ? 'Безнал' : 'Нал', masters: rr.masters, manager: mapManager_(rr.manager) });
   recalcOrderFinance(orderId);                                 // валовая/бонусы с учётом затрат и мастеров
   if (Number(price) > 0) {
     addOrderPayment(orderId, { amount: Number(price), payType: rr.beznal ? 'Безнал' : 'Нал',

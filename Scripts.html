@@ -2974,7 +2974,7 @@ function runMatchPayments(dryRun) {
         (d.matched||[]).forEach(function(m){
           L.push(m.order.contract + ' | ' + m.order.client + ' | ' + m.order.car + ' | ' + m.order.price + ' | ' + m.order.date +
                  '  ⟶  расчёт: ' + m.raschet.car + ' | ' + m.raschet.price + ' | ' + m.raschet.date +
-                 ' | ' + m.raschet.payType + (m.raschet.masters?(' | мастера: '+m.raschet.masters):'') +
+                 ' | ' + m.raschet.payType + (m.raschet.manager?(' | менеджер: '+m.raschet.manager):'') + (m.raschet.masters?(' | мастера: '+m.raschet.masters):'') +
                  (m.raschet.taxi?(' | такси '+m.raschet.taxi):'') + (m.raschet.armatura?(' | арматура '+m.raschet.armatura):''));
         });
         if ((d.unmatched||[]).length) {
