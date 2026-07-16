@@ -2868,6 +2868,29 @@ function checkSetup() {
     .getSetupStatus();
 }
 
+// Показать структуру исходных таблиц импорта (заголовки + примеры строк)
+function runInspectImport() {
+  var btn = document.getElementById('inspect-import-btn');
+  var out = document.getElementById('import-inspect-out');
+  if (btn) { btn.disabled = true; btn.textContent = 'Читаю таблицы…'; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Показать структуру таблиц импорта'; }
+      if (!resp || !resp.ok) { if (out) { out.style.display='block'; out.value = 'Ошибка: ' + (resp?resp.error:'нет ответа'); } return; }
+      if (out) {
+        out.style.display = 'block';
+        out.value = JSON.stringify(resp.data, null, 2);
+        out.focus(); out.select();
+      }
+      toast('Готово — скопируйте текст и пришлите в чат', 'success');
+    })
+    .withFailureHandler(function(e){
+      if (btn) { btn.disabled = false; btn.textContent = 'Показать структуру таблиц импорта'; }
+      if (out) { out.style.display='block'; out.value = 'Ошибка: ' + e.message; }
+    })
+    .inspectImportSheets();
+}
+
 // Разовая починка дублей ID заказов из интерфейса (без редактора Apps Script)
 function runFixOrderIds() {
   var btn = document.getElementById('fix-ids-btn');
