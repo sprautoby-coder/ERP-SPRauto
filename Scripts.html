@@ -2954,6 +2954,27 @@ function runImportOrders(dryRun) {
     run, { title: 'Импорт заказов', okText: 'Импортировать', danger: false });
 }
 
+// Удалить импортированные заказы (для чистого переимпорта)
+function runDeleteImported() {
+  uiConfirm('Удалить все импортированные заказы (в заметках [импорт]) вместе с их платежами/расходами?\n\nНужно для чистого переимпорта. Резервная копия у вас уже есть.',
+    function() {
+      var btn = document.getElementById('del-imported-btn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Удаляю…'; }
+      impShowOut_('Удаляю импортированные заказы…');
+      google.script.run
+        .withSuccessHandler(function(resp){
+          if (btn) { btn.disabled = false; btn.textContent = 'Удалить импортированные (для переимпорта)'; }
+          if (!resp || !resp.ok) { impShowOut_('Ошибка: ' + (resp?resp.error:'')); return; }
+          impShowOut_('✓ Удалено импортированных заказов: ' + resp.data.removed + '\nТеперь нажмите «3. Выполнить импорт» — заказы создадутся заново (с администратором и по дате).');
+          App.orders = []; App._cardCache = {}; App._dashCache = null; App._debtCache = null;
+          toast('Удалено: ' + resp.data.removed, 'success');
+        })
+        .withFailureHandler(function(e){ if (btn){btn.disabled=false;btn.textContent='Удалить импортированные (для переимпорта)';} impShowOut_('Ошибка: ' + e.message); })
+        .deleteImportedOrders();
+    },
+    { title: 'Удалить импортированные', okText: 'Удалить', danger: true });
+}
+
 // Шаг 2: сопоставление оплат/персонала/затрат из расчётной таблицы
 function runMatchPayments(dryRun) {
   var run = function() {

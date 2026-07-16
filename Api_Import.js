@@ -343,3 +343,41 @@ function applyRaschetMatch_(orderId, rr, price, orderDate) {
                                date: orderDate || '', comment: 'Оплата (импорт из расчёта)' });
   }
 }
+
+/**
+ * Удалить все импортированные заказы (в «Заметки» есть [импорт]) вместе со
+ * связанными материалами/расходами/платежами/графиком. Для чистого переимпорта.
+ */
+function deleteImportedOrders() {
+  return safeCall(function() {
+    bumpDataVersion_();
+    var sheet    = getTab('DATABASE', 'ORDERS');
+    var data     = sheet.getDataRange().getValues();
+    var headers  = data[0];
+    var notesIdx = headers.indexOf('Заметки');
+    var idIdx    = headers.indexOf('ID');
+    if (notesIdx < 0 || idIdx < 0) throw new Error('Нет колонок ID/Заметки в листе Заказы');
+    var ids = [], removed = 0;
+    for (var i = data.length - 1; i >= 1; i--) {
+      if (String(data[i][notesIdx] || '').indexOf('[импорт]') >= 0) {
+        ids.push(String(data[i][idIdx]));
+        sheet.deleteRow(i + 1);
+        removed++;
+      }
+    }
+    var idset = {}; ids.forEach(function(x){ idset[x] = true; });
+    ['ORDER_MATERIALS', 'ORDER_EXPENSES', 'PAYMENTS', 'SCHEDULE'].forEach(function(tab) {
+      try {
+        var s = getTab('DATABASE', tab);
+        var d = s.getDataRange().getValues();
+        var oidIdx = d[0].indexOf('Заказ ID');
+        if (oidIdx < 0) return;
+        for (var j = d.length - 1; j >= 1; j--) {
+          if (idset[String(d[j][oidIdx])]) s.deleteRow(j + 1);
+        }
+      } catch (e) {}
+    });
+    logActivity('Удалены импортированные заказы: ' + removed, 'Заказ', '', '', '');
+    return { removed: removed };
+  });
+}
