@@ -2975,6 +2975,35 @@ function runDeleteImported() {
     { title: 'Удалить импортированные', okText: 'Удалить', danger: true });
 }
 
+// Замена коротких имён мастеров на полные ФИО (для Расчёта ЗП)
+function runRemapMasters(dryRun) {
+  var run = function() {
+    var btn = document.getElementById(dryRun ? 'mast-preview-btn' : 'mast-run-btn');
+    var label = dryRun ? '6. Мастера→ФИО: предпросмотр' : '7. Мастера→ФИО: выполнить';
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    impShowOut_(dryRun ? 'Считаю замены имён мастеров…' : 'Заменяю имена мастеров на ФИО…');
+    google.script.run
+      .withSuccessHandler(function(resp){
+        if (btn) { btn.disabled = false; btn.textContent = label; }
+        if (!resp || !resp.ok) { impShowOut_('Ошибка: ' + (resp?resp.error:'нет ответа')); return; }
+        var d = resp.data, L = [];
+        L.push(dryRun ? '=== ПРЕДПРОСМОТР ЗАМЕН МАСТЕРОВ ===' : '=== ИМЕНА МАСТЕРОВ ЗАМЕНЕНЫ ===');
+        L.push('Заказов с заменой: ' + d.changedCount + (dryRun ? '' : (', обновлено: ' + d.updated)));
+        L.push('');
+        (d.samples||[]).forEach(function(s){ L.push(s.id + ': «' + s.from + '» → «' + s.to + '»'); });
+        if (dryRun) { L.push(''); L.push('Проверьте. Если верно — жмите «7. Мастера→ФИО: выполнить».'); }
+        impShowOut_(L.join('\n'));
+        toast(dryRun ? ('К замене: ' + d.changedCount) : ('Обновлено: ' + d.updated), 'success');
+        if (!dryRun) { App.orders = []; App._cardCache = {}; }
+      })
+      .withFailureHandler(function(e){ if (btn){btn.disabled=false;btn.textContent=label;} impShowOut_('Ошибка: ' + e.message); })
+      .remapImportedMasters({ dryRun: dryRun });
+  };
+  if (dryRun) run();
+  else uiConfirm('Заменить короткие имена мастеров на полные ФИО в импортированных заказах?\n\nСумма бонусов не меняется — только имена (для привязки в Расчёте ЗП).',
+    run, { title: 'Мастера → ФИО', okText: 'Заменить', danger: false });
+}
+
 // Шаг 2: сопоставление оплат/персонала/затрат из расчётной таблицы
 function runMatchPayments(dryRun) {
   var run = function() {

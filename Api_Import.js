@@ -55,6 +55,20 @@ var MANAGER_MAP = {
   'егор':    'Озолов Егор Вячеславович',
   'татьяна': 'Татьяна Милош'
 };
+// Короткое имя мастера (оклейщика) → фрагмент ФИО для поиска в «Сотрудники».
+// ВАЖНО: мастер «Егор» = Еромин (НЕ Озолов — тот менеджер). «Саня»/«Леха» — как есть.
+var MASTER_MAP = {
+  'виталик': 'Витал',    // Волков Виталий
+  'артем':   'Артё',     // Жуковский Артём
+  'артём':   'Артё',
+  'антон':   'Антон',    // Завгородний Антон
+  'миша':    'Михаил',   // Карпук Михаил
+  'егор':    'Еромин',   // мастер Егор = Еромин
+  'саня':    'Саня',     // литеральный сотрудник
+  'леха':    'Леха',     // литеральный
+  'лёха':    'Лёха'
+};
+
 // Правило менеджера: если в расчёте есть не-Игорь (Егор/Татьяна) — менеджер он;
 // если только Игорь — менеджер Папкович. Нераспознанное имя возвращаем как есть.
 function mapManager_(raw) {
@@ -385,5 +399,51 @@ function deleteImportedOrders() {
     });
     logActivity('Удалены импортированные заказы: ' + removed, 'Заказ', '', '', '');
     return { removed: removed };
+  });
+}
+
+/**
+ * Заменить короткие имена мастеров (оклейщиков) в импортированных заказах на полные
+ * ФИО из «Сотрудники» — чтобы бонусы попадали в Расчёт ЗП по людям.
+ * Резолв по фрагменту (см. MASTER_MAP) с поиском точного ФИО в базе. Мастер «Егор» = Еромин.
+ * @param {Object} opts { dryRun:boolean (по умолч. true) }
+ */
+function remapImportedMasters(opts) {
+  opts = opts || {};
+  var dryRun = (opts.dryRun !== false);
+  return safeCall(function() {
+    bumpDataVersion_();
+    var emps = readSheetAsObjects('DATABASE', 'EMPLOYEES')
+      .map(function(e){ return String(e['ФИО'] || '').trim(); }).filter(Boolean);
+    var resolve = function(tok) {
+      var key  = String(tok || '').toLowerCase().trim();
+      var frag = MASTER_MAP[key];
+      if (!frag) return tok;                       // неизвестное имя — оставляем как есть
+      var f = frag.toLowerCase();
+      for (var i = 0; i < emps.length; i++) {
+        if (emps[i].toLowerCase().indexOf(f) >= 0) return emps[i];
+      }
+      return tok;                                  // сотрудник не найден — не трогаем
+    };
+    var sheet    = getTab('DATABASE', 'ORDERS');
+    var data     = sheet.getDataRange().getValues();
+    var headers  = data[0];
+    var notesIdx = headers.indexOf('Заметки');
+    var mIdx     = headers.indexOf('Оклейщики');
+    var idIdx    = headers.indexOf('ID');
+    if (mIdx < 0) throw new Error('Нет колонки «Оклейщики»');
+    var changes = [], updated = 0;
+    for (var r = 1; r < data.length; r++) {
+      if (String(data[r][notesIdx] || '').indexOf('[импорт]') < 0) continue;
+      var cur = String(data[r][mIdx] || '').trim();
+      if (!cur) continue;
+      var mapped = cur.split(',').map(function(t){ return resolve(t.trim()); }).join(', ');
+      if (mapped !== cur) {
+        changes.push({ id: String(data[r][idIdx]), from: cur, to: mapped });
+        if (!dryRun) { sheet.getRange(r + 1, mIdx + 1).setValue(mapped); updated++; }
+      }
+    }
+    // Имена мастеров не влияют на СУММУ бонуса (она по количеству), пересчёт не нужен.
+    return { dryRun: dryRun, changedCount: changes.length, updated: updated, samples: changes.slice(0, 50) };
   });
 }
