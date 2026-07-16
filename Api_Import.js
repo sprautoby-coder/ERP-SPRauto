@@ -3,10 +3,11 @@
  * После завершения импорта этот файл можно удалить.
  */
 
-// Исходные книги (Оклейка клиенты / Тонировка клиенты)
+// Исходные книги (Оклейка клиенты / Тонировка клиенты / Расчёт оклейки — оплаты)
 var IMPORT_SRC = {
   okleyka:   '1g1wrju0lWSg4eQPoEIafn6NmVSRZN_-DmIp5VAQhWCE',
-  tonirovka: '1nF-5TFkTyaU0jWsMGShQBM_xvZsxnOjIUmbwnoy1cmo'
+  tonirovka: '1nF-5TFkTyaU0jWsMGShQBM_xvZsxnOjIUmbwnoy1cmo',
+  raschet:   '1054JIozquIipA2Vhu6v6nv8NS0Q61aVUiBpUirtW_sU'
 };
 
 /**
@@ -20,7 +21,7 @@ function inspectImportSheets() {
       try {
         var ss    = SpreadsheetApp.openById(IMPORT_SRC[key]);
         var sheet = ss.getSheets()[0];
-        var lastRow = Math.min(sheet.getLastRow(), 7);
+        var lastRow = Math.min(sheet.getLastRow(), 12);
         var lastCol = sheet.getLastColumn();
         var vals = (lastRow >= 1 && lastCol >= 1)
           ? sheet.getRange(1, 1, lastRow, lastCol).getDisplayValues()
