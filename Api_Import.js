@@ -495,3 +495,79 @@ function raschetGapReport() {
     return { raschetTotal: raschet.length, ordersTotal: orders.length, gapCount: gaps.length, gaps: gaps };
   });
 }
+
+/**
+ * Завести недостающие работы прямо из «Расчёт ОКЛЕЙКА» (строки без заказа),
+ * КРОМЕ тех, что покрыты существующим несматченным заказом (та же услуга+марка,
+ * напр. HONDA у Прошко). Минимальный заказ + затраты + платёж (нал/безнал).
+ * Мастера — короткими именами (потом кнопка 7 переведёт в ФИО).
+ * @param {Object} opts { dryRun:boolean (по умолч. true) }
+ */
+function importRaschetGaps(opts) {
+  opts = opts || {};
+  var dryRun = (opts.dryRun !== false);
+  return safeCall(function() {
+    bumpDataVersion_();
+    var rv = SpreadsheetApp.openById(IMPORT_SRC.raschet).getSheets()[0].getDataRange().getDisplayValues();
+    var raschet = [];
+    for (var i = 1; i < rv.length; i++) {
+      var row = rv[i], d = parseImpDate_(row[1]), price = parseImpNum_(row[5]);
+      if (!d || d < IMPORT_FROM_DATE || !price) continue;
+      raschet.push({
+        service: /тонир/.test(String(row[4] || '').toLowerCase()) ? 'TINT' : 'PPF',
+        price: price, date: d, car: String(row[2] || '').trim(),
+        manager: String(row[23] || '').trim(), masters: String(row[24] || '').trim(),
+        beznal: /да/i.test(String(row[21] || '').trim()),
+        taxi: parseImpNum_(row[19]), armatura: parseImpNum_(row[20]), used: false
+      });
+    }
+    var orders = readSheetAsObjects('DATABASE', 'ORDERS').filter(function(o) {
+      if (!o['ID'] || String(o['Удалён'] || '') === 'Да') return false;
+      var d = parseImpDate_(o['Дата']); return d && d >= IMPORT_FROM_DATE;
+    });
+    var unmatched = [];
+    orders.forEach(function(o) {
+      var svc = /Тонир/i.test(String(o['Услуга'] || '')) ? 'TINT' : 'PPF';
+      var price = Number(o['Стоимость заказа']) || 0, od = parseImpDate_(o['Дата']), od2 = parseImpDate_(o['Дата выполнения']);
+      var matched = false;
+      for (var i = 0; i < raschet.length; i++) {
+        var rr = raschet[i];
+        if (rr.used || rr.service !== svc || Math.abs(rr.price - price) > 0.5) continue;
+        if (!brandMatch_(o['Авто'], rr.car)) continue;
+        var diff = 1e9; if (od) diff = Math.min(diff, Math.abs(rr.date - od) / 86400000); if (od2) diff = Math.min(diff, Math.abs(rr.date - od2) / 86400000);
+        if (diff > 10) continue;
+        rr.used = true; matched = true; break;
+      }
+      if (!matched) unmatched.push({ service: svc, car: String(o['Авто'] || '') });
+    });
+    var gaps = raschet.filter(function(rr) {
+      if (rr.used) return false;
+      for (var i = 0; i < unmatched.length; i++) {
+        if (unmatched[i].service === rr.service && brandMatch_(unmatched[i].car, rr.car)) return false; // покрыто существующим заказом
+      }
+      return true;
+    });
+    var res = { dryRun: dryRun, toImport: gaps.length, created: 0, samples: [], errors: [] };
+    gaps.forEach(function(rr) {
+      if (res.samples.length < 15) res.samples.push({ service: rr.service, car: rr.car, price: rr.price, date: fmtImpD_(rr.date), manager: mapManager_(rr.manager), masters: rr.masters });
+      if (dryRun) return;
+      try {
+        var resp = createOrder({
+          orderDate: fmtImpD_(rr.date), service: rr.service, clientType: 'физ',
+          clientName: (rr.car || 'Авто') + ' (из расчёта)', car: rr.car, price: rr.price,
+          payType: rr.beznal ? 'Безнал' : 'Нал', manager: mapManager_(rr.manager), masters: rr.masters,
+          admin: IMPORT_ADMIN, notes: 'Заведён из расчёта (нет в клиентских таблицах) [импорт]'
+        });
+        if (!resp || !resp.ok) { res.errors.push(rr.car + ': ' + (resp ? resp.error : '?')); return; }
+        var oid = resp.data.id, exps = [];
+        if (rr.taxi > 0)     exps.push({ name: 'Такси',    amount: rr.taxi });
+        if (rr.armatura > 0) exps.push({ name: 'Арматура', amount: rr.armatura });
+        if (exps.length) saveOrderExpenses(oid, exps);
+        recalcOrderFinance(oid);
+        addOrderPayment(oid, { amount: rr.price, payType: rr.beznal ? 'Безнал' : 'Нал', date: fmtImpD_(rr.date), comment: 'Оплата (из расчёта)' });
+        res.created++;
+      } catch (e) { res.errors.push(rr.car + ': ' + e.message); }
+    });
+    return res;
+  });
+}

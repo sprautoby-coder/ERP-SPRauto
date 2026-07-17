@@ -2975,6 +2975,39 @@ function runDeleteImported() {
     { title: 'Удалить импортированные', okText: 'Удалить', danger: true });
 }
 
+// Завести недостающие работы из расчёта (минимальные заказы)
+function runGapImport(dryRun) {
+  var run = function() {
+    var btn = document.getElementById(dryRun ? 'gapimp-preview-btn' : 'gapimp-run-btn');
+    var label = dryRun ? '9. Завести недостающие: предпросмотр' : '10. Завести недостающие: выполнить';
+    if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    impShowOut_(dryRun ? 'Считаю недостающие работы…' : 'Завожу недостающие заказы + платежи…');
+    google.script.run
+      .withSuccessHandler(function(resp){
+        if (btn) { btn.disabled = false; btn.textContent = label; }
+        if (!resp || !resp.ok) { impShowOut_('Ошибка: ' + (resp?resp.error:'нет ответа')); return; }
+        var d = resp.data, L = [];
+        L.push(dryRun ? '=== ПРЕДПРОСМОТР: недостающие из расчёта ===' : '=== НЕДОСТАЮЩИЕ ЗАВЕДЕНЫ ===');
+        L.push('К заведению: ' + d.toImport + (dryRun ? '' : (', создано: ' + d.created)));
+        if ((d.errors||[]).length) { L.push('Ошибки: ' + d.errors.slice(0,10).join(' | ')); }
+        L.push('');
+        (d.samples||[]).forEach(function(s){
+          L.push((s.service==='TINT'?'Тонировка':'Оклейка') + ' | ' + s.car + ' | ' + s.price + ' | ' + s.date + ' | менеджер: ' + s.manager + (s.masters?(' | мастера: '+s.masters):''));
+        });
+        if (dryRun) { L.push(''); L.push('Проверьте. Если верно — жмите «10. Завести недостающие: выполнить».'); }
+        else { L.push(''); L.push('Готово. Теперь: «7. Мастера→ФИО: выполнить» (перевести имена мастеров) и пересчитать ЗП.'); }
+        impShowOut_(L.join('\n'));
+        toast(dryRun ? ('Недостающих: ' + d.toImport) : ('Заведено: ' + d.created), 'success');
+        if (!dryRun) { App.orders = []; App._cardCache = {}; App._dashCache = null; App._debtCache = null; App._finCache = null; App._ddsCache = null; App._kassaCache = null; }
+      })
+      .withFailureHandler(function(e){ if (btn){btn.disabled=false;btn.textContent=label;} impShowOut_('Ошибка: ' + e.message); })
+      .importRaschetGaps({ dryRun: dryRun });
+  };
+  if (dryRun) run();
+  else uiConfirm('Завести недостающие работы из расчёта? Создадутся минимальные заказы (без ФИО клиента) + реальные платежи (нал→касса, безнал→счёт).',
+    run, { title: 'Недостающие из расчёта', okText: 'Завести', danger: false });
+}
+
 // Диагностика: строки расчёта без заказа (недостающие работы)
 function runGapReport() {
   var btn = document.getElementById('gap-btn');
