@@ -448,3 +448,50 @@ function remapImportedMasters(opts) {
     return { dryRun: dryRun, changedCount: changes.length, updated: updated, samples: changes.slice(0, 50) };
   });
 }
+
+/**
+ * Диагностика: строки «Расчёт ОКЛЕЙКА» (≥10.07), под которые НЕТ заказа.
+ * Матч по услуга+стоимость+марка+дата(±10). Показывает недостающие работы —
+ * из-за них бонусы в ЗП меньше, чем в расчёте.
+ */
+function raschetGapReport() {
+  return safeCall(function() {
+    bumpDataVersion_();
+    var rv = SpreadsheetApp.openById(IMPORT_SRC.raschet).getSheets()[0].getDataRange().getDisplayValues();
+    var raschet = [];
+    for (var i = 1; i < rv.length; i++) {
+      var row = rv[i], d = parseImpDate_(row[1]), price = parseImpNum_(row[5]);
+      if (!d || d < IMPORT_FROM_DATE || !price) continue;
+      raschet.push({
+        service:  /тонир/.test(String(row[4] || '').toLowerCase()) ? 'TINT' : 'PPF',
+        price: price, date: d, car: String(row[2] || '').trim(),
+        manager: String(row[23] || '').trim(), masters: String(row[24] || '').trim(), used: false
+      });
+    }
+    var orders = readSheetAsObjects('DATABASE', 'ORDERS').filter(function(o) {
+      if (!o['ID'] || String(o['Удалён'] || '') === 'Да') return false;
+      var d = parseImpDate_(o['Дата']); return d && d >= IMPORT_FROM_DATE;
+    });
+    orders.forEach(function(o) {
+      var svc = /Тонир/i.test(String(o['Услуга'] || '')) ? 'TINT' : 'PPF';
+      var price = Number(o['Стоимость заказа']) || 0;
+      var od = parseImpDate_(o['Дата']), od2 = parseImpDate_(o['Дата выполнения']);
+      for (var i = 0; i < raschet.length; i++) {
+        var rr = raschet[i];
+        if (rr.used || rr.service !== svc) continue;
+        if (Math.abs(rr.price - price) > 0.5) continue;
+        if (!brandMatch_(o['Авто'], rr.car)) continue;
+        var diff = 1e9;
+        if (od)  diff = Math.min(diff, Math.abs(rr.date - od)  / 86400000);
+        if (od2) diff = Math.min(diff, Math.abs(rr.date - od2) / 86400000);
+        if (diff > 10) continue;
+        rr.used = true; break;
+      }
+    });
+    var gaps = raschet.filter(function(rr){ return !rr.used; }).map(function(rr) {
+      return { service: rr.service, car: rr.car, price: rr.price, date: fmtImpD_(rr.date),
+               manager: rr.manager, masters: rr.masters };
+    });
+    return { raschetTotal: raschet.length, ordersTotal: orders.length, gapCount: gaps.length, gaps: gaps };
+  });
+}

@@ -2975,6 +2975,31 @@ function runDeleteImported() {
     { title: 'Удалить импортированные', okText: 'Удалить', danger: true });
 }
 
+// Диагностика: строки расчёта без заказа (недостающие работы)
+function runGapReport() {
+  var btn = document.getElementById('gap-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Считаю…'; }
+  impShowOut_('Ищу работы из расчёта без заказа…');
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = '8. Работы без заказа'; }
+      if (!resp || !resp.ok) { impShowOut_('Ошибка: ' + (resp?resp.error:'нет ответа')); return; }
+      var d = resp.data, L = [];
+      L.push('=== РАБОТЫ ИЗ РАСЧЁТА БЕЗ ЗАКАЗА ===');
+      L.push('Строк расчёта (≥10.07): ' + d.raschetTotal + ' | заказов (≥10.07): ' + d.ordersTotal + ' | без заказа: ' + d.gapCount);
+      L.push('');
+      (d.gaps||[]).forEach(function(g){
+        L.push((g.service==='TINT'?'Тонировка':'Оклейка') + ' | ' + g.car + ' | ' + g.price + ' | ' + g.date +
+               (g.manager?(' | менеджер: '+g.manager):'') + (g.masters?(' | мастера: '+g.masters):''));
+      });
+      if (!d.gapCount) L.push('Все работы расчёта имеют заказ — разрыва нет.');
+      impShowOut_(L.join('\n'));
+      toast('Работ без заказа: ' + d.gapCount, 'success');
+    })
+    .withFailureHandler(function(e){ if (btn){btn.disabled=false;btn.textContent='8. Работы без заказа';} impShowOut_('Ошибка: ' + e.message); })
+    .raschetGapReport();
+}
+
 // Замена коротких имён мастеров на полные ФИО (для Расчёта ЗП)
 function runRemapMasters(dryRun) {
   var run = function() {
