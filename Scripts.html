@@ -1736,7 +1736,7 @@ function loadCurrentPage() {
   // рисуют из кэша мгновенно и обновляются в фоне
   var force = !!App._forceReload;
   App._forceReload = false;
-  if (App.currentPage === 'dashboard') renderDashboard(force);
+  if (App.currentPage === 'dashboard') { restorePeriod_('dash'); renderDashboard(force); }
   if (App.currentPage === 'team')      loadTeam(force);
   if (App.currentPage === 'clients')   loadClients(force);
   if (App.currentPage === 'orders')    loadOrders(force);
@@ -1746,12 +1746,12 @@ function loadCurrentPage() {
   if (App.currentPage === 'appointments') loadAppointments(force);
   if (App.currentPage === 'settings')  loadSettings();
   if (App.currentPage === 'kassa')     loadKassa(force);
-  if (App.currentPage === 'expenses')  loadExpenses();
-  if (App.currentPage === 'finance')   loadFinance();
+  if (App.currentPage === 'expenses')  { restorePeriod_('exp'); loadExpenses(); }
+  if (App.currentPage === 'finance')   { restorePeriod_('fin'); loadFinance(); }
   if (App.currentPage === 'debt')      loadDebt();
   if (App.currentPage === 'services')  { loadServices(); loadComplexes(); }
-  if (App.currentPage === 'dds')       loadDDS();
-  if (App.currentPage === 'salary')    { fillSalaryEmployees(); ensureSalDates_(); } // расчёт — вручную кнопкой
+  if (App.currentPage === 'dds')       { restorePeriod_('dds'); loadDDS(); }
+  if (App.currentPage === 'salary')    { fillSalaryEmployees(); restorePeriod_('sal'); ensureSalDates_(); } // расчёт — вручную кнопкой
 }
 
 // Принудительное обновление (кнопка «Обновить» в шапке)
@@ -5782,6 +5782,7 @@ function onDashPeriodChange() {
   var t = document.getElementById('dash-to');
   if (f) f.value = r.from ? r.from.slice(0, 10) : '';
   if (t) t.value = r.to   ? r.to.slice(0, 10)   : '';
+  savePeriod_('dash');
   renderDashboard();
 }
 
@@ -6073,7 +6074,29 @@ function getPeriodRange(period) {
 }
 
 // Читает диапазон дат из UI для страниц с prefix-from/to и prefix-period
+// Запоминаем выбранный период страницы (пресет + даты), чтобы не сбрасывался при навигации
+function savePeriod_(prefix) {
+  try {
+    var g = function(id){ var e = document.getElementById(id); return e ? e.value : ''; };
+    localStorage.setItem('sprauto-period-' + prefix, JSON.stringify({
+      period: g(prefix + '-period'), from: g(prefix + '-from'), to: g(prefix + '-to')
+    }));
+  } catch (e) {}
+}
+function restorePeriod_(prefix) {
+  try {
+    var raw = localStorage.getItem('sprauto-period-' + prefix);
+    if (!raw) return;
+    var s = JSON.parse(raw);
+    var set = function(id, v){ var e = document.getElementById(id); if (e && v != null && v !== '') e.value = v; };
+    set(prefix + '-period', s.period); set(prefix + '-from', s.from); set(prefix + '-to', s.to);
+    var cw = document.getElementById(prefix + '-custom-range');
+    if (cw && s.period) cw.style.display = (s.period === 'custom') ? 'flex' : 'none';
+  } catch (e) {}
+}
+
 function getPeriodRangeFromUI(prefix) {
+  savePeriod_(prefix);
   var period = (document.getElementById(prefix + '-period') || {}).value || 'month';
   if (period === 'custom') {
     var fromVal = (document.getElementById(prefix + '-from') || {}).value;
@@ -6111,12 +6134,14 @@ function onSalPeriodChange() {
     if (el && d) el.value = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
   };
   setd('sal-from', from); setd('sal-to', to);
+  savePeriod_('sal');
 }
 
 // Ручная правка даты → переключаем пресет на «Произвольный»
 function onSalDateEdit() {
   var sel = document.getElementById('sal-period');
   if (sel) sel.value = 'custom';
+  savePeriod_('sal');
 }
 
 /* ===== РАСХОДЫ ===== */
@@ -7020,6 +7045,7 @@ function getSalaryRange() {
 }
 
 function calcSalary() {
+  savePeriod_('sal');
   var range = getSalaryRange();
   var res    = document.getElementById('salary-result');
   if (res) res.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text3)">Считаем...</div>';
