@@ -7764,7 +7764,7 @@ function renderOrderCard(order) {
     : '<div style="font-size:12px;color:var(--text3);padding:4px 0">Платежей пока нет</div>';
 
   // Опции типа оплаты
-  var payTypeOpts = ['','Нал','Безнал','Смешанная','Отсрочка','Рассрочка'].map(function(t){
+  var payTypeOpts = ['','Нал','Нал с чеком','Безнал','Смешанная','Отсрочка','Рассрочка'].map(function(t){
     var label = t === '' ? '— не указано —' : t;
     return '<option value="' + t + '"' + (t===payType?' selected':'') + '>' + label + '</option>';
   }).join('');
@@ -7833,8 +7833,8 @@ function renderOrderCard(order) {
           '<div style="font-size:20px;font-weight:700">' + fmt(price) + '</div>' +
           '<span style="font-size:11px;padding:2px 9px;border-radius:20px;background:' + payStatusColor + '22;color:' + payStatusColor + '">' + payStatus + '</span>' +
         '</div>' +
-        '<select style="font-size:12px;font-weight:700;padding:5px 8px;border-radius:8px;border:1px solid var(--border);background:var(--inp);color:' + statusColor + '" onchange="changeOrderStatus(\'' + oid + '\', this)">' +
-          orderStatusNames().map(function(s){ return '<option' + (s===order['Статус']?' selected':'') + '>' + s + '</option>'; }).join('') +
+        '<select style="font-size:12px;font-weight:700;padding:5px 8px;border-radius:8px;border:2px solid ' + statusColor + ';background:var(--inp);color:var(--text)" onchange="changeOrderStatus(\'' + oid + '\', this)">' +
+          orderStatusNames().map(function(s){ return '<option value="' + s + '"' + (s===order['Статус']?' selected':'') + ' style="color:var(--text);background:var(--bg-card)">' + s + '</option>'; }).join('') +
         '</select>' +
       '</div>' +
     '</div>' +
