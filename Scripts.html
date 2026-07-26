@@ -3877,6 +3877,22 @@ function commitStatusRename(oldName, val) {
   pushStatuses_(list, [{ from: oldName, to: newName }]);
 }
 
+// Бейдж способа оплаты — цветной по типу (нал/безнал/нал с чеком/смешанная/отсрочка/рассрочка)
+var PAY_METHOD_STYLE_ = {
+  'Нал':         { c: 'var(--success)', bg: 'var(--green-soft)' },
+  'Нал с чеком': { c: 'var(--blue)',    bg: 'var(--blue-soft)' },
+  'Безнал':      { c: 'var(--purple)',  bg: 'var(--purple-soft)' },
+  'Смешанная':   { c: 'var(--warning)', bg: 'var(--yellow-soft)' },
+  'Отсрочка':    { c: 'var(--warning)', bg: 'var(--yellow-soft)' },
+  'Рассрочка':   { c: 'var(--blue)',    bg: 'var(--blue-soft)' }
+};
+function payMethodBadge_(m) {
+  if (!m) return '<span style="color:var(--text3)">—</span>';
+  var s = PAY_METHOD_STYLE_[m] || { c: 'var(--text2)', bg: 'var(--bg-card2)' };
+  return '<span style="display:inline-block;font-size:11px;font-weight:600;color:' + s.c +
+         ';background:' + s.bg + ';padding:1px 9px;border-radius:10px;white-space:nowrap">' + m + '</span>';
+}
+
 // Бейдж статуса заказа: тёмный читаемый текст + цветная рамка/подложка.
 // Текст всегда var(--text) — виден при ЛЮБОМ (даже очень светлом) цвете статуса.
 function statusBadge_(status) {
@@ -4006,7 +4022,7 @@ function renderOrdersTable(orders) {
       '<td style="text-align:right;font-weight:600">' + price.toLocaleString('ru') + ' ' + CUR + '</td>' +
       '<td style="text-align:right;font-size:12px;color:var(--text2)">' + costCell + '</td>' +
       '<td style="text-align:center">' + payBadge + payDates + '</td>' +
-      '<td style="text-align:center;font-size:12px">' + (o._payMethod ? '<span style="color:var(--text2)">' + o._payMethod + '</span>' : '<span style="color:var(--text3)">—</span>') + '</td>' +
+      '<td style="text-align:center">' + payMethodBadge_(o._payMethod) + '</td>' +
       '<td style="text-align:center">' + statusBadge_(status) + '</td>' +
       '<td style="text-align:center">' + verCell + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + (o['Менеджер'] || '—') + '</td>' +
@@ -6360,7 +6376,7 @@ function renderRecentOrders(orders, totalCount) {
       '<td style="font-size:12px">' + (o.service || '') + '</td>' +
       '<td style="font-weight:600;text-align:right;white-space:nowrap">' + Number(o.price||0).toLocaleString('ru') + ' ' + CUR + '</td>' +
       '<td style="text-align:center">' + payBadge(o) + '</td>' +
-      '<td style="text-align:center;font-size:12px">' + (o.payMethod ? '<span style="color:var(--text2)">' + o.payMethod + '</span>' : '<span style="color:var(--text3)">—</span>') + '</td>' +
+      '<td style="text-align:center">' + payMethodBadge_(o.payMethod) + '</td>' +
       '<td style="text-align:center">' + statusBadge_(o.status) + '</td>' +
       '<td style="text-align:center">' + verCell + '</td>' +
       '<td style="text-align:center" onclick="event.stopPropagation()"><button class="row-del-btn" onclick="deleteOrderFromDash(\'' + o.id + '\')" title="Удалить заказ (в Корзину)">🗑</button></td>' +
