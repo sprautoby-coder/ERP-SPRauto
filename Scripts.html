@@ -5269,7 +5269,7 @@ function cancelNewOrder() {
   App._orderDirty = false; App._orderResume = false;
   ['ord-service','ord-client-phone','ord-client-name','ord-client-id','ord-car','ord-vin',
    'ord-price','ord-masters','ord-notes','ord-prepay','ord-complex','ord-elements','ord-elements-count',
-   'ord-tint-price','ord-cl-unp','ord-cl-director','ord-cl-address','ord-cl-postal','ord-cl-bank'].forEach(function(id){
+   'ord-tint-price','ord-tint-film','ord-tint-light','ord-cl-unp','ord-cl-director','ord-cl-address','ord-cl-postal','ord-cl-bank'].forEach(function(id){
     var el = document.getElementById(id); if (el) el.value = '';
   });
   document.querySelectorAll('.ord-extra-svc:checked').forEach(function(cb){ cb.checked = false; });
@@ -5348,6 +5348,8 @@ function submitNewOrderProceed() {
     masters:     ((document.getElementById('ord-masters') || {}).value || '').trim(),
     tintPrice:   isTintInForm_() ? Number((document.getElementById('ord-tint-price') || {}).value || 0) : 0,
     tintMasters: isTintInForm_() ? (function(){ var a=[]; document.querySelectorAll('.ord-tinter-cb:checked').forEach(function(cb){ a.push(cb.value); }); return a.join(', '); })() : '',
+    film:        isTintInForm_() ? ((document.getElementById('ord-tint-film')  || {}).value || '') : '',
+    lightTransmission: isTintInForm_() ? ((document.getElementById('ord-tint-light') || {}).value || '') : '',
     notes:       ((document.getElementById('ord-notes')   || {}).value || '').trim(),
     complex:       (document.getElementById('ord-complex')        || {}).value || '',
     elements:      ((document.getElementById('ord-elements')      || {}).value || '').trim(),

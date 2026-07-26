@@ -368,6 +368,8 @@ function createOrder(payload) {
       'Тонировщики':           tintMasters,
       'Стоимость тонировки':   tintPrice || '',
       'Бонус тонировщика':     finance.tintMasterBonus,
+      'Пленка':                payload.film || '',
+      'Светопропускаемость':   payload.lightTransmission || '',
       'Администратор':         payload.admin || '',
       'Итого материалы':       totalMaterialCost,
       'Итого расходы':         totalExpenses,
