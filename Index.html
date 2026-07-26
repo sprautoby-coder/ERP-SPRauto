@@ -765,8 +765,8 @@
   <div class="content page" id="page-dds">
     <div class="section-header">
       <div class="section-title-big">ДДС — Движение денег</div>
-      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-        <select class="form-select" id="dds-period" onchange="onDdsPeriodChange()" style="height:36px;font-size:13px;min-width:140px">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select class="form-select" id="dds-period" onchange="onDdsPeriodChange()" style="height:38px;font-size:13px;min-width:150px">
           <option value="month" selected>Этот месяц</option>
           <option value="prev_month">Прошлый месяц</option>
           <option value="quarter">Квартал</option>
@@ -775,11 +775,11 @@
           <option value="custom">Произвольный…</option>
         </select>
         <div id="dds-custom-range" style="display:none;gap:6px;align-items:center">
-          <input type="date" class="form-input" id="dds-from" onchange="loadDDS()" style="height:36px;font-size:13px;width:138px">
+          <input type="date" class="form-input" id="dds-from" onchange="loadDDS()" style="height:38px;font-size:13px;width:140px">
           <span style="color:var(--text3)">—</span>
-          <input type="date" class="form-input" id="dds-to"   onchange="loadDDS()" style="height:36px;font-size:13px;width:138px">
+          <input type="date" class="form-input" id="dds-to"   onchange="loadDDS()" style="height:38px;font-size:13px;width:140px">
         </div>
-        <button class="btn btn-ghost" onclick="printDDS()">Распечатать</button>
+        <button class="btn btn-ghost" onclick="printDDS()" style="height:38px;white-space:nowrap">Распечатать</button>
       </div>
     </div>
     <!-- KPI — три потока -->
