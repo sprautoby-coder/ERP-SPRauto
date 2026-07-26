@@ -1862,21 +1862,20 @@ function renderKassa(k) {
 
   var ops = document.getElementById('kassa-ops');
   if (ops) {
-    if (!k.operations || !k.operations.length) {
-      ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">Нет операций за ' + (isR ? 'период' : 'этот день') + '</div>';
-    } else {
-      ops.innerHTML = k.operations.map(function(op){
-        var cls = op.type === 'расход' ? 'kassa-op-out' : (op.type === 'безнал' ? 'kassa-op-bn' : 'kassa-op-in');
-        var amt = (op.type === 'расход' ? '−' : (op.type === 'безнал' ? '' : '+')) + money(op.amount);
-        var del = op.expenseId ? '<button class="kassa-op-del" title="Удалить расход" onclick="deleteKassaExpense(\'' + op.expenseId + '\')">✕</button>' : '';
-        var when = (isR && op.date ? op.date + ' ' : '') + (op.time || '');
-        return '<div class="kassa-op ' + cls + '">' +
-          '<span class="kassa-op-time">' + when + '</span>' +
-          '<span class="kassa-op-desc">' + (op.type === 'безнал' ? 'БЕЗНАЛ · ' : '') + escapeHtml_(op.desc || '') + '</span>' +
-          '<span class="kassa-op-amt">' + amt + '</span>' + del +
-        '</div>';
-      }).join('');
-    }
+    var opsHtml = (!k.operations || !k.operations.length)
+      ? '<div style="text-align:center;padding:24px;color:var(--text3)">Нет операций за ' + (isR ? 'период' : 'этот день') + '</div>'
+      : k.operations.map(function(op){
+          var cls = op.type === 'расход' ? 'kassa-op-out' : (op.type === 'безнал' ? 'kassa-op-bn' : 'kassa-op-in');
+          var amt = (op.type === 'расход' ? '−' : (op.type === 'безнал' ? '' : '+')) + money(op.amount);
+          var del = op.expenseId ? '<button class="kassa-op-del" title="Удалить расход" onclick="deleteKassaExpense(\'' + op.expenseId + '\')">✕</button>' : '';
+          var when = (isR && op.date ? op.date + ' ' : '') + (op.time || '');
+          return '<div class="kassa-op ' + cls + '">' +
+            '<span class="kassa-op-time">' + when + '</span>' +
+            '<span class="kassa-op-desc">' + (op.type === 'безнал' ? 'БЕЗНАЛ · ' : '') + escapeHtml_(op.desc || '') + '</span>' +
+            '<span class="kassa-op-amt">' + amt + '</span>' + del +
+          '</div>';
+        }).join('');
+    ops.innerHTML = opsHtml + kassaOpsTotal_(k, isR);
   }
   // Текст отчёта для Telegram — только в режиме одного дня
   var ta = document.getElementById('kassa-report');
@@ -1887,6 +1886,24 @@ function renderKassa(k) {
 }
 
 function escapeHtml_(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+
+// Подытог под списком операций кассы: приход − расход = итог (+ безнал справочно)
+function kassaOpsTotal_(k, isR) {
+  var f = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+  var row = function(label, val, color){
+    return '<div style="display:flex;justify-content:space-between;font-size:13px;padding:3px 0">' +
+      '<span style="color:var(--text2)">' + label + '</span>' +
+      '<span style="font-weight:700;font-variant-numeric:tabular-nums' + (color?';color:'+color:'') + '">' + val + '</span></div>';
+  };
+  var net = Number(k.dayNet) || 0;
+  return '<div style="border-top:2px solid var(--border);margin-top:10px;padding-top:8px">' +
+    row('Приход наличными', '+' + f(k.dayIn), 'var(--success)') +
+    row('Расход наличными', '−' + f(k.dayOut), 'var(--danger)') +
+    (Number(k.dayBeznal) > 0 ? row('Безнал (справочно)', f(k.dayBeznal), 'var(--text3)') : '') +
+    '<div style="border-top:1px solid var(--border);margin:4px 0"></div>' +
+    row('Итого наличными за ' + (isR ? 'период' : 'день'), (net>=0?'+':'') + f(net), net>=0?'var(--success)':'var(--danger)') +
+  '</div>';
+}
 
 // Сверка наличных за период: поступило = осело в кассе + изъято + прочие расходы
 function renderKassaReconcile_(k, isR) {
