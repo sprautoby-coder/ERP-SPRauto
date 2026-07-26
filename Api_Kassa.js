@@ -250,6 +250,35 @@ function getKassaBalance_() {
   return kr_(settings.start + settings.adjust + inSum - outSum);
 }
 
+/**
+ * Разбивка остатков для сверки на дашборде: начало + приход − расход = сейчас,
+ * отдельно наличные (касса) и безнал (счёт). Наличные — с даты старта кассы;
+ * безнал — за всё время (на счёт приходит полная сумма, без −15%).
+ */
+function getBalancesBreakdown_() {
+  var settings = getKassaSettings_();
+  var startDate = settings.startDate ? parseKassaDay_(settings.startDate) : null;
+  function inScope(d) { return d && (!startDate || d >= startDate); }
+  var nalIn = 0, nalOut = 0, bezIn = 0, bezOut = 0;
+  readSheetAsObjects('DATABASE', 'PAYMENTS').forEach(function(p) {
+    if (!p['ID']) return;
+    var amt = Number(p['Сумма']) || 0;
+    if (String(p['Способ оплаты']) === 'Безнал') { bezIn += amt; }
+    else if (inScope(parseKassaDay_(p['Дата']))) { nalIn += amt; }
+  });
+  readSheetAsObjects('DATABASE', 'EXPENSES').forEach(function(e) {
+    if (!e['ID']) return;
+    var amt = Number(e['Сумма']) || 0;
+    if ((e['Способ оплаты'] || 'Нал') === 'Безнал') { bezOut += amt; }
+    else if (inScope(parseKassaDay_(e['Дата']))) { nalOut += amt; }
+  });
+  var nalOpen = settings.start + settings.adjust;
+  return {
+    nal:    { opening: kr_(nalOpen), inSum: kr_(nalIn), outSum: kr_(nalOut), closing: kr_(nalOpen + nalIn - nalOut) },
+    beznal: { opening: 0,            inSum: kr_(bezIn), outSum: kr_(bezOut), closing: kr_(bezIn - bezOut) },
+  };
+}
+
 function getKassaSettings_() {
   return {
     start:     Number(getSettingValue_('kassa_start')) || 0,

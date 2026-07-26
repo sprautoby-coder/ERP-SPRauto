@@ -162,6 +162,7 @@ function getDashboardData(period) {
       byService:     byService,
       recentOrders:  recent,
       expByCategory: expByCategory,
+      reconcile:     (function(){ try { return getBalancesBreakdown_(); } catch (e) { return null; } })(),
     };
    });
   });

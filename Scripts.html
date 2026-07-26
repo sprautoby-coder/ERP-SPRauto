@@ -5959,7 +5959,41 @@ function renderDashData_(d) {
     kpiCard('Дебиторка',      fmt(k.debtSum),      '#f59e0b',       '🧾', "goPage('debt')") +
     kpiCard('Деньги в кассе', fmt(k.kassaBalance), 'var(--success)', '💵', "goPage('kassa')") +
     kpiCard('Расчётный счёт', fmt(k.bankBalance),  'var(--accent)',  '🏦', "goPage('dds')");
+  renderReconcile_(d.reconcile);
   renderRecentOrders(d.recentOrders || [], k.ordersCount || 0);
+}
+
+// Блок-сверка остатков: было + приход − расход = сейчас (нал/безнал раздельно)
+function renderReconcile_(rec) {
+  var box = document.getElementById('dash-reconcile');
+  if (!box) return;
+  if (!rec) { box.innerHTML = ''; return; }
+  var f = function(n){ return (Math.round(Number(n)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+  var col = function(c){ return '<td style="text-align:right;padding:6px 10px;font-variant-numeric:tabular-nums">' + f(c) + '</td>'; };
+  var row = function(label, n, b, bold, color){
+    var s = bold ? 'font-weight:700' : '';
+    var cl = color ? ';color:' + color : '';
+    return '<tr style="' + s + cl + '">' +
+      '<td style="padding:6px 10px;color:var(--text2)">' + label + '</td>' + col(n) + col(b) + '</tr>';
+  };
+  box.innerHTML =
+    '<div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px 16px;max-width:560px">' +
+    '<div style="font-weight:600;margin-bottom:8px;color:var(--text)">🧮 Сверка остатков</div>' +
+    '<table style="width:100%;border-collapse:collapse;font-size:14px">' +
+    '<thead><tr>' +
+      '<th style="text-align:left;padding:6px 10px;color:var(--text3);font-weight:500">&nbsp;</th>' +
+      '<th style="text-align:right;padding:6px 10px;color:var(--text3);font-weight:500">💵 Наличные (касса)</th>' +
+      '<th style="text-align:right;padding:6px 10px;color:var(--text3);font-weight:500">🏦 Безнал (счёт)</th>' +
+    '</tr></thead><tbody>' +
+      row('Было (начало учёта)', rec.nal.opening, rec.beznal.opening, false, '') +
+      row('+ Приход',            rec.nal.inSum,   rec.beznal.inSum,   false, 'var(--success)') +
+      row('− Расход',            rec.nal.outSum,  rec.beznal.outSum,  false, 'var(--danger)') +
+    '</tbody><tfoot>' +
+      '<tr><td colspan="3" style="border-top:1px solid var(--border);padding:0"></td></tr>' +
+      row('= Сейчас', rec.nal.closing, rec.beznal.closing, true, '') +
+    '</tfoot></table>' +
+    '<div style="font-size:11.5px;color:var(--text3);margin-top:8px;line-height:1.5">Это остатки за всё время (с начала учёта), поэтому «Сейчас» может быть больше выручки за период — в них входит начальный остаток. Безнал — полная сумма (−15% применяется только к базе бонусов ЗП).</div>' +
+    '</div>';
 }
 
 function renderDashboard(force) {
