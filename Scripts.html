@@ -1858,6 +1858,8 @@ function renderKassa(k) {
   set('kassa-lbl-closing', 'Итого на конец ' + (isR ? 'периода' : 'дня'));
   set('kassa-ops-title',   'Операции за ' + w);
 
+  renderKassaReconcile_(k, isR);
+
   var ops = document.getElementById('kassa-ops');
   if (ops) {
     if (!k.operations || !k.operations.length) {
@@ -1885,6 +1887,45 @@ function renderKassa(k) {
 }
 
 function escapeHtml_(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+
+// Сверка наличных за период: поступило = осело в кассе + изъято + прочие расходы
+function renderKassaReconcile_(k, isR) {
+  var box = document.getElementById('kassa-reconcile');
+  if (!box) return;
+  var f = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+  var inSum  = Number(k.dayIn) || 0;                 // поступило наличными за период
+  var outSum = Number(k.dayOut) || 0;                // все нал-расходы за период
+  var net    = Number(k.closing) - Number(k.opening); // осело в кассе (кон − нач)
+  // Изъятия — из операций (категория «Изъятие владельца»)
+  var withdrawals = 0;
+  (k.operations || []).forEach(function(op){
+    if (op.type === 'расход' && /изъят/i.test(String(op.category || op.desc || ''))) withdrawals += Number(op.amount) || 0;
+  });
+  var other = Math.round((outSum - withdrawals) * 100) / 100;   // прочие нал-расходы (авансы и т.п.)
+  var diff  = Math.round((inSum - (net + withdrawals + other)) * 100) / 100;  // должно быть 0
+  var ok = Math.abs(diff) < 0.5;
+  var w1 = isR ? 'период' : 'день';
+  var row = function(label, val, color){
+    return '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px">' +
+      '<span style="color:var(--text2)">' + label + '</span>' +
+      '<span style="font-weight:600;font-variant-numeric:tabular-nums' + (color?';color:'+color:'') + '">' + val + '</span></div>';
+  };
+  box.innerHTML =
+    '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;max-width:560px">' +
+      '<div style="font-weight:600;margin-bottom:8px">🧮 Сверка наличных за ' + w1 + '</div>' +
+      row('Поступило наличными', f(inSum), 'var(--success)') +
+      '<div style="border-top:1px solid var(--border);margin:6px 0"></div>' +
+      row('→ осело в кассе (кон − нач)', f(net), '') +
+      row('→ изъято владельцем', f(withdrawals), '') +
+      row('→ прочие нал-расходы (авансы…)', f(other), '') +
+      '<div style="border-top:1px solid var(--border);margin:6px 0"></div>' +
+      '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px;font-weight:700">' +
+        '<span>' + (ok ? '✅ Сходится' : '⚠ Расхождение') + '</span>' +
+        '<span style="color:' + (ok ? 'var(--success)' : 'var(--danger)') + '">' + (ok ? f(inSum) + ' = ' + f(net + withdrawals + other) : f(diff)) + '</span>' +
+      '</div>' +
+      '<div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5">Все наличные из оплат за ' + w1 + ' либо остались в кассе, либо изъяты, либо ушли на расходы. Если «расхождение» ≠ 0 — где-то нал не проведён.</div>' +
+    '</div>';
+}
 
 // Печать кассы за текущий вид (день или период)
 function printKassa() {
