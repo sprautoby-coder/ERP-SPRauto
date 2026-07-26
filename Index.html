@@ -527,30 +527,10 @@
           <span style="color:var(--text3)">—</span>
           <input type="date" class="form-input" id="fin-to"   onchange="loadFinance()" style="height:36px;font-size:13px;width:138px">
         </div>
+        <button class="btn btn-ghost" onclick="printFinanceReport()" title="Общий финансовый отчёт (печать)" style="height:38px;white-space:nowrap">🖨 Отчёт</button>
       </div>
     </div>
-    <div class="kpi-grid" id="fin-kpi" style="margin-bottom:20px">
-      <div class="kpi-card"><div class="kpi-label">Выручка</div><div class="kpi-value" id="fin-revenue">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Валовая прибыль</div><div class="kpi-value" id="fin-gross">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Расходы</div><div class="kpi-value" id="fin-expenses">—</div></div>
-      <div class="kpi-card"><div class="kpi-label">Чистая прибыль</div><div class="kpi-value" id="fin-net">—</div></div>
-    </div>
-    <!-- Разбивка по услугам -->
-    <div class="section-header" style="margin-bottom:10px"><div class="section-title">По направлениям</div></div>
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead><tr><th>Услуга</th><th style="text-align:right">Заказов</th><th style="text-align:right">Выручка</th><th style="text-align:right">Валовая прибыль</th><th style="text-align:right">Доля выручки</th></tr></thead>
-        <tbody id="fin-services-tbody"><tr><td colspan="5" style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</td></tr></tbody>
-      </table>
-    </div>
-    <!-- Расходы по категориям -->
-    <div class="section-header" style="margin:20px 0 10px"><div class="section-title">Расходы по категориям</div></div>
-    <div class="table-wrap">
-      <table class="data-table">
-        <thead><tr><th>Категория</th><th style="text-align:right">Сумма</th><th style="text-align:right">Доля</th></tr></thead>
-        <tbody id="fin-exp-tbody"><tr><td colspan="3" style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</td></tr></tbody>
-      </table>
-    </div>
+    <div id="fin-body"><div style="text-align:center;padding:48px;color:var(--text3)">Загрузка…</div></div>
   </div>
 
   <!-- РАСХОДЫ -->

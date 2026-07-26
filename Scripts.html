@@ -5879,8 +5879,8 @@ function renderDashData_(d) {
   if (kpi) kpi.innerHTML =
     kpiCard('Выручка',        fmt(k.revenue),     'var(--accent)',   '💰') +
     kpiCard('Валовая прибыль',fmt(k.grossProfit),  'var(--success)', '📈') +
-    kpiCard('Расходы',        fmt(k.expenses),     'var(--danger)',  '💸') +
-    kpiCard('Дебиторка',      fmt(k.debtSum),      '#f59e0b',       '🧾');
+    kpiCard('Расходы',        fmt(k.expenses),     'var(--danger)',  '💸', "goPage('expenses')") +
+    kpiCard('Дебиторка',      fmt(k.debtSum),      '#f59e0b',       '🧾', "goPage('debt')");
   renderRecentOrders(d.recentOrders || [], k.ordersCount || 0);
 }
 
@@ -5950,8 +5950,8 @@ function loadDashDebtAlert() {
     .getDebtOrders();
 }
 
-function kpiCard(label, value, color, icon) {
-  return '<div class="kpi-card">' +
+function kpiCard(label, value, color, icon, onclick) {
+  return '<div class="kpi-card"' + (onclick ? ' onclick="' + onclick + '" style="cursor:pointer" title="Открыть"' : '') + '>' +
     '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
       '<span style="font-size:20px">' + icon + '</span>' +
       '<span class="kpi-label">' + label + '</span>' +
@@ -6085,59 +6085,140 @@ function deleteOrderFromDash(id) {
 function loadFinance() {
   var range = getPeriodRangeFromUI('fin');
   var key   = (range.from || '') + '_' + (range.to || '');
-  // Мгновенно из кэша того же периода, свежие данные — в фоне
-  if (App._finCache && App._finCache.key === key) renderFinance_(App._finCache.data);
-
+  if (App._finRepCache && App._finRepCache.key === key) renderFinance_(App._finRepCache.data);
   google.script.run
     .withSuccessHandler(function(resp) {
-      if (!resp || !resp.ok) return;
-      App._finCache = { key: key, data: resp.data };
+      if (!resp || !resp.ok) {
+        var b = document.getElementById('fin-body');
+        if (b && !App._finRepCache) b.innerHTML = '<div style="padding:24px;color:var(--danger)">Ошибка: ' + (resp ? resp.error : 'нет ответа') + '</div>';
+        return;
+      }
+      App._finRepCache = { key: key, data: resp.data };
       renderFinance_(resp.data);
     })
     .withFailureHandler(function(){})
-    .getDashboardData(range);
+    .getFinanceReport(range);
+}
+
+function finFmt_(n){ return (Math.round(Number(n||0)*100)/100).toLocaleString('ru') + ' ' + CUR; }
+function finToggle_(id){ var el = document.getElementById(id); if (el) el.style.display = (el.style.display === 'block') ? 'none' : 'block'; }
+function finKpi_(label, value, sub, color, onclick){
+  return '<div class="kpi-card"' + (onclick ? ' onclick="' + onclick + '" style="cursor:pointer"' : '') + '>' +
+    '<div class="kpi-label">' + label + '</div>' +
+    '<div class="kpi-value" style="' + (color ? 'color:' + color : '') + '">' + value + '</div>' +
+    (sub ? '<div style="font-size:11px;color:' + (onclick ? 'var(--accent)' : 'var(--text3)') + ';margin-top:4px">' + sub + '</div>' : '') +
+  '</div>';
+}
+function finPl_(label, amount){
+  var neg = Number(amount) < 0;
+  return '<div style="display:flex;justify-content:space-between;padding:5px 0;font-size:13px">' +
+    '<span style="color:var(--text2)">' + label + '</span>' +
+    '<span style="font-weight:600;color:' + (neg ? 'var(--text3)' : 'var(--text)') + '">' + finFmt_(amount) + '</span></div>';
+}
+function finPlSum_(label, amount, color){
+  return '<div style="display:flex;justify-content:space-between;padding:7px 0;margin-top:2px;border-top:1px solid var(--border);font-size:14px">' +
+    '<span style="font-weight:700">' + label + '</span>' +
+    '<span style="font-weight:700;color:' + (color || 'var(--text)') + '">' + finFmt_(amount) + '</span></div>';
+}
+function finM_(label, value){
+  return '<div class="fin-metric"><div class="fin-metric-label">' + label + '</div><div class="fin-metric-val">' + value + '</div></div>';
 }
 
 function renderFinance_(d) {
-  var fmtBr = function(n){ return (Math.round(Number(n||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
-  {
-      var k = d.kpi || {};
-      var set = function(id, val){ var el = document.getElementById(id); if(el) el.textContent = val; };
-      set('fin-revenue',  fmtBr(k.revenue));
-      set('fin-gross',    fmtBr(k.grossProfit));
-      set('fin-expenses', fmtBr(k.expenses));
-      set('fin-net',      fmtBr(k.netProfit));
+  App._finRep = d;
+  var body = document.getElementById('fin-body'); if (!body) return;
+  var netCol = Number(d.netProfit) < 0 ? 'var(--danger)' : 'var(--success)';
 
-      // По услугам
-      var svcTbody = document.getElementById('fin-services-tbody');
-      if (svcTbody) {
-        var svcRows = Object.keys(d.byService || {}).map(function(svc) {
-          var s = d.byService[svc];
-          var pct = k.revenue > 0 ? Math.round(s.revenue / k.revenue * 100) + '%' : '—';
-          return '<tr>' +
-            '<td style="font-weight:600">' + svc + '</td>' +
-            '<td style="text-align:right">' + s.count + '</td>' +
-            '<td style="text-align:right">' + fmtBr(s.revenue) + '</td>' +
-            '<td style="text-align:right;color:var(--success)">' + fmtBr(s.gross) + '</td>' +
-            '<td style="text-align:right;color:var(--text3)">' + pct + '</td>' +
-          '</tr>';
-        }).join('');
-        svcTbody.innerHTML = svcRows || '<tr><td colspan="5" style="text-align:center;color:var(--text3);padding:16px">Нет данных</td></tr>';
-      }
+  var kpi = '<div class="kpi-grid" style="margin-bottom:16px">' +
+    finKpi_('Выручка', finFmt_(d.revenue), 'Нал ' + finFmt_(d.revenueNal) + ' · Безнал ' + finFmt_(d.revenueBeznal) + ' (' + d.beznalPct + '%)', '') +
+    finKpi_('Валовая прибыль', finFmt_(d.grossProfit), d.grossPct + '% от выручки', 'var(--success)') +
+    finKpi_('Чистая прибыль', finFmt_(d.netProfit), d.netPct + '% от выручки', netCol) +
+    finKpi_('Дебиторка', finFmt_(d.debtSum), d.debtCount + ' заказ. · показать ▾', '#f59e0b', "finToggle_('fin-debt-detail')") +
+    finKpi_('Расходы (опер.)', finFmt_(d.opExpenses), 'показать детализацию ▾', '', "finToggle_('fin-exp-detail')") +
+  '</div>';
 
-      // Расходы по категориям
-      var expTbody = document.getElementById('fin-exp-tbody');
-      if (expTbody) {
-        var ec = d.expByCategory || {};
-        var totalExp = Object.values(ec).reduce(function(s,v){ return s+v; }, 0);
-        var expRows = Object.keys(ec).sort(function(a,b){ return ec[b]-ec[a]; }).map(function(cat) {
-          var pct = totalExp > 0 ? Math.round(ec[cat]/totalExp*100) + '%' : '—';
-          return '<tr><td>' + cat + '</td><td style="text-align:right;font-weight:600">' + fmtBr(ec[cat]) + '</td>' +
-            '<td style="text-align:right;color:var(--text3)">' + pct + '</td></tr>';
-        }).join('');
-        expTbody.innerHTML = expRows || '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:16px">Нет расходов</td></tr>';
-      }
-  }
+  var pl = '<div class="fin-card" style="margin-bottom:16px"><div class="fin-card-title">Как получилась прибыль</div>' +
+    finPl_('Выручка', d.revenue) +
+    finPl_('− Себестоимость материалов', -d.materialCost) +
+    finPl_('− Затраты по заказам (такси/арматура)', -d.orderExpenses) +
+    finPl_('− Комиссия безнал (−15%)', -d.beznalFee) +
+    finPlSum_('= Валовая прибыль', d.grossProfit, 'var(--success)') +
+    finPl_('− Бонусы (менеджер/мастер/админ)', -d.bonuses) +
+    finPlSum_('= Маржинальная прибыль', d.marginalProfit) +
+    finPl_('− Операционные расходы', -d.opExpenses) +
+    finPlSum_('= Чистая прибыль', d.netProfit, netCol) +
+  '</div>';
+
+  var m2 = '<div class="fin-metrics">' +
+    finM_('% безнала', d.beznalPct + '%') +
+    finM_('Заказов', d.ordersCount) +
+    finM_('Машин', d.carsCount) +
+    finM_('Средний чек', finFmt_(d.avgCheck)) +
+    finM_('ФОТ' + (d.fotPct ? ' · ' + d.fotPct + '%' : ''), finFmt_(d.fot)) +
+    finM_('Себестоимость мат. · ' + d.materialPct + '%', finFmt_(d.materialCost)) +
+    finM_('Касса', finFmt_(d.kassaBalance)) +
+    finM_('Расчётный счёт', finFmt_(d.bankBalance)) +
+    finM_('Изъятия владельца', finFmt_(d.withdrawals)) +
+  '</div>';
+
+  var svcRows = Object.keys(d.byService || {}).sort(function(a,b){ return d.byService[b].revenue - d.byService[a].revenue; }).map(function(svc){
+    var s = d.byService[svc];
+    var share  = d.revenue > 0 ? Math.round(s.revenue / d.revenue * 100) + '%' : '—';
+    var margin = s.revenue > 0 ? Math.round(s.gross / s.revenue * 100) + '%' : '—';
+    return '<tr><td style="font-weight:600">' + svc + '</td><td style="text-align:right">' + s.count + '</td><td style="text-align:right">' + finFmt_(s.revenue) + '</td><td style="text-align:right;color:var(--success)">' + finFmt_(s.gross) + '</td><td style="text-align:right">' + margin + '</td><td style="text-align:right;color:var(--text3)">' + share + '</td></tr>';
+  }).join('') || '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:16px">Нет данных</td></tr>';
+  var svcTable = '<div class="fin-card" style="margin-bottom:16px"><div class="fin-card-title">По направлениям</div>' +
+    '<div style="overflow-x:auto"><table class="data-table"><thead><tr><th>Услуга</th><th style="text-align:right">Заказов</th><th style="text-align:right">Выручка</th><th style="text-align:right">Валовая</th><th style="text-align:right">Маржа</th><th style="text-align:right">Доля</th></tr></thead><tbody>' + svcRows + '</tbody></table></div></div>';
+
+  var debtRows = (d.debtList || []).map(function(o){
+    return '<tr onclick="openOrderCard(\'' + o.id + '\')" style="cursor:pointer"><td>' + (o.contract||'') + '</td><td>' + (o.client||'') + '</td><td>' + (o.car||'') + '</td><td>' + (o.service||'') + '</td><td style="text-align:right">' + finFmt_(o.price) + '</td><td style="text-align:right;color:var(--success)">' + finFmt_(o.paid) + '</td><td style="text-align:right;color:#f59e0b;font-weight:600">' + finFmt_(o.remaining) + '</td><td>' + (o.dueDate||'—') + '</td><td>' + (o.payType||'') + '</td></tr>';
+  }).join('') || '<tr><td colspan="9" style="text-align:center;color:var(--text3);padding:16px">Долгов нет</td></tr>';
+  var debtDetail = '<div id="fin-debt-detail" class="fin-card" style="display:none;margin-bottom:16px"><div class="fin-card-title">Дебиторка · ' + finFmt_(d.debtSum) + ' (' + d.debtCount + ' заказ.)</div>' +
+    '<div style="overflow-x:auto"><table class="data-table"><thead><tr><th>Договор</th><th>Клиент</th><th>Авто</th><th>Услуга</th><th style="text-align:right">Сумма</th><th style="text-align:right">Оплачено</th><th style="text-align:right">Остаток</th><th>Срок оплаты</th><th>Тип</th></tr></thead><tbody>' + debtRows + '</tbody></table></div></div>';
+
+  var ec = d.opByCategory || {}; var totalExp = Object.keys(ec).reduce(function(s,k){ return s + ec[k]; }, 0);
+  var catRows = Object.keys(ec).sort(function(a,b){ return ec[b] - ec[a]; }).map(function(cat){
+    var pct = totalExp > 0 ? Math.round(ec[cat]/totalExp*100) + '%' : '—';
+    return '<tr><td>' + cat + '</td><td style="text-align:right;font-weight:600">' + finFmt_(ec[cat]) + '</td><td style="text-align:right;color:var(--text3)">' + pct + '</td></tr>';
+  }).join('') || '<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:16px">Нет расходов</td></tr>';
+  var expDetail = '<div id="fin-exp-detail" class="fin-card" style="display:none;margin-bottom:16px"><div class="fin-card-title">Расходы по категориям · ' + finFmt_(d.opExpenses) + '</div>' +
+    '<div style="overflow-x:auto"><table class="data-table"><thead><tr><th>Категория</th><th style="text-align:right">Сумма</th><th style="text-align:right">Доля</th></tr></thead><tbody>' + catRows + '</tbody></table></div></div>';
+
+  body.innerHTML = kpi + pl + m2 + svcTable + debtDetail + expDetail;
+}
+
+// Печать общего финансового отчёта
+function printFinanceReport() {
+  var d = App._finRep; if (!d) { toast('Сначала откройте Финансы', 'error'); return; }
+  var lbl = (function(){ var s = document.getElementById('fin-period'); var o = s && s.options[s.selectedIndex]; return o ? o.text : ''; })();
+  var f = function(n){ return (Math.round(Number(n||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+  var row = function(a,b,bold){ return '<tr' + (bold?' style="font-weight:bold"':'') + '><td>' + a + '</td><td style="text-align:right">' + f(b) + '</td></tr>'; };
+  var svc = Object.keys(d.byService||{}).sort(function(a,b){return d.byService[b].revenue-d.byService[a].revenue;}).map(function(s){
+    var x=d.byService[s]; return '<tr><td>'+s+'</td><td style="text-align:right">'+x.count+'</td><td style="text-align:right">'+f(x.revenue)+'</td><td style="text-align:right">'+f(x.gross)+'</td></tr>';
+  }).join('');
+  var ec=d.opByCategory||{}; var cats=Object.keys(ec).sort(function(a,b){return ec[b]-ec[a];}).map(function(c){return '<tr><td>'+c+'</td><td style="text-align:right">'+f(ec[c])+'</td></tr>';}).join('');
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Финансовый отчёт</title>' +
+    '<style>body{font-family:Arial;font-size:12px;margin:15mm;color:#111}h2{text-align:center;margin-bottom:2px}.period{text-align:center;color:#555;margin-bottom:14px}' +
+    'table{width:100%;border-collapse:collapse;margin-bottom:14px}td,th{border:1px solid #ccc;padding:4px 7px}th{background:#f0f0f0;text-align:left}h3{font-size:13px;margin:10px 0 4px}' +
+    '@media print{.no-print{display:none}}</style></head><body>' +
+    '<div class="no-print"><button onclick="window.print()">Печать</button></div>' +
+    '<h2>ФИНАНСОВЫЙ ОТЧЁТ</h2><div class="period">' + (lbl || '') + '</div>' +
+    '<h3>Прибыль</h3><table>' +
+      row('Выручка', d.revenue) + '<tr><td colspan="2" style="color:#777">в т.ч. нал ' + f(d.revenueNal) + ' · безнал ' + f(d.revenueBeznal) + '</td></tr>' +
+      row('− Себестоимость материалов', -d.materialCost) + row('− Затраты по заказам', -d.orderExpenses) + row('− Комиссия безнал (−15%)', -d.beznalFee) +
+      row('= Валовая прибыль', d.grossProfit, true) + row('− Бонусы', -d.bonuses) + row('= Маржинальная прибыль', d.marginalProfit, true) +
+      row('− Операционные расходы', -d.opExpenses) + row('= Чистая прибыль', d.netProfit, true) +
+    '</table>' +
+    '<h3>Ключевые показатели</h3><table>' +
+      row('Заказов', d.ordersCount) + row('Машин', d.carsCount) + row('Средний чек', d.avgCheck) +
+      '<tr><td>% безнала</td><td style="text-align:right">' + d.beznalPct + '%</td></tr>' +
+      row('ФОТ', d.fot) + row('Касса (остаток)', d.kassaBalance) + row('Расчётный счёт (остаток)', d.bankBalance) +
+      row('Изъятия владельца', d.withdrawals) + row('Дебиторка', d.debtSum) +
+    '</table>' +
+    '<h3>По направлениям</h3><table><thead><tr><th>Услуга</th><th style="text-align:right">Заказов</th><th style="text-align:right">Выручка</th><th style="text-align:right">Валовая</th></tr></thead><tbody>' + svc + '</tbody></table>' +
+    '<h3>Расходы по категориям</h3><table><thead><tr><th>Категория</th><th style="text-align:right">Сумма</th></tr></thead><tbody>' + cats + '</tbody></table>' +
+    '</body></html>';
+  var w = window.open('','_blank'); if (w) { w.document.write(html); w.document.close(); }
 }
 
 function getPeriodRange(period) {

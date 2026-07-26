@@ -410,6 +410,13 @@ select.mat-inp { cursor:pointer; padding-right:2px; }
 /* Минимальная ширина таблицы заказов: на маленьком мониторе колонки не сжимаются,
    а таблица выходит за область → появляется горизонтальная прокрутка (все колонки доступны) */
 #orders-table { min-width:1200px; }
+/* Финансы: карточки и метрики */
+.fin-card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:16px; }
+.fin-card-title { font-weight:700; font-size:14px; margin-bottom:12px; }
+.fin-metrics { display:grid; grid-template-columns:repeat(auto-fill,minmax(165px,1fr)); gap:10px; margin-bottom:16px; }
+.fin-metric { background:var(--bg-card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+.fin-metric-label { font-size:10.5px; color:var(--text3); text-transform:uppercase; letter-spacing:.04em; margin-bottom:4px; line-height:1.3; }
+.fin-metric-val { font-size:16px; font-weight:700; }
 /* раскрытие расхода плёнки в строке заказа */
 .film-toggle { border:none; background:none; color:var(--text3); cursor:pointer; font-size:12px; padding:0 5px 0 0; transition:transform .15s; display:inline-block; }
 .film-toggle.open { transform:rotate(90deg); color:var(--accent); }
