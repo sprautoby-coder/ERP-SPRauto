@@ -1649,7 +1649,7 @@ function fillServiceDropdowns() {
   // Доп. услуги — чекбоксы (можно выбрать несколько на одно авто)
   var extra = document.getElementById('ord-extra-services');
   if (extra) extra.innerHTML = active.map(function(s){
-    return '<label class="svc-chip"><input type="checkbox" class="ord-extra-svc" value="' + s.code + '"> ' + (s.icon ? s.icon + ' ' : '') + s.name + '</label>';
+    return '<label class="svc-chip"><input type="checkbox" class="ord-extra-svc" value="' + s.code + '" onchange="updateOrderTintBlock_()"> ' + (s.icon ? s.icon + ' ' : '') + s.name + '</label>';
   }).join('');
 
   // Фильтр заказов — value = название (в заказах хранится название услуги)
@@ -5177,11 +5177,65 @@ function fillOrdComplexOptions() {
 function onOrdServiceChange() {
   var svc = document.getElementById('ord-service');
   var block = document.getElementById('ord-complex-block');
-  if (!svc || !block) return;
-  var txt = (svc.options[svc.selectedIndex] || {}).textContent || '';
-  var isTint = /тонир|tint/i.test(txt) || /tint/i.test(svc.value);
-  var isOkl  = svc.value && !isTint;   // оклейка = выбрана услуга и это не тонировка
-  block.style.display = isOkl ? 'block' : 'none';
+  if (svc && block) {
+    var txt = (svc.options[svc.selectedIndex] || {}).textContent || '';
+    var isTint = /тонир|tint/i.test(txt) || /tint/i.test(svc.value);
+    var isOkl  = svc.value && !isTint;   // оклейка = выбрана услуга и это не тонировка
+    block.style.display = isOkl ? 'block' : 'none';
+  }
+  updateOrderTintBlock_();
+}
+
+// Есть ли тонировка среди услуг заказа (основная или доп.)?
+function isTintInForm_() {
+  var sv = document.getElementById('ord-service');
+  if (sv) {
+    var t = (sv.options[sv.selectedIndex] || {}).textContent || '';
+    if (/тонир|tint/i.test(t) || /tint/i.test(sv.value)) return true;
+  }
+  var found = false;
+  document.querySelectorAll('.ord-extra-svc:checked').forEach(function(cb){
+    var lbl = cb.parentNode ? cb.parentNode.textContent : '';
+    if (/tint/i.test(cb.value) || /тонир/i.test(lbl)) found = true;
+  });
+  return found;
+}
+
+// Заполнить список тонировщиков (по роли), при первом показе — авто-отметить
+function fillOrderTinters_() {
+  var wrap = document.getElementById('ord-tinters-wrap');
+  if (!wrap) return;
+  var emps = App.employees || [];
+  var tinters = emps.filter(function(e){
+    var roles = (e['Основная должность'] || '') + ',' + (e['Доп. роли'] || '');
+    return /тонировщик/i.test(roles);
+  });
+  var list = tinters.length ? tinters : emps;
+  if (!list.length) { wrap.innerHTML = '<div style="font-size:11px;color:var(--text3)">Нет сотрудников — добавьте в «Сотрудники»</div>'; return; }
+  var checked = {};
+  wrap.querySelectorAll('.ord-tinter-cb:checked').forEach(function(cb){ checked[cb.value] = true; });
+  var firstFill = !wrap.getAttribute('data-filled');
+  wrap.innerHTML = list.map(function(e){
+    var n = e['ФИО'] || e['Имя'] || ''; if (!n) return '';
+    var on = checked[n] || (firstFill && tinters.length > 0);   // авто-подтягивание тонировщиков
+    return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">' +
+      '<input type="checkbox" class="ord-tinter-cb" value="' + n.replace(/"/g,'&quot;') + '"' + (on ? ' checked' : '') + '> ' + n + '</label>';
+  }).join('');
+  wrap.setAttribute('data-filled', '1');
+}
+
+// Показать/скрыть блок тонировки в зависимости от выбранных услуг
+function updateOrderTintBlock_() {
+  var block = document.getElementById('ord-tint-block');
+  if (!block) return;
+  var show = isTintInForm_();
+  block.style.display = show ? 'block' : 'none';
+  if (show) { fillOrderTinters_(); }
+  else {
+    var w = document.getElementById('ord-tinters-wrap'); if (w) w.removeAttribute('data-filled');   // сброс авто-подтяжки
+    var p = document.getElementById('ord-tint-price'); if (p) p.value = '';
+  }
+  if (typeof recalcOrderPreview === 'function') recalcOrderPreview();
 }
 
 // Выбор комплекса в форме — авто-заполнить элементы и их количество
@@ -5199,10 +5253,12 @@ function cancelNewOrder() {
   App._orderDirty = false; App._orderResume = false;
   ['ord-service','ord-client-phone','ord-client-name','ord-client-id','ord-car','ord-vin',
    'ord-price','ord-masters','ord-notes','ord-prepay','ord-complex','ord-elements','ord-elements-count',
-   'ord-cl-unp','ord-cl-director','ord-cl-address','ord-cl-postal','ord-cl-bank'].forEach(function(id){
+   'ord-tint-price','ord-cl-unp','ord-cl-director','ord-cl-address','ord-cl-postal','ord-cl-bank'].forEach(function(id){
     var el = document.getElementById(id); if (el) el.value = '';
   });
   document.querySelectorAll('.ord-extra-svc:checked').forEach(function(cb){ cb.checked = false; });
+  var tintBlock = document.getElementById('ord-tint-block'); if (tintBlock) tintBlock.style.display = 'none';
+  var tintersWrap = document.getElementById('ord-tinters-wrap'); if (tintersWrap) { tintersWrap.innerHTML = ''; tintersWrap.removeAttribute('data-filled'); }
   var found = document.getElementById('ord-client-found'); if (found) found.style.display = 'none';
   var preview = document.getElementById('ord-finance-preview'); if (preview) preview.style.display = 'none';
   App._orderPayType = '';
@@ -5274,6 +5330,8 @@ function submitNewOrderProceed() {
     manager:     (document.getElementById('ord-manager') || {}).value || '',
     admin:       (document.getElementById('ord-admin')   || {}).value || '',
     masters:     ((document.getElementById('ord-masters') || {}).value || '').trim(),
+    tintPrice:   isTintInForm_() ? Number((document.getElementById('ord-tint-price') || {}).value || 0) : 0,
+    tintMasters: isTintInForm_() ? (function(){ var a=[]; document.querySelectorAll('.ord-tinter-cb:checked').forEach(function(cb){ a.push(cb.value); }); return a.join(', '); })() : '',
     notes:       ((document.getElementById('ord-notes')   || {}).value || '').trim(),
     complex:       (document.getElementById('ord-complex')        || {}).value || '',
     elements:      ((document.getElementById('ord-elements')      || {}).value || '').trim(),
@@ -8199,6 +8257,30 @@ function renderCardPersonnel() {
       }).join('')
     : '<div style="font-size:11px;color:var(--text3)">Список сотрудников пуст — добавьте в разделе «Сотрудники»</div>';
 
+  // Блок тонировки — если среди услуг заказа есть тонировка
+  var isTintOrder  = /тонир|tint/i.test(String(o['Услуга'] || ''));
+  var tintList     = String(o['Тонировщики'] || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  var tintPriceVal = (Number(o['Стоимость тонировки']) || '') === '' ? '' : Number(o['Стоимость тонировки']);
+  var tintSection  = '';
+  if (isTintOrder) {
+    var tinterChecks = emps.map(function(e){
+      var n = e['ФИО'] || e['Имя'] || ''; if (!n) return '';
+      var roles = (e['Основная должность'] || '') + ',' + (e['Доп. роли'] || '');
+      var isTinter = /тонировщик/i.test(roles);
+      // если тонировщики ещё не заданы — авто-подтягиваем по роли; иначе уважаем сохранённых
+      var on = tintList.length ? (tintList.indexOf(n) >= 0) : isTinter;
+      return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">' +
+        '<input type="checkbox" class="card-tinter-cb" value="' + n.replace(/"/g,'&quot;') + '"' + (on ? ' checked' : '') + ' onchange="persAutoSave()"> ' + n + (isTinter ? ' 🎨' : '') + '</label>';
+    }).join('');
+    tintSection =
+      '<div style="border-top:1px solid var(--border);margin:8px 0 0;padding-top:8px">' +
+        '<label style="font-size:10px;color:var(--text3)">🎨 Стоимость тонировки, руб <span style="color:var(--text3)">(из общей суммы заказа)</span></label>' +
+        '<input id="card-tint-price" type="number" min="0" value="' + tintPriceVal + '" style="' + inp + ';margin:2px 0 8px" oninput="persAutoSave()">' +
+        '<div style="font-size:10px;color:var(--text3);margin-bottom:2px">Тонировщики (бонус — с части тонировки)</div>' +
+        '<div style="max-height:100px;overflow:auto">' + tinterChecks + '</div>' +
+      '</div>';
+  }
+
   return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:12px">' +
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
       '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2)">Персонал · кто клеил</div>' +
@@ -8210,6 +8292,7 @@ function renderCardPersonnel() {
     '<select id="card-admin" style="' + inp + ';margin:2px 0 8px" onchange="persAutoSave()">' + adminOpts + '</select>' +
     '<div style="font-size:10px;color:var(--text3);margin-bottom:2px">Мастера (оклейщики)</div>' +
     '<div style="max-height:118px;overflow:auto">' + masterChecks + '</div>' +
+    tintSection +
   '</div>';
 }
 
@@ -8229,10 +8312,23 @@ function persFlush_(cb) {
   var admin = (document.getElementById('card-admin') || {}).value || '';
   var masters = [];
   document.querySelectorAll('.card-master-cb:checked').forEach(function(cb2){ masters.push(cb2.value); });
+  // Тонировка (если блок присутствует)
+  var tintEl = document.getElementById('card-tint-price');
+  var hasTint = !!tintEl;
+  var tintPrice = hasTint ? (Number(tintEl.value) || 0) : null;
+  var tintMasters = null;
+  if (hasTint) {
+    var tm = [];
+    document.querySelectorAll('.card-tinter-cb:checked').forEach(function(cb2){ tm.push(cb2.value); });
+    tintMasters = tm.join(', ');
+  }
   var st = function(t,c){ var e=document.getElementById('card-pers-status'); if(e){e.textContent=t; e.style.color=c||'var(--text3)';} };
   st('сохранение…');
   // обновим модель сразу (для документов/перерисовки)
   o['Менеджер'] = mgr; o['Оклейщики'] = masters.join(', '); o['Администратор'] = admin;
+  if (hasTint) { o['Стоимость тонировки'] = tintPrice; o['Тонировщики'] = tintMasters; }
+  var payload = { manager: mgr, masters: masters.join(', '), admin: admin };
+  if (hasTint) { payload.tintPrice = tintPrice; payload.tintMasters = tintMasters; }
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) { st('ошибка сохранения', 'var(--danger)'); if (cb) cb(); return; }
@@ -8240,13 +8336,14 @@ function persFlush_(cb) {
       if (f) {
         o['Валовая прибыль']=f.grossProfit; o['Бонус менеджера']=f.managerBonus;
         o['Бонус оклейщика']=f.masterBonus; o['Бонус администратора']=f.adminBonus; o['Маржинальная прибыль']=f.marginalProfit;
+        if (f.tintMasterBonus !== undefined) o['Бонус тонировщика']=f.tintMasterBonus;
         var box=document.getElementById('card-fin-box'); if(box) box.innerHTML=renderCardFinance_(o);
       }
       App.orders = []; App._dashCache = null; if (App._cardCache) delete App._cardCache[id];
       st('✓ сохранено', 'var(--success)'); if (cb) cb();
     })
     .withFailureHandler(function(e){ st('ошибка: ' + e.message, 'var(--danger)'); if (cb) cb(); })
-    .updateOrder(id, { manager: mgr, masters: masters.join(', '), admin: admin });
+    .updateOrder(id, payload);
 }
 
 /* --- Карточка заказа: редактор расходов (такси, арматура) --- */
@@ -8372,6 +8469,7 @@ function updateOrderCardField(orderId, payload) {
         var f = resp.data.finance;
         o['Валовая прибыль']=f.grossProfit; o['Бонус менеджера']=f.managerBonus;
         o['Бонус оклейщика']=f.masterBonus; o['Бонус администратора']=f.adminBonus; o['Маржинальная прибыль']=f.marginalProfit;
+        if (f.tintMasterBonus !== undefined) o['Бонус тонировщика']=f.tintMasterBonus;
         var box=document.getElementById('card-fin-box'); if(box) box.innerHTML=renderCardFinance_(o);
       }
       App.orders = []; App._dashCache = null; App._debtCache = null;
@@ -8598,6 +8696,7 @@ function matFlush_(cb) {
           o['Итого материалы'] = r3.data.totalMat; o['Итого расходы'] = r3.data.totalExp;
           o['Валовая прибыль'] = f.grossProfit; o['Бонус менеджера'] = f.managerBonus;
           o['Бонус оклейщика'] = f.masterBonus; o['Бонус администратора'] = f.adminBonus; o['Маржинальная прибыль'] = f.marginalProfit;
+          if (f.tintMasterBonus !== undefined) o['Бонус тонировщика'] = f.tintMasterBonus;
           var box = document.getElementById('card-fin-box'); if (box) box.innerHTML = renderCardFinance_(o);
         }
         App.orders = []; App._dashCache = null; if (App._cardCache) delete App._cardCache[id];
@@ -8629,6 +8728,7 @@ function renderCardFinance_(order) {
     finLine_('Валовая прибыль', fmt(order['Валовая прибыль']), 'var(--success)') +
     finLine_('Бонус менеджера', fmt(order['Бонус менеджера']), 'var(--accent)') +
     finLine_('Бонус мастера',   fmt(order['Бонус оклейщика']), 'var(--accent)') +
+    (Number(order['Бонус тонировщика']) > 0 ? finLine_('Бонус тонировщика', fmt(order['Бонус тонировщика']), 'var(--accent)') : '') +
     (Number(order['Бонус администратора']) > 0 ? finLine_('Бонус администратора', fmt(order['Бонус администратора']), 'var(--accent)') : '') +
     '<div style="border-top:2px solid var(--border);margin:8px 0"></div>' +
     finLine_('Маржинальная',    fmt(order['Маржинальная прибыль']), 'var(--success)', true);

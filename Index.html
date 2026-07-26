@@ -1541,6 +1541,22 @@
         </div>
       </div>
 
+      <!-- Тонировка как отдельная услуга: стоимость + тонировщики (видно, когда среди услуг есть тонировка) -->
+      <div id="ord-tint-block" style="display:none;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-top:12px">
+        <div class="form-label" style="margin-bottom:6px">🎨 Тонировка — отдельная услуга</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div class="form-row" style="margin:0">
+            <label class="form-label">Стоимость тонировки, <span class="cur">Br</span></label>
+            <input class="form-input" id="ord-tint-price" type="number" min="0" placeholder="0" oninput="recalcOrderPreview()">
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">Часть общей стоимости заказа — с неё считается бонус тонировщика</div>
+          </div>
+          <div class="form-row" style="margin:0">
+            <label class="form-label">Тонировщик(и)</label>
+            <div id="ord-tinters-wrap" style="max-height:112px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px;background:var(--inp)"></div>
+          </div>
+        </div>
+      </div>
+
       <!-- Срок оплаты (для отсрочки/рассрочки) -->
       <div id="ord-duepay-row" style="margin-top:12px;display:none">
         <div style="display:grid;grid-template-columns:1fr auto;gap:12px;align-items:end">

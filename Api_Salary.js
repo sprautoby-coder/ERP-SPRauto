@@ -59,12 +59,17 @@ function calcSalaryForPeriod(from, to) {
       const ordersList = [];
 
       orders.forEach(function(o) {
-        const managers = splitNames_(o['Менеджер'] || '');
-        const masters  = splitNames_(o['Оклейщики'] || '');
-        const admins   = splitNames_(o['Администратор'] || '');
-        const gross    = Number(o['Валовая прибыль']) || 0;
-        const price    = Number(o['Стоимость заказа']) || 0;
-        let involved   = false;
+        const managers    = splitNames_(o['Менеджер'] || '');
+        const masters     = splitNames_(o['Оклейщики'] || '');
+        const tintMasters = splitNames_(o['Тонировщики'] || '');
+        const admins      = splitNames_(o['Администратор'] || '');
+        const gross       = Number(o['Валовая прибыль']) || 0;
+        const price       = Number(o['Стоимость заказа']) || 0;
+        // Валовая делится по доле цены: тонировщик — с части тонировки, оклейщик — с оклейки
+        const tintPrice   = Number(o['Стоимость тонировки']) || 0;
+        const tintGross   = price > 0 ? gross * (tintPrice / price) : 0;
+        const wrapGross   = gross - tintGross;
+        let involved      = false;
 
         if (managers.indexOf(name) >= 0) {
           const share = managers.length > 0 ? gross * (rates.manager / 100) / managers.length : 0;
@@ -72,7 +77,12 @@ function calcSalaryForPeriod(from, to) {
           involved = true;
         }
         if (masters.indexOf(name) >= 0) {
-          const share = masters.length > 0 ? gross * (rates.master / 100) / masters.length : 0;
+          const share = masters.length > 0 ? wrapGross * (rates.master / 100) / masters.length : 0;
+          masterBonus += share;
+          involved = true;
+        }
+        if (tintMasters.indexOf(name) >= 0) {
+          const share = tintMasters.length > 0 ? tintGross * (rates.master / 100) / tintMasters.length : 0;
           masterBonus += share;
           involved = true;
         }
