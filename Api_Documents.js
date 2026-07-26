@@ -551,7 +551,7 @@ function buildDocPlaceholders_(d, serviceMode) {
   var auto  = String(o['Авто'] || '').trim();
   var marka = auto.split(/\s+/)[0] || '';
   var model = auto.split(/\s+/).slice(1).join(' ');
-  var film  = (d.materials[0] || {})['Название'] || '';
+  var film  = (d.materials[0] || {})['Название'] || o['Пленка'] || '';
   var usedFilm = d.materials.reduce(function(s, m){ return s + (Number(m['Кол-во']) || 0); }, 0);
   var get = function(k, def){ return (co[k] != null && co[k] !== '') ? co[k] : def; };
 

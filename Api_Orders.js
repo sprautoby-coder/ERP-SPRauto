@@ -19,7 +19,7 @@
  * и редактируются в любой момент), а НЕ от статуса оплаты. Это единый источник истины.
  * Поддержан и legacy 'Да' для обратной совместимости со старыми вызовами.
  */
-function calcOrderFinance_(price, materialCost, totalExpenses, payType, managersStr, mastersStr, adminName, adminPct, tintPrice, tintMastersStr) {
+function calcOrderFinance_(price, materialCost, totalExpenses, payType, managersStr, mastersStr, adminName, adminPct, tintPrice, tintMastersStr, officialPaid) {
   price          = Number(price)          || 0;
   materialCost   = Number(materialCost)   || 0;
   totalExpenses  = Number(totalExpenses)  || 0;
@@ -27,8 +27,14 @@ function calcOrderFinance_(price, materialCost, totalExpenses, payType, managers
   if (tintPrice < 0)     tintPrice = 0;
   if (tintPrice > price) tintPrice = price;   // тонировка не может стоить больше всего заказа
 
-  var isBeznal       = (payType === 'Безнал' || payType === 'Да');
-  var bezналDiscount = isBeznal ? price * 0.15 : 0;
+  // База −15% для бонусов = ОФИЦИАЛЬНО полученные деньги (безнал + нал с чеком):
+  // при выводе с них теряется ~15% на налоги. «Нал без чека» базу не уменьшает.
+  // Если официальных платежей ещё нет — оценка по условиям оплаты (Безнал/Нал с чеком → вся сумма).
+  officialPaid = Number(officialPaid) || 0;
+  var official;
+  if (officialPaid > 0) official = Math.min(officialPaid, price);
+  else official = (payType === 'Безнал' || payType === 'Да' || payType === 'Нал с чеком') ? price : 0;
+  var bezналDiscount = official * 0.15;
   var grossProfit    = price - materialCost - totalExpenses - bezналDiscount;
 
   var managersCount = managersStr ? managersStr.split(',').filter(function(s){ return s.trim(); }).length : 0;
@@ -80,7 +86,20 @@ function ensureColumns_(sheet, names) {
   }
   return headers;
 }
-var TINT_COLUMNS_ = ['Стоимость тонировки', 'Тонировщики', 'Бонус тонировщика'];
+var TINT_COLUMNS_ = ['Стоимость тонировки', 'Тонировщики', 'Бонус тонировщика', 'Пленка', 'Светопропускаемость'];
+
+/** Сумма ОФИЦИАЛЬНО полученных денег по заказу (безнал + нал с чеком) — база для −15% бонусов. */
+function getOfficialPaid_(orderId) {
+  var sum = 0;
+  try {
+    readSheetAsObjects('DATABASE', 'PAYMENTS').forEach(function(p){
+      if (String(p['Заказ ID']) !== String(orderId)) return;
+      var m = String(p['Способ оплаты'] || '');
+      if (m === 'Безнал' || m === 'Нал с чеком') sum += Number(p['Сумма']) || 0;
+    });
+  } catch (e) {}
+  return sum;
+}
 
 // Глобальные ставки бонусов (%) из листа Настроек. Дефолты: менеджер 10, мастер 35, админ 5.
 // Ключи: manager_bonus_pct / master_bonus_pct / admin_bonus_pct.
@@ -410,7 +429,8 @@ function recalcOrderFinance(orderId) {
         rowData['Стоимость заказа'], totalMat, totalExp,
         rowData['Тип оплаты'], rowData['Менеджер'], rowData['Оклейщики'],
         adminNameR, getEmployeeBonusPct_(adminNameR, 5),
-        rowData['Стоимость тонировки'], rowData['Тонировщики']
+        rowData['Стоимость тонировки'], rowData['Тонировщики'],
+        getOfficialPaid_(orderId)
       );
 
       const tz  = Session.getScriptTimeZone();
@@ -497,6 +517,7 @@ function updateOrder(id, payload) {
       if (payload.masters     !== undefined) setCell('Оклейщики',       payload.masters);
       if (payload.tintMasters !== undefined) setCell('Тонировщики',     payload.tintMasters);
       if (payload.tintPrice   !== undefined) setCell('Стоимость тонировки', Number(payload.tintPrice) || 0);
+      if (payload.film        !== undefined) setCell('Пленка',          payload.film);
       if (payload.admin       !== undefined) setCell('Администратор',   payload.admin);
 
       if (payload.service !== undefined) {
@@ -525,7 +546,7 @@ function updateOrder(id, payload) {
         const tintMasters= payload.tintMasters !== undefined ? payload.tintMasters       : String(row['Тонировщики'] || '');
         const matCost    = Number(row['Итого материалы']) || 0;
         const expCost    = Number(row['Итого расходы'])   || 0;
-        financeResult    = calcOrderFinance_(price, matCost, expCost, payType, manager, masters, admin, getEmployeeBonusPct_(admin, 5), tintPrice, tintMasters);
+        financeResult    = calcOrderFinance_(price, matCost, expCost, payType, manager, masters, admin, getEmployeeBonusPct_(admin, 5), tintPrice, tintMasters, getOfficialPaid_(id));
 
         if (payload.price !== undefined) setCell('Стоимость заказа', price);
         setCell('Валовая прибыль',      financeResult.grossProfit);

@@ -7694,7 +7694,7 @@ function renderOrderCard(order) {
     : '<div style="font-size:12px;color:var(--text3);padding:4px 0">Платежей пока нет</div>';
 
   // Опции типа оплаты
-  var payTypeOpts = ['','Нал','Безнал','Отсрочка','Рассрочка'].map(function(t){
+  var payTypeOpts = ['','Нал','Безнал','Смешанная','Отсрочка','Рассрочка'].map(function(t){
     var label = t === '' ? '— не указано —' : t;
     return '<option value="' + t + '"' + (t===payType?' selected':'') + '>' + label + '</option>';
   }).join('');
@@ -7710,11 +7710,13 @@ function renderOrderCard(order) {
   var schedRows = sched.map(function(s, idx){
     var paidS = s['Оплачен'] === 'Да';
     var dISO  = ruToIso_(s['Дата']);
+    // Все взносы редактируемые (в т.ч. уже оплаченные — план можно корректировать вручную).
+    // После сохранения статус «оплачен» пересчитается по фактическим платежам.
     return '<div class="sched-row" data-paid="' + (paidS?'1':'0') + '" style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid var(--border)">' +
-      '<span style="width:18px;text-align:center;color:' + (paidS?'var(--success)':'var(--text3)') + '">' + (paidS?'✓':'○') + '</span>' +
+      '<span style="width:18px;text-align:center;color:' + (paidS?'var(--success)':'var(--text3)') + '" title="' + (paidS?'оплачен':'не оплачен') + '">' + (paidS?'✓':'○') + '</span>' +
       '<span style="width:22px;font-size:12px;color:var(--text3)">№' + (s['№']||(idx+1)) + '</span>' +
-      '<input type="date" class="sched-date" value="' + dISO + '"' + (paidS?' disabled':'') + ' style="' + inpS + ';flex:1;min-width:0" onchange="updateSchedSum_()">' +
-      '<input type="number" class="sched-amt" min="0" step="0.01" value="' + (Number(s['Сумма'])||0) + '"' + (paidS?' disabled':'') + ' style="' + inpS + ';width:92px;text-align:right" oninput="updateSchedSum_()">' +
+      '<input type="date" class="sched-date" value="' + dISO + '" style="' + inpS + ';flex:1;min-width:0" onchange="updateSchedSum_()">' +
+      '<input type="number" class="sched-amt" min="0" step="0.01" value="' + (Number(s['Сумма'])||0) + '" style="' + inpS + ';width:92px;text-align:right" oninput="updateSchedSum_()">' +
     '</div>';
   }).join('');
   var splitControl = (!isPaid)
@@ -7847,7 +7849,7 @@ function renderOrderCard(order) {
             finBox_('Оплачено', fmt(paid), 'var(--success)') +
             finBox_('Остаток', fmt(remaining), remaining>0?'var(--danger)':'var(--success)') +
           '</div>' +
-          '<label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Условия оплаты (−15% при Безнал)</label>' +
+          '<label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Условия оплаты (−15% ЗП с безнала и нала с чеком)</label>' +
           '<select onchange="updateOrderCardField(\'' + oid + '\',{payType:this.value})" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--inp);color:var(--text);margin-bottom:8px">' + payTypeOpts + '</select>' +
           '<label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Срок оплаты / следующий взнос</label>' +
           '<input type="date" value="' + dueIso + '" onchange="setOrderCardDueDate(\'' + oid + '\', this.value)" style="width:100%;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--inp);color:var(--text);margin-bottom:10px">' +
@@ -8293,20 +8295,30 @@ function renderCardPersonnel() {
   var tintPriceVal = (Number(o['Стоимость тонировки']) || '') === '' ? '' : Number(o['Стоимость тонировки']);
   var tintSection  = '';
   if (isTintOrder) {
-    var tinterChecks = emps.map(function(e){
+    // Тонировщики (по роли) — первыми, затем остальные сотрудники
+    var isTinterRole = function(e){ return /тонировщик/i.test((e['Основная должность'] || '') + ',' + (e['Доп. роли'] || '')); };
+    var tintersFirst = emps.slice().sort(function(a, b){ return (isTinterRole(b)?1:0) - (isTinterRole(a)?1:0); });
+    var tinterChecks = tintersFirst.map(function(e){
       var n = e['ФИО'] || e['Имя'] || ''; if (!n) return '';
-      var roles = (e['Основная должность'] || '') + ',' + (e['Доп. роли'] || '');
-      var isTinter = /тонировщик/i.test(roles);
+      var isTinter = isTinterRole(e);
       // если тонировщики ещё не заданы — авто-подтягиваем по роли; иначе уважаем сохранённых
       var on = tintList.length ? (tintList.indexOf(n) >= 0) : isTinter;
       return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">' +
         '<input type="checkbox" class="card-tinter-cb" value="' + n.replace(/"/g,'&quot;') + '"' + (on ? ' checked' : '') + ' onchange="persAutoSave()"> ' + n + (isTinter ? ' 🎨' : '') + '</label>';
     }).join('');
+    var filmVal  = String(o['Пленка'] || '').replace(/"/g,'&quot;');
+    var lightVal = String(o['Светопропускаемость'] == null ? '' : o['Светопропускаемость']).replace(/"/g,'&quot;');
     tintSection =
       '<div style="border-top:1px solid var(--border);margin:8px 0 0;padding-top:8px">' +
         '<label style="font-size:10px;color:var(--text3)">🎨 Стоимость тонировки, руб <span style="color:var(--text3)">(из общей суммы заказа)</span></label>' +
         '<input id="card-tint-price" type="number" min="0" value="' + tintPriceVal + '" style="' + inp + ';margin:2px 0 8px" oninput="persAutoSave()">' +
-        '<div style="font-size:10px;color:var(--text3);margin-bottom:2px">Тонировщики (бонус — с части тонировки)</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 88px;gap:8px">' +
+          '<div><label style="font-size:10px;color:var(--text3)">Плёнка (для документов)</label>' +
+            '<input id="card-tint-film" value="' + filmVal + '" placeholder="напр. Nano Ceramic" style="' + inp + ';margin:2px 0 8px" oninput="persAutoSave()"></div>' +
+          '<div><label style="font-size:10px;color:var(--text3)">Светопр., %</label>' +
+            '<input id="card-tint-light" type="number" min="0" max="100" value="' + lightVal + '" style="' + inp + ';margin:2px 0 8px" oninput="persAutoSave()"></div>' +
+        '</div>' +
+        '<div style="font-size:10px;color:var(--text3);margin-bottom:2px">Тонировщики (бонус — с части тонировки; тонировщики — первыми)</div>' +
         '<div style="max-height:100px;overflow:auto">' + tinterChecks + '</div>' +
       '</div>';
   }
@@ -8346,19 +8358,21 @@ function persFlush_(cb) {
   var tintEl = document.getElementById('card-tint-price');
   var hasTint = !!tintEl;
   var tintPrice = hasTint ? (Number(tintEl.value) || 0) : null;
-  var tintMasters = null;
+  var tintMasters = null, tintFilm = null, tintLight = null;
   if (hasTint) {
     var tm = [];
     document.querySelectorAll('.card-tinter-cb:checked').forEach(function(cb2){ tm.push(cb2.value); });
     tintMasters = tm.join(', ');
+    tintFilm  = (document.getElementById('card-tint-film')  || {}).value || '';
+    tintLight = (document.getElementById('card-tint-light') || {}).value || '';
   }
   var st = function(t,c){ var e=document.getElementById('card-pers-status'); if(e){e.textContent=t; e.style.color=c||'var(--text3)';} };
   st('сохранение…');
   // обновим модель сразу (для документов/перерисовки)
   o['Менеджер'] = mgr; o['Оклейщики'] = masters.join(', '); o['Администратор'] = admin;
-  if (hasTint) { o['Стоимость тонировки'] = tintPrice; o['Тонировщики'] = tintMasters; }
+  if (hasTint) { o['Стоимость тонировки'] = tintPrice; o['Тонировщики'] = tintMasters; o['Пленка'] = tintFilm; o['Светопропускаемость'] = tintLight; }
   var payload = { manager: mgr, masters: masters.join(', '), admin: admin };
-  if (hasTint) { payload.tintPrice = tintPrice; payload.tintMasters = tintMasters; }
+  if (hasTint) { payload.tintPrice = tintPrice; payload.tintMasters = tintMasters; payload.film = tintFilm; payload.lightTransmission = tintLight; }
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) { st('ошибка сохранения', 'var(--danger)'); if (cb) cb(); return; }
@@ -8784,12 +8798,14 @@ function finLine_(label, value, color, bold) {
 // Внутренности блока «Финансовый итог» (для обновления без перезагрузки карточки)
 function renderCardFinance_(order) {
   var fmt = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
-  var payType = String(order['Тип оплаты'] || '').trim();
+  // Фактический вычет −15% = Стоимость − материалы − расходы − Валовая (считается от официальных денег)
+  var discount = Math.max(0, (Number(order['Стоимость заказа'])||0) - (Number(order['Итого материалы'])||0)
+                              - (Number(order['Итого расходы'])||0) - (Number(order['Валовая прибыль'])||0));
   return '<div style="font-weight:600;margin-bottom:10px">Финансовый итог</div>' +
     finLine_('Стоимость заказа', fmt(order['Стоимость заказа']), '') +
     finLine_('Итого материалы', '−' + fmt(order['Итого материалы']), 'var(--text3)') +
     finLine_('Итого расходы',   '−' + fmt(order['Итого расходы']),   'var(--text3)') +
-    (payType==='Безнал' ? finLine_('Безнал −15%', '−' + fmt(Number(order['Стоимость заказа'])*0.15), 'var(--text3)') : '') +
+    (discount > 0.5 ? finLine_('−15% (безнал/нал с чеком)', '−' + fmt(discount), 'var(--text3)') : '') +
     '<div style="border-top:1px solid var(--border);margin:8px 0"></div>' +
     finLine_('Валовая прибыль', fmt(order['Валовая прибыль']), 'var(--success)') +
     finLine_('Бонус менеджера', fmt(order['Бонус менеджера']), 'var(--accent)') +
