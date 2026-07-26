@@ -136,6 +136,16 @@ function getDashboardData(period) {
       expByCategory[cat] = (expByCategory[cat] || 0) + (Number(e['Сумма']) || 0);
     });
 
+    // Остатки касса / расчётный счёт (всё время, не зависит от периода)
+    let kassaBalance = 0, bankBalance = 0;
+    try { kassaBalance = getKassaBalance_(); } catch (e) {}
+    try {
+      let bIn = 0, bOut = 0;
+      readSheetAsObjects('DATABASE', 'PAYMENTS').forEach(function(p){ if (p['ID'] && String(p['Способ оплаты']) === 'Безнал') bIn += (Number(p['Сумма']) || 0) * 0.85; });
+      expenses.forEach(function(e){ if (e['ID'] && String(e['Способ оплаты'] || '') === 'Безнал') bOut += Number(e['Сумма']) || 0; });
+      bankBalance = bIn - bOut;
+    } catch (e) {}
+
     return {
       kpi: {
         revenue:     Math.round(revenue     * 100) / 100,
@@ -146,6 +156,8 @@ function getDashboardData(period) {
         debtSum:     Math.round(debtSum * 100) / 100,
         expenses:    Math.round(expensesSum * 100) / 100,
         avgCheck:    filtered.length ? Math.round(revenue / filtered.length) : 0,
+        kassaBalance: Math.round(kassaBalance * 100) / 100,
+        bankBalance:  Math.round(bankBalance * 100) / 100,
       },
       byService:     byService,
       recentOrders:  recent,
