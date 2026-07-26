@@ -1878,6 +1878,38 @@ function renderKassa(k) {
 
 function escapeHtml_(s){ return String(s).replace(/[&<>"]/g, function(c){ return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
 
+// Печать кассы за текущий вид (день или период)
+function printKassa() {
+  var k = App._kassa; if (!k) { toast('Сначала откройте Кассу', 'error'); return; }
+  var isR = !!k.isRange;
+  var f = function(n){ return (Math.round(Number(n||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+  var periodLbl = isR ? (k.fromDate + ' — ' + k.toDate) : (k.date || '');
+  var rows = (k.operations || []).map(function(op){
+    var amt = (op.type === 'расход' ? '−' : (op.type === 'безнал' ? '' : '+')) + f(op.amount);
+    var when = (isR && op.date ? op.date + ' ' : '') + (op.time || '');
+    var typ = op.type === 'расход' ? 'Расход' : (op.type === 'безнал' ? 'Безнал' : 'Приход');
+    return '<tr><td>' + when + '</td><td>' + typ + '</td><td>' + escapeHtml_(op.desc || '') + '</td><td style="text-align:right">' + amt + '</td></tr>';
+  }).join('') || '<tr><td colspan="4" style="text-align:center;color:#777">Нет операций</td></tr>';
+  var w1 = isR ? 'период' : 'день';
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Касса</title>' +
+    '<style>body{font-family:Arial;font-size:12px;margin:15mm;color:#111}h2{text-align:center;margin-bottom:2px}.period{text-align:center;color:#555;margin-bottom:12px}' +
+    'table{width:100%;border-collapse:collapse;margin-bottom:12px}td,th{border:1px solid #ccc;padding:4px 7px}th{background:#f0f0f0;text-align:left}' +
+    '.sum td{border:none;padding:2px 0}@media print{.no-print{display:none}}</style></head><body>' +
+    '<div class="no-print"><button onclick="window.print()">Печать</button></div>' +
+    '<h2>КАССА (наличные)</h2><div class="period">' + (isR ? 'Период: ' : 'День: ') + periodLbl + '</div>' +
+    '<table class="sum">' +
+      '<tr><td>Было на начало ' + (isR ? 'периода' : 'дня') + '</td><td style="text-align:right"><b>' + f(k.opening) + '</b></td></tr>' +
+      '<tr><td>Приход наличными за ' + w1 + '</td><td style="text-align:right;color:#0a0">+' + f(k.dayIn) + '</td></tr>' +
+      '<tr><td>Расход наличными за ' + w1 + '</td><td style="text-align:right;color:#c00">−' + f(k.dayOut) + '</td></tr>' +
+      '<tr><td>Безнал за ' + w1 + '</td><td style="text-align:right">' + f(k.dayBeznal) + '</td></tr>' +
+      '<tr><td><b>Итого на конец ' + (isR ? 'периода' : 'дня') + '</b></td><td style="text-align:right"><b>' + f(k.closing) + '</b></td></tr>' +
+    '</table>' +
+    '<table><thead><tr><th>' + (isR ? 'Дата/время' : 'Время') + '</th><th>Тип</th><th>Описание</th><th style="text-align:right">Сумма</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div style="color:#777">Деньги в кассе сейчас: ' + f(k.balanceNow) + '</div>' +
+    '</body></html>';
+  var w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
+}
+
 function kassaShiftDay(delta) {
   var base = App._kassaDate || kassaTodayIso_();
   var p = base.split('-');
