@@ -3895,7 +3895,7 @@ function renderOrdersTable(orders) {
   if (!tbody) return;
 
   if (!orders || orders.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;padding:32px;color:var(--text2)">Заказов не найдено</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;padding:32px;color:var(--text2)">Заказов не найдено</td></tr>';
     if (footer) footer.textContent = '';
     updateOrderSelBar();
     return;
@@ -4006,6 +4006,7 @@ function renderOrdersTable(orders) {
       '<td style="text-align:right;font-weight:600">' + price.toLocaleString('ru') + ' ' + CUR + '</td>' +
       '<td style="text-align:right;font-size:12px;color:var(--text2)">' + costCell + '</td>' +
       '<td style="text-align:center">' + payBadge + payDates + '</td>' +
+      '<td style="text-align:center;font-size:12px">' + (o._payMethod ? '<span style="color:var(--text2)">' + o._payMethod + '</span>' : '<span style="color:var(--text3)">—</span>') + '</td>' +
       '<td style="text-align:center">' + statusBadge_(status) + '</td>' +
       '<td style="text-align:center">' + verCell + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + (o['Менеджер'] || '—') + '</td>' +
@@ -6359,7 +6360,8 @@ function renderRecentOrders(orders, totalCount) {
       '<td style="font-size:12px">' + (o.service || '') + '</td>' +
       '<td style="font-weight:600;text-align:right;white-space:nowrap">' + Number(o.price||0).toLocaleString('ru') + ' ' + CUR + '</td>' +
       '<td style="text-align:center">' + payBadge(o) + '</td>' +
-      '<td style="text-align:center"><span style="font-size:11px;font-weight:600;color:' + statusColor + '">' + (o.status || '') + '</span></td>' +
+      '<td style="text-align:center;font-size:12px">' + (o.payMethod ? '<span style="color:var(--text2)">' + o.payMethod + '</span>' : '<span style="color:var(--text3)">—</span>') + '</td>' +
+      '<td style="text-align:center">' + statusBadge_(o.status) + '</td>' +
       '<td style="text-align:center">' + verCell + '</td>' +
       '<td style="text-align:center" onclick="event.stopPropagation()"><button class="row-del-btn" onclick="deleteOrderFromDash(\'' + o.id + '\')" title="Удалить заказ (в Корзину)">🗑</button></td>' +
     '</tr>';
@@ -6368,7 +6370,9 @@ function renderRecentOrders(orders, totalCount) {
   container.innerHTML = head +
     '<div class="clients-table-wrap" id="dash-orders-wrap"><table class="clients-table resizable-table" id="dash-orders-table"><thead><tr>' +
       '<th style="min-width:120px">Договор</th><th style="min-width:80px">Дата</th><th style="min-width:140px">Авто / Госномер</th><th style="min-width:110px">Услуга</th>' +
-      '<th style="min-width:90px;text-align:right">Сумма</th><th style="min-width:70px;text-align:center">Оплата</th><th style="min-width:90px;text-align:center">Статус</th>' +
+      '<th style="min-width:90px;text-align:right">Сумма</th><th style="min-width:70px;text-align:center">Оплата</th>' +
+      '<th style="min-width:90px;text-align:center" title="Способ оплаты (после оплаты)">Способ</th>' +
+      '<th style="min-width:90px;text-align:center">Статус</th>' +
       '<th style="min-width:84px;text-align:center" title="Проверено директором">✓ Пров.</th>' +
       '<th style="width:44px;text-align:center" title="Удалить"></th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table>' + footNote + '</div>';

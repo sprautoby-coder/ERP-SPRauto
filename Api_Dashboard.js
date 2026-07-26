@@ -28,11 +28,14 @@ function getDashboardData(period) {
 
     // Уплачено по заказам — для остатка дебиторки
     const paidByOrder = {};
+    const methodsByOrder = {};
     try {
       readSheetAsObjects('DATABASE', 'PAYMENTS').forEach(function(p) {
         if (!p['ID']) return;
         const oid = String(p['Заказ ID']);
         paidByOrder[oid] = (paidByOrder[oid] || 0) + (Number(p['Сумма']) || 0);
+        const m = String(p['Способ оплаты'] || '').trim();
+        if (m) { (methodsByOrder[oid] = methodsByOrder[oid] || {})[m] = true; }
       });
     } catch (e) {}
 
@@ -126,6 +129,13 @@ function getDashboardData(period) {
           beznal:   o['Безнал'] || '',
           payStatus: o['Статус оплаты'] || '',
           payType:   o['Тип оплаты'] || '',
+          payMethod: (function(){
+            var ms = Object.keys(methodsByOrder[String(o['ID'])] || {});
+            if (ms.length === 1) return ms[0];
+            if (ms.length > 1)   return 'Смешанная';
+            var t = String(o['Тип оплаты'] || '').trim();
+            return (t === 'Отсрочка' || t === 'Рассрочка') ? t : '';
+          })(),
           verified:  String(o['Проверено'] || '') === 'Да',
         };
       });

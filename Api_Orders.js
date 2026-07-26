@@ -197,13 +197,17 @@ function getOrders(filter) {
       });
     } catch (e) { /* лист клиентов может отсутствовать */ }
 
-    // Карта уплаченного по заказам — для прогресса рассрочки и остатка
+    // Карта уплаченного по заказам — для прогресса рассрочки и остатка,
+    // + набор способов оплаты по заказу (для колонки «Способ оплаты»)
     var paidByOrder = {};
+    var methodsByOrder = {};
     try {
       readSheetAsObjects('DATABASE', 'PAYMENTS').forEach(function(p) {
         if (!p['ID']) return;
         var oid = String(p['Заказ ID']);
         paidByOrder[oid] = (paidByOrder[oid] || 0) + (Number(p['Сумма']) || 0);
+        var m = String(p['Способ оплаты'] || '').trim();
+        if (m) { (methodsByOrder[oid] = methodsByOrder[oid] || {})[m] = true; }
       });
     } catch (e) { /* лист платежей может отсутствовать */ }
 
@@ -261,6 +265,15 @@ function getOrders(filter) {
       o._remaining  = round2(Math.max(0, price - paid));
       o._nextPay    = o['Срок оплаты'] || '';
       o._finalPay   = (finalPayByOrder[String(o['ID'])] || {}).date || '';
+      // Способ оплаты (появляется после оплаты): фактические способы из платежей;
+      // несколько разных → «Смешанная»; нет платежей, но отсрочка/рассрочка → условие.
+      var methods = Object.keys(methodsByOrder[String(o['ID'])] || {});
+      if (methods.length === 1)      o._payMethod = methods[0];
+      else if (methods.length > 1)   o._payMethod = 'Смешанная';
+      else {
+        var t = String(o['Тип оплаты'] || '').trim();
+        o._payMethod = (t === 'Отсрочка' || t === 'Рассрочка') ? t : '';
+      }
       return o;
     });
    });
