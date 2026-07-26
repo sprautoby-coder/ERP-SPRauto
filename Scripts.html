@@ -6137,7 +6137,7 @@ function renderFinance_(d) {
     finKpi_('Расходы (опер.)', finFmt_(d.opExpenses), 'показать детализацию ▾', '', "finToggle_('fin-exp-detail')") +
   '</div>';
 
-  var pl = '<div class="fin-card" style="margin-bottom:16px"><div class="fin-card-title">Как получилась прибыль</div>' +
+  var pl = '<div class="fin-card" style="margin-bottom:16px;max-width:560px"><div class="fin-card-title">Как получилась прибыль</div>' +
     finPl_('Выручка', d.revenue) +
     finPl_('− Себестоимость материалов', -d.materialCost) +
     finPl_('− Затраты по заказам (такси/арматура)', -d.orderExpenses) +
