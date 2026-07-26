@@ -4832,13 +4832,16 @@ function initOrderForm() {
   document.querySelectorAll('#ord-masters-wrap input[type=checkbox]').forEach(function(cb){ cb.checked = false; });
   var hid = document.getElementById('ord-masters'); if (hid) hid.value = '';
 
-  // Авто-подстановка менеджера и администратора по ролям (по умолчанию — первый менеджер/админ)
+  // Авто-подстановка менеджера и администратора: последний использованный (запоминаем),
+  // иначе — первый сотрудник с ролью менеджер/админ. Ставим всегда (форма новая).
   ensureEmployeesLoaded_(function(){
     fillOrderEmployees();
+    var lastM = '', lastA = '';
+    try { lastM = localStorage.getItem('spr_last_manager') || ''; lastA = localStorage.getItem('spr_last_admin') || ''; } catch (e) {}
     var selMgr = document.getElementById('ord-manager');
-    if (selMgr && !selMgr.value) { var dm = defaultEmpByRole_(/менеджер/i); if (dm) selMgr.value = dm; }
+    if (selMgr) selMgr.value = lastM || defaultEmpByRole_(/менеджер/i) || '';
     var selAdm = document.getElementById('ord-admin');
-    if (selAdm && !selAdm.value) { var da = defaultEmpByRole_(/админ/i); if (da) selAdm.value = da; }
+    if (selAdm) selAdm.value = lastA || defaultEmpByRole_(/админ/i) || '';
   });
 
   // Сбрасываем тип заказчика на «Физ. лицо»
@@ -5395,6 +5398,9 @@ function submitNewOrderProceed() {
     materials:   App._orderMaterials.filter(function(m){ return m && m.materialId; }),
     expenses:    App._orderExpenses.filter(function(e){ return e && e.name && e.amount > 0; }),
   };
+
+  // Запоминаем менеджера/админа, чтобы подставлять в следующих заказах
+  try { localStorage.setItem('spr_last_manager', payload.manager || ''); localStorage.setItem('spr_last_admin', payload.admin || ''); } catch (e) {}
 
   var btn = document.getElementById('ord-submit-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
