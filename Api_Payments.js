@@ -250,10 +250,11 @@ function getDebtOrders() {
     });
 
     const result = [];
-    const cancelledSet = getCancelledStatusSet_();
+    const receivableSet = getReceivableStatusSet_();   // дебиторка только с «Готов» (не отменён)
 
     orders.forEach(function(o) {
-      if (!o['ID'] || String(o['Удалён'] || '') === 'Да' || cancelledSet[o['Статус']]) return; // мягко удалённые не учитываем
+      // Долг только по ГОТОВЫМ заказам; мягко удалённые и «Новый»/«В работе» — не считаем
+      if (!o['ID'] || String(o['Удалён'] || '') === 'Да' || !receivableSet[o['Статус']]) return;
 
       // Статус оплаты с откатом на legacy «Безнал» для старых строк
       let payStatus = String(o['Статус оплаты'] || '').trim();

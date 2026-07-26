@@ -70,11 +70,11 @@ function getDDS(from, to) {
     });
 
     // ДЕБИТОРКА = непогашенный остаток по неоплаченным/частичным заказам
-    const cancelledSet = getCancelledStatusSet_();
+    const receivableSet = getReceivableStatusSet_();   // дебиторка только с «Готов»
     orders.forEach(function(o) {
       if (!o['ID'] || String(o['Удалён'] || '') === 'Да' || !inPeriod(o['Дата'])) return; // мягко удалённые не учитываем
       const status = o['Статус'] || '';
-      if (cancelledSet[status]) return;
+      if (!receivableSet[status]) return;   // «Новый»/«В работе»/отменён — не долг
 
       let payStatus = String(o['Статус оплаты'] || '').trim();
       if (!payStatus) {

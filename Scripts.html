@@ -3572,6 +3572,18 @@ function orderStatusMeta(name) {
 function orderStatusColor(name) { var m = orderStatusMeta(name); return m ? m.color : 'var(--text2)'; }
 function isCancelledStatus(name) { var m = orderStatusMeta(name); return !!(m && m.cancelled); }
 function isDoneStatus(name) { var m = orderStatusMeta(name); return !!(m && m.done); }
+// Дебиторка возникает только когда работа выполнена: статус «Готов» и позже (не отменён).
+// Заказы «Новый»/«В работе» долгом не считаются.
+function isReceivableStatus(name) {
+  if (isCancelledStatus(name)) return false;
+  var list = orderStatusList(), readyIdx = -1, curIdx = -1;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].name === 'Готов') readyIdx = i;
+    if (list[i].name === name)    curIdx = i;
+  }
+  if (readyIdx >= 0 && curIdx >= 0) return curIdx >= readyIdx;   // на «Готов» и позже
+  return isDoneStatus(name);   // запасной вариант (если «Готов» нет в конфиге)
+}
 
 /* ===== РЕДАКТОР ВОРОНОК (СТАТУСОВ ЗАКАЗОВ) ===== */
 function openStatusesEditor() {
@@ -3807,13 +3819,16 @@ function commitStatusRename(oldName, val) {
   pushStatuses_(list, [{ from: oldName, to: newName }]);
 }
 
-// Бейдж статуса заказа: насыщенный цвет + мягкая подложка, читается на любой строке
+// Бейдж статуса заказа: тёмный читаемый текст + цветная рамка/подложка.
+// Текст всегда var(--text) — виден при ЛЮБОМ (даже очень светлом) цвете статуса.
 function statusBadge_(status) {
   if (!status) return '';
   var c = orderStatusColor(status);
-  var bg = /^#[0-9a-fA-F]{6}$/.test(c) ? c + '33' : 'rgba(120,140,170,.18)';
-  return '<span style="display:inline-block;font-size:11px;font-weight:700;color:' + c +
-         ';background:' + bg + ';padding:2px 10px;border-radius:10px;white-space:nowrap">' + status + '</span>';
+  var hex = /^#[0-9a-fA-F]{6}$/.test(c);
+  var bg = hex ? c + '22' : 'rgba(120,140,170,.15)';
+  var bd = hex ? c : 'var(--text3)';
+  return '<span style="display:inline-block;font-size:11px;font-weight:700;color:var(--text)' +
+         ';background:' + bg + ';border:1px solid ' + bd + ';padding:1px 9px;border-radius:10px;white-space:nowrap">' + status + '</span>';
 }
 
 function renderOrdersTable(orders) {
@@ -3841,15 +3856,18 @@ function renderOrdersTable(orders) {
     var isLegal    = o._clientType === 'юр';
     var isPaid     = payStatus === 'Оплачен';
 
-    // Просрочка: не оплачено и срок платежа (ближайший взнос / срок оплаты) уже прошёл
+    // Дебиторка учитывается только для готовых заказов (работа выполнена)
+    var receivable = isReceivableStatus(status);
+    // Просрочка: готовый неоплаченный заказ, срок платежа которого уже прошёл
     var todayStart = new Date(); todayStart.setHours(0,0,0,0);
     var dueStr  = o._nextPay || o['Срок оплаты'] || o._finalPay || '';
     var dueMs   = parseOrdDate_(dueStr);
-    var overdue = !isPaid && dueMs != null && dueMs < todayStart.getTime();
+    var overdue = !isPaid && receivable && dueMs != null && dueMs < todayStart.getTime();
 
     // Класс подсветки строки (контроль дебиторки). Просрочка — приоритетнее (красный).
     var rowClass = '';
     if (isPaid)                                       rowClass = 'row-paid';
+    else if (!receivable)                             rowClass = 'row-open';   // работа не готова — не долг
     else if (overdue)                                 rowClass = 'row-overdue';
     else if (isLegal)                                 rowClass = 'row-legal';
     else if (payStatus === 'Частично' || payType === 'Рассрочка') rowClass = 'row-rass';
@@ -3868,8 +3886,11 @@ function renderOrdersTable(orders) {
       payBadge = '<span style="font-size:11px;background:var(--yellow-soft);color:var(--warning);padding:2px 7px;border-radius:10px;">отсрочка</span>';
     } else if (payType === 'Рассрочка') {
       payBadge = '<span style="font-size:11px;background:var(--blue-soft);color:var(--blue);padding:2px 7px;border-radius:10px;">рассрочка</span>';
-    } else {
+    } else if (receivable) {
       payBadge = '<span style="font-size:11px;background:var(--red-soft);color:var(--danger);padding:2px 7px;border-radius:10px;">долг</span>';
+    } else {
+      // Работа ещё не готова — это не долг, а просто неоплаченный открытый заказ
+      payBadge = '<span style="font-size:11px;background:var(--bg-card2);color:var(--text3);padding:2px 7px;border-radius:10px;">не оплачен</span>';
     }
     if (isLegal) {
       payBadge += ' <span style="font-size:10px;background:var(--purple-soft);color:var(--purple);padding:1px 5px;border-radius:8px;" title="Юридическое лицо">ЮЛ</span>';

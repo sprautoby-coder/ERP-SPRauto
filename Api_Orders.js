@@ -820,6 +820,7 @@ function getOrdersStats() {
     var debtSum      = 0;
     var cancelledSet = getCancelledStatusSet_();
     var doneSet = getDoneStatusSet_();
+    var receivableSet = getReceivableStatusSet_();   // дебиторка только с «Готов»
 
     all.forEach(function(o) {
       if (!o['ID']) return;
@@ -827,7 +828,8 @@ function getOrdersStats() {
       var price = Number(o['Стоимость заказа']) || 0;
       totalRevenue += price;
       if (!cancelledSet[o['Статус']] && !doneSet[o['Статус']]) inWork++;
-      if (cancelledSet[o['Статус']]) return;
+      // Дебиторка — только для готовых заказов (работа выполнена, но не оплачена)
+      if (!receivableSet[o['Статус']]) return;
 
       // Статус оплаты с откатом на legacy «Безнал»
       var st = String(o['Статус оплаты'] || '').trim();

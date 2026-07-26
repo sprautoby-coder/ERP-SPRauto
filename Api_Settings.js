@@ -206,6 +206,22 @@ function getDoneStatusSet_() {
   return set;
 }
 
+/** Множество статусов, с которых начинается дебиторка: «Готов» и позже (не отменён).
+ *  Заказы «Новый»/«В работе» долгом НЕ считаются. */
+function getReceivableStatusSet_() {
+  var set = {};
+  try {
+    var list = getOrderStatuses();
+    var readyIdx = -1;
+    for (var i = 0; i < list.length; i++) { if (String(list[i].name) === 'Готов') readyIdx = i; }
+    list.forEach(function(s, i){
+      if (!s || s.cancelled) return;
+      if ((readyIdx >= 0 && i >= readyIdx) || s.done) set[String(s.name)] = true;
+    });
+  } catch (e) {}
+  return set;
+}
+
 /** Имя статуса по умолчанию для нового заказа (первая воронка). */
 function getDefaultStatusName_() {
   var list = getOrderStatuses();

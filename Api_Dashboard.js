@@ -60,6 +60,7 @@ function getDashboardData(period) {
     const byService = {};
     const cancelledSet = getCancelledStatusSet_();
     const doneSet = getDoneStatusSet_();
+    const receivableSet = getReceivableStatusSet_();   // дебиторка только с «Готов»
 
     filtered.forEach(function(o) {
       const price  = Number(o['Стоимость заказа'])  || 0;
@@ -75,8 +76,9 @@ function getDashboardData(period) {
 
       if (!cancelledSet[status] && !doneSet[status]) inWork++;
 
-      // Дебиторка = остаток по неоплаченным/частичным (по «Статус оплаты», откат на legacy «Безнал»)
-      if (!cancelledSet[status]) {
+      // Дебиторка = остаток по неоплаченным ГОТОВЫМ заказам (работа выполнена, но не оплачена).
+      // Заказы «Новый»/«В работе» долгом не считаются.
+      if (receivableSet[status]) {
         let payStatus = String(o['Статус оплаты'] || '').trim();
         if (!payStatus) {
           const bz = String(o['Безнал'] || '').trim();
