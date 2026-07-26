@@ -40,27 +40,34 @@ function getOrderForDocument(orderId) {
 /**
  * Генерировать HTML договора для печати.
  */
-function generateContractHtml(orderId) {
+function generateContractHtml(orderId, service) {
   return safeCall(function() {
     var d = getDocData_(orderId);
-    var map = buildDocPlaceholders_(d);
+    var map = buildDocPlaceholders_(d, service);
     var isLegal = String(d.client['Тип'] || '') === 'юр' || String(d.order['_clientType'] || '') === 'юр';
     var byProxy = isLegal && String(d.order['Подписант'] || '').trim() !== '';
     var body = fillTemplate_(contractTemplateHtml_(isLegal, byProxy), map);
-    return docWrap_('Договор ' + (map['Номер договора'] || ''), body, map['Логотип'], true);
+    return docWrap_('Договор ' + (map['Номер договора'] || '') + docSvcSuffix_(service), body, map['Логотип'], true);
   });
 }
 
 /** Отдельный Акт выполненных работ (без договора) — для закрытия заказа. */
-function generateActHtml(orderId) {
+function generateActHtml(orderId, service) {
   return safeCall(function() {
     var d = getDocData_(orderId);
-    var map = buildDocPlaceholders_(d);
+    var map = buildDocPlaceholders_(d, service);
     var isLegal = String(d.client['Тип'] || '') === 'юр' || String(d.order['_clientType'] || '') === 'юр';
     var byProxy = isLegal && String(d.order['Подписант'] || '').trim() !== '';
     var body = fillTemplate_(actBodyHtml_(isLegal, byProxy, false), map);
-    return docWrap_('Акт ' + (map['Номер договора'] || ''), body, map['Логотип'], true);
+    return docWrap_('Акт ' + (map['Номер договора'] || '') + docSvcSuffix_(service), body, map['Логотип'], true);
   });
+}
+
+/** Суффикс названия документа по услуге (для отдельных документов мультиуслуги). */
+function docSvcSuffix_(service) {
+  if (service === 'tint') return ' · Тонировка';
+  if (service === 'wrap') return ' · Оклейка';
+  return '';
 }
 
 // (старый генератор договора — оставлен как референс, не вызывается)
@@ -168,12 +175,16 @@ function generateContractHtmlLegacy_(orderId) {
 /**
  * Генерировать HTML заказ-наряда.
  */
-function generateOrderNaradHtml(orderId) {
+function generateOrderNaradHtml(orderId, service) {
   return safeCall(function() {
     var d = getDocData_(orderId);
-    var map = buildDocPlaceholders_(d);
-    var isTint = /тонир|tint/i.test(d.order['Услуга'] || '');
-    var price = Number(d.order['Стоимость заказа']) || 0;
+    var map = buildDocPlaceholders_(d, service);
+    var tintPrice = Number(d.order['Стоимость тонировки']) || 0;
+    var fullPrice = Number(d.order['Стоимость заказа']) || 0;
+    var isTint, price;
+    if (service === 'tint')      { isTint = true;  price = tintPrice > 0 ? tintPrice : fullPrice; }
+    else if (service === 'wrap') { isTint = false; price = tintPrice > 0 ? Math.max(0, fullPrice - tintPrice) : fullPrice; }
+    else                         { isTint = /тонир|tint/i.test(d.order['Услуга'] || ''); price = fullPrice; }
     var esc = function(s){ return String(s == null ? '' : s).replace(/"/g, '&quot;'); };
 
     // Плёнка (расход) — редактируемые строки
@@ -234,7 +245,7 @@ function generateOrderNaradHtml(orderId) {
       '<div class="sign"><span>_____________ / ' + map['Фамилия И.О.'] + '<br><span class="muted">(подпись заказчика)</span></span><span>' + (map['Дата сдачи кратко']||'') + '</span></div>' +
       naradRecalcScript_();
 
-    return docWrap_('Заказ-наряд ' + (map['Номер договора'] || ''), body, map['Логотип'], true);
+    return docWrap_('Заказ-наряд ' + (map['Номер договора'] || '') + docSvcSuffix_(service), body, map['Логотип'], true);
   });
 }
 
@@ -532,10 +543,11 @@ function tintWarrantyMonths_(name) {
 }
 
 /** Карта подстановок {{...}} → значение. Реквизиты — из настроек, дефолт «САНПРОТЕКТ». */
-function buildDocPlaceholders_(d) {
+function buildDocPlaceholders_(d, serviceMode) {
   var o = d.order, c = d.client, co = d.company;
   var fio   = o['Клиент'] || c['ФИО'] || c['Название организации'] || '';
   var price = Number(o['Стоимость заказа']) || 0;
+  var tintPrice = Number(o['Стоимость тонировки']) || 0;
   var auto  = String(o['Авто'] || '').trim();
   var marka = auto.split(/\s+/)[0] || '';
   var model = auto.split(/\s+/).slice(1).join(' ');
@@ -545,7 +557,14 @@ function buildDocPlaceholders_(d) {
 
   // Тонировка: описание всех плёнок с зоной и процентом (для договора/акта).
   // Пример: «Лобовое стекло — Nano Ceramic 70%, передние боковые — Carbon 20%».
-  var isTint_ = /тонир|tint/i.test(o['Услуга'] || '');
+  // Режим услуги (для отдельных документов на мультиуслугу):
+  //  'tint' — только тонировка (цена = стоимость тонировки),
+  //  'wrap' — только оклейка (цена = остаток без тонировки),
+  //  иначе  — по услуге заказа целиком.
+  var isTint_;
+  if (serviceMode === 'tint')      { isTint_ = true;  price = tintPrice > 0 ? tintPrice : price; }
+  else if (serviceMode === 'wrap') { isTint_ = false; if (tintPrice > 0) price = Math.max(0, price - tintPrice); }
+  else                             { isTint_ = /тонир|tint/i.test(o['Услуга'] || ''); }
   var tintDesc = '';
   var warrantyMonths = get('warranty_months', '36');   // общий срок по умолчанию
   if (isTint_) {
@@ -641,7 +660,7 @@ function buildDocPlaceholders_(d) {
         return '- тонировка а/м ' + avto + ', VIN номер ' + (o['VIN']||'') + (tintDesc ? ', плёнками: ' + tintDesc : (film ? ', плёнкой ' + film : '')) + ';';
       return '- оклейка кузова а/м ' + avto + ', VIN номер ' + (o['VIN']||'') + ' защитной плёнкой ' + film + ';';
     })(),
-    'Протокол услуга': (/тонир|tint/i.test(o['Услуга'] || '')
+    'Протокол услуга': (isTint_
                           ? 'Тонировка автомобиля'
                           : 'Оклейка кузова защитной плёнкой' + (o['Комплекс'] ? ' (комплекс «' + o['Комплекс'] + '»)' : '')),
     'Сумма':           price.toFixed(2),

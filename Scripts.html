@@ -7869,7 +7869,8 @@ function renderOrderCard(order) {
     photosSection_(oid);
 
   loadOrderPhotos(oid);
-  updateSchedSum_();   // показать итог по графику рассрочки при открытии
+  updateSchedSum_();      // показать итог по графику рассрочки при открытии
+  renderDocButtons_(order); // кнопки документов (для мультиуслуги — по каждой услуге)
 }
 
 /* ===== ФОТО ДО/ПОСЛЕ ===== */
@@ -8799,8 +8800,9 @@ function renderCardFinance_(order) {
     finLine_('Маржинальная',    fmt(order['Маржинальная прибыль']), 'var(--success)', true);
 }
 
-// Печать документа: сперва досохраняем правки (cvFlush_), затем генерируем
-function printDoc_(genFnName) {
+// Печать документа: сперва досохраняем правки (cvFlush_), затем генерируем.
+// service: '' | 'wrap' (оклейка) | 'tint' (тонировка) — для отдельных документов мультиуслуги.
+function printDoc_(genFnName, service) {
   var id = App._currentOrderId;
   if (!id) return;
   flushCard_(function(){
@@ -8810,13 +8812,40 @@ function printDoc_(genFnName) {
         var w = window.open('','_blank'); if(w){ w.document.write(resp.data); w.document.close(); }
       })
       .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
-      [genFnName](id);
+      [genFnName](id, service || '');
   });
 }
-function printOrderContract() { printDoc_('generateContractHtml'); }
-function printOrderNarad()    { printDoc_('generateOrderNaradHtml'); }
-function printWorkCard()      { printDoc_('generateWorkCardHtml'); }
-function printOrderAct()      { printDoc_('generateActHtml'); }
+function printOrderContract(service) { printDoc_('generateContractHtml',    service); }
+function printOrderNarad(service)    { printDoc_('generateOrderNaradHtml',  service); }
+function printWorkCard()             { printDoc_('generateWorkCardHtml'); }
+function printOrderAct(service)      { printDoc_('generateActHtml',         service); }
+
+// Определение состава услуг заказа
+function orderHasTint_(o){ return /тонир|tint/i.test(String((o||{})['Услуга'] || '')); }
+function orderHasWrap_(o){ return /оклейк|ppf|полиров|керам|антихром|шумо|химч/i.test(String((o||{})['Услуга'] || '')); }
+function orderMultiService_(o){ return orderHasTint_(o) && orderHasWrap_(o); }
+
+// Кнопки документов: для мультиуслуги — отдельные договор/наряд на каждую услугу
+function renderDocButtons_(o) {
+  var box = document.getElementById('order-card-docbtns');
+  if (!box) return;
+  var b = function(label, fn){ return '<button class="btn btn-ghost" onclick="' + fn + '">' + label + '</button>'; };
+  if (orderMultiService_(o)) {
+    box.innerHTML =
+      b('📄 Договор · Оклейка',   "printOrderContract('wrap')") +
+      b('📄 Договор · Тонировка', "printOrderContract('tint')") +
+      b('📋 Наряд · Оклейка',     "printOrderNarad('wrap')") +
+      b('📋 Наряд · Тонировка',   "printOrderNarad('tint')") +
+      b('Акт',         "printOrderAct('')") +
+      b('Карта работ', "printWorkCard()");
+  } else {
+    box.innerHTML =
+      b('Договор',      "printOrderContract('')") +
+      b('Заказ-наряд',  "printOrderNarad('')") +
+      b('Акт',          "printOrderAct('')") +
+      b('Карта работ',  "printWorkCard()");
+  }
+}
 
 /* ===== ИНИЦИАЛИЗАЦИЯ ===== */
 function init() {
