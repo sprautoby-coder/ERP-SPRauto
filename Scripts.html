@@ -1739,7 +1739,7 @@ function loadCurrentPage() {
   if (App.currentPage === 'dashboard') { restorePeriod_('dash'); renderDashboard(force); }
   if (App.currentPage === 'team')      loadTeam(force);
   if (App.currentPage === 'clients')   loadClients(force);
-  if (App.currentPage === 'orders')    loadOrders(force);
+  if (App.currentPage === 'orders')    { restorePeriod_('ord'); loadOrders(force); }
   if (App.currentPage === 'materials') loadMaterials(force);
   if (App.currentPage === 'sales')     loadSales(force);
   if (App.currentPage === 'inventory') loadInventory(force);
@@ -3369,12 +3369,33 @@ function setOrderStatusFilter(status, btn) {
   filterOrders();
 }
 
+// Разбор даты заказа dd.MM.yyyy → мс (или null)
+function parseOrdDate_(s) {
+  var m = String(s || '').match(/^(\d{2})\.(\d{2})\.(\d{4})/);
+  return m ? new Date(+m[3], +m[2] - 1, +m[1]).getTime() : null;
+}
+// Смена периода отображения заказов
+function onOrdPeriodChange() {
+  var p = (document.getElementById('ord-period') || {}).value;
+  var cw = document.getElementById('ord-custom-range');
+  if (cw) cw.style.display = (p === 'custom') ? 'flex' : 'none';
+  savePeriod_('ord');
+  filterOrders();
+}
+
 function filterOrders() {
   var search  = (document.getElementById('orders-search')         || {}).value || '';
   var service = (document.getElementById('orders-service-filter') || {}).value || '';
+  var range   = getPeriodRangeFromUI('ord');   // {from,to} ISO или пусто (Всё время)
+  var fromMs  = range.from ? new Date(range.from).getTime() : null;
+  var toMs    = range.to   ? new Date(range.to).getTime()   : null;
   var filtered = App.orders.filter(function(o) {
     if (App._orderFilter !== 'all' && o['Статус'] !== App._orderFilter) return false;
     if (service && o['Услуга'] !== service) return false;
+    if (fromMs || toMs) {
+      var od = parseOrdDate_(o['Дата']);
+      if (od != null) { if (fromMs && od < fromMs) return false; if (toMs && od > toMs) return false; }
+    }
     if (search) {
       var q  = search.toLowerCase();
       var cl = String(o['Клиент']   || '').toLowerCase();
@@ -4306,10 +4327,14 @@ function renderOrdersKanban(orders) {
   // Группируем по статусу (воронки — из white-label конфига)
   var STATUS_NAMES = orderStatusNames();
   var defStatus = STATUS_NAMES[0] || 'Новый';
+  // Имя статуса «Выдан» (done) — туда автоматически попадают оплаченные заказы
+  var doneName = (function(){ for (var i=0;i<STATUS_NAMES.length;i++) if (isDoneStatus(STATUS_NAMES[i])) return STATUS_NAMES[i]; return null; })();
   var byStatus = {};
   STATUS_NAMES.forEach(function(s){ byStatus[s] = []; });
   orders.forEach(function(o){
     var s = o['Статус'] || defStatus;
+    // Оплаченный заказ автоматически перемещается в «Выдан» (кроме отменённых)
+    if (doneName && String(o['Статус оплаты'] || '').trim() === 'Оплачен' && !isCancelledStatus(s)) s = doneName;
     if (!byStatus[s]) byStatus[s] = [];   // нестандартный статус (напр. из старых данных)
     byStatus[s].push(o);
   });

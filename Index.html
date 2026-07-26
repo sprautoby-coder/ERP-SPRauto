@@ -397,6 +397,20 @@
         <option value="Антихром">Антихром</option>
         <option value="Шумоизоляция">Шумоизоляция</option>
       </select>
+      <select class="form-select" id="ord-period" onchange="onOrdPeriodChange()" style="width:150px;flex:0 0 150px;height:38px;font-size:13px" title="Период отображения заказов">
+        <option value="all" selected>Всё время</option>
+        <option value="today">Сегодня</option>
+        <option value="week">Неделя</option>
+        <option value="month">Этот месяц</option>
+        <option value="prev_month">Прошлый месяц</option>
+        <option value="quarter">Квартал</option>
+        <option value="year">Год</option>
+        <option value="custom">Произвольный…</option>
+      </select>
+      <div id="ord-custom-range" style="display:none;gap:6px;align-items:center">
+        <input type="date" class="form-input" id="ord-from" onchange="filterOrders()" style="height:38px;width:140px" title="Дата с">
+        <input type="date" class="form-input" id="ord-to" onchange="filterOrders()" style="height:38px;width:140px" title="Дата по">
+      </div>
       <button class="btn btn-ghost" onclick="openTrash()" title="Удалённые заказы" style="height:38px;white-space:nowrap">🗑 Корзина</button>
       <button class="btn btn-ghost" onclick="openStatusesEditor()" title="Настроить воронки (статусы)" style="height:38px;white-space:nowrap">⚙ Воронки</button>
       <div style="position:relative">

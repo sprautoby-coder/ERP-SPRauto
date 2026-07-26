@@ -407,6 +407,9 @@ select.mat-inp { cursor:pointer; padding-right:2px; }
 #orders-table-wrap::-webkit-scrollbar-thumb:hover, #dash-orders-wrap::-webkit-scrollbar-thumb:hover { background:var(--text2); }
 /* Закреплённая шапка таблицы при вертикальной прокрутке внутри области */
 #orders-table-wrap thead th, #dash-orders-wrap thead th { position:sticky; top:0; z-index:3; }
+/* Минимальная ширина таблицы заказов: на маленьком мониторе колонки не сжимаются,
+   а таблица выходит за область → появляется горизонтальная прокрутка (все колонки доступны) */
+#orders-table { min-width:1200px; }
 /* раскрытие расхода плёнки в строке заказа */
 .film-toggle { border:none; background:none; color:var(--text3); cursor:pointer; font-size:12px; padding:0 5px 0 0; transition:transform .15s; display:inline-block; }
 .film-toggle.open { transform:rotate(90deg); color:var(--accent); }
