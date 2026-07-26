@@ -157,6 +157,83 @@ function getKassa(dateStr) {
 }
 
 /** Текущий остаток наличных (для дашборда/прочих модулей). Число. */
+/**
+ * Касса за ПЕРИОД [fromStr..toStr]: остаток на начало периода, приход/расход нал
+ * за период, безнал за период, остаток на конец периода + операции с датами.
+ */
+function getKassaRange(fromStr, toStr) {
+  return safeCall(function() {
+    var from = parseKassaDay_(kassaDayKey_(fromStr));
+    var to   = parseKassaDay_(kassaDayKey_(toStr));
+    var settings  = getKassaSettings_();
+    var startDate = settings.startDate ? parseKassaDay_(settings.startDate) : null;
+
+    var orders   = readSheetAsObjects('DATABASE', 'ORDERS');
+    var payments = readSheetAsObjects('DATABASE', 'PAYMENTS');
+    var expenses = readSheetAsObjects('DATABASE', 'EXPENSES');
+    var orderById = {};
+    orders.forEach(function(o){ if (o['ID']) orderById[String(o['ID'])] = o; });
+
+    var base = kr_(settings.start + settings.adjust);
+    function inScope(d){ return d && (!startDate || d >= startDate); }
+
+    var beforeIn = 0, beforeOut = 0, inSum = 0, outSum = 0, beznal = 0, allIn = 0, allOut = 0;
+    var ops = [];
+
+    payments.forEach(function(p) {
+      if (!p['ID']) return;
+      var d = parseKassaDay_(p['Дата']); if (!inScope(d)) return;
+      var amount = Number(p['Сумма']) || 0;
+      var isBez  = String(p['Способ оплаты']) === 'Безнал';
+      var oid = String(p['Заказ ID'] || ''); var o = orderById[oid] || {};
+      var carPart = o['Авто'] || o['Клиент'] || '';
+      var desc = (oid ? 'ID ' + oid + ' ' : '') + carPart + (o['Услуга'] ? ' | ' + o['Услуга'] : '');
+      desc = desc.trim() || (p['Комментарий'] || 'Платёж');
+      if (!isBez) {
+        allIn += amount;
+        if (d < from) beforeIn += amount;
+        else if (d <= to) { inSum += amount; ops.push({ date: kassaDayKey_(p['Дата']), time: kassaTime_(p['Создан'], p['Дата']), type: 'приход', amount: kr_(amount), sign: '+', desc: desc, orderId: oid }); }
+      } else if (d >= from && d <= to) {
+        beznal += amount;
+        ops.push({ date: kassaDayKey_(p['Дата']), time: kassaTime_(p['Создан'], p['Дата']), type: 'безнал', amount: kr_(amount), sign: 'бн', desc: desc, orderId: oid });
+      }
+    });
+    expenses.forEach(function(e) {
+      if (!e['ID']) return;
+      if ((e['Способ оплаты'] || 'Нал') === 'Безнал') return;
+      var d = parseKassaDay_(e['Дата']); if (!inScope(d)) return;
+      var amount = Number(e['Сумма']) || 0;
+      var desc = e['Описание'] || e['Комментарий'] || e['Категория'] || 'Расход';
+      allOut += amount;
+      if (d < from) beforeOut += amount;
+      else if (d <= to) { outSum += amount; ops.push({ date: kassaDayKey_(e['Дата']), time: kassaTime_(e['Создан'], e['Дата']), type: 'расход', amount: kr_(amount), sign: '-', desc: desc, expenseId: e['ID'], category: e['Категория'] || '' }); }
+    });
+
+    ops.sort(function(a, b) {
+      var ka = String(a.date).split('.').reverse().join(''), kb = String(b.date).split('.').reverse().join('');
+      if (ka !== kb) return ka.localeCompare(kb);
+      return String(a.time).localeCompare(String(b.time));
+    });
+
+    var opening = kr_(base + beforeIn - beforeOut);
+    var closing = kr_(opening + inSum - outSum);
+    return {
+      isRange:    true,
+      fromDate:   kassaDayKey_(fromStr),
+      toDate:     kassaDayKey_(toStr),
+      opening:    opening,
+      dayIn:      kr_(inSum),
+      dayOut:     kr_(outSum),
+      dayNet:     kr_(inSum - outSum),
+      dayBeznal:  kr_(beznal),
+      closing:    closing,
+      balanceNow: kr_(base + allIn - allOut),
+      operations: ops,
+      startDate:  settings.startDate
+    };
+  });
+}
+
 function getKassaBalance_() {
   var settings = getKassaSettings_();
   var startDate = settings.startDate ? parseKassaDay_(settings.startDate) : null;

@@ -1745,7 +1745,7 @@ function loadCurrentPage() {
   if (App.currentPage === 'inventory') loadInventory(force);
   if (App.currentPage === 'appointments') loadAppointments(force);
   if (App.currentPage === 'settings')  loadSettings();
-  if (App.currentPage === 'kassa')     loadKassa(force);
+  if (App.currentPage === 'kassa')     { restorePeriod_('kassa'); loadKassa(force); }
   if (App.currentPage === 'expenses')  { restorePeriod_('exp'); loadExpenses(); }
   if (App.currentPage === 'finance')   { restorePeriod_('fin'); loadFinance(); }
   if (App.currentPage === 'debt')      loadDebt();
@@ -1775,17 +1775,51 @@ function kassaIsoToRu_(iso) {
   return m ? (m[3] + '.' + m[2] + '.' + m[1]) : '';
 }
 
+// Смена периода Кассы: день / диапазон
+function onKassaPeriodChange() {
+  var p = (document.getElementById('kassa-period') || {}).value || 'day';
+  App._kassaPeriod = p;
+  var dn = document.getElementById('kassa-daynav-wrap'); if (dn) dn.style.display = (p === 'day') ? 'inline-flex' : 'none';
+  var rw = document.getElementById('kassa-range-wrap'); if (rw) rw.style.display = (p === 'custom') ? 'inline-flex' : 'none';
+  savePeriod_('kassa');
+  loadKassa(true);
+}
+
 function loadKassa(force) {
   var inp = document.getElementById('kassa-date');
   if (!App._kassaDate) App._kassaDate = kassaTodayIso_();
   if (inp && !inp.value) inp.value = App._kassaDate;
   if (inp && inp.value) App._kassaDate = inp.value;
-
   var ops = document.getElementById('kassa-ops');
-  // Мгновенно из кэша той же даты, свежие данные — в фоне
+  var period = (document.getElementById('kassa-period') || {}).value || 'day';
+  App._kassaPeriod = period;
+  var _dn = document.getElementById('kassa-daynav-wrap'); if (_dn) _dn.style.display = (period === 'day') ? 'inline-flex' : 'none';
+  var _rw = document.getElementById('kassa-range-wrap'); if (_rw) _rw.style.display = (period === 'custom') ? 'inline-flex' : 'none';
+
+  // ── Режим диапазона ──
+  if (period !== 'day') {
+    var range;
+    if (period === 'custom') {
+      range = { from: (document.getElementById('kassa-from') || {}).value, to: (document.getElementById('kassa-to') || {}).value };
+    } else {
+      var r = getPeriodRange(period);
+      range = { from: r.from ? r.from.slice(0, 10) : '', to: r.to ? r.to.slice(0, 10) : '' };
+    }
+    if (!range.from || !range.to) { if (ops) ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">Укажите даты периода</div>'; return; }
+    if (ops && force) ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</div>';
+    google.script.run
+      .withSuccessHandler(function(resp){
+        if (!resp || !resp.ok) { if (ops) ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">' + (resp?resp.error:'Ошибка') + '</div>'; return; }
+        App._kassa = resp.data; renderKassa(resp.data);
+      })
+      .withFailureHandler(function(e){ if (ops) ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--danger)">' + e.message + '</div>'; })
+      .getKassaRange(kassaIsoToRu_(range.from), kassaIsoToRu_(range.to));
+    return;
+  }
+
+  // ── Режим одного дня ──
   if (App._kassaCache && App._kassaCache.date === App._kassaDate) { App._kassa = App._kassaCache.data; renderKassa(App._kassaCache.data); }
   else if (ops && force) ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</div>';
-
   var reqDate = App._kassaDate;
   google.script.run
     .withSuccessHandler(function(resp){
@@ -1800,6 +1834,7 @@ function loadKassa(force) {
 
 function renderKassa(k) {
   var set = function(id, v){ var e = document.getElementById(id); if (e) e.textContent = v; };
+  var isR = !!k.isRange;
   set('kassa-balance', money(k.balanceNow));
   var sub = document.getElementById('kassa-balance-sub');
   if (sub) sub.textContent = k.startDate ? ('учёт с ' + k.startDate) : 'начальный остаток не задан — нажмите «Пересчёт»';
@@ -1807,27 +1842,36 @@ function renderKassa(k) {
   set('kassa-daynet',  (k.dayNet >= 0 ? '+' : '') + money(k.dayNet));
   set('kassa-beznal',  money(k.dayBeznal));
   set('kassa-closing', money(k.closing));
+  // Метки: «за день» ↔ «за период»
+  var w = isR ? 'период' : 'день';
+  set('kassa-lbl-opening', 'Было на начало ' + (isR ? 'периода' : 'дня'));
+  set('kassa-lbl-net',     'Касса за ' + w);
+  set('kassa-lbl-beznal',  'Безнал за ' + w);
+  set('kassa-lbl-closing', 'Итого на конец ' + (isR ? 'периода' : 'дня'));
+  set('kassa-ops-title',   'Операции за ' + w);
 
   var ops = document.getElementById('kassa-ops');
   if (ops) {
     if (!k.operations || !k.operations.length) {
-      ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">Нет операций за этот день</div>';
+      ops.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)">Нет операций за ' + (isR ? 'период' : 'этот день') + '</div>';
     } else {
       ops.innerHTML = k.operations.map(function(op){
         var cls = op.type === 'расход' ? 'kassa-op-out' : (op.type === 'безнал' ? 'kassa-op-bn' : 'kassa-op-in');
         var amt = (op.type === 'расход' ? '−' : (op.type === 'безнал' ? '' : '+')) + money(op.amount);
         var del = op.expenseId ? '<button class="kassa-op-del" title="Удалить расход" onclick="deleteKassaExpense(\'' + op.expenseId + '\')">✕</button>' : '';
+        var when = (isR && op.date ? op.date + ' ' : '') + (op.time || '');
         return '<div class="kassa-op ' + cls + '">' +
-          '<span class="kassa-op-time">' + (op.time || '') + '</span>' +
+          '<span class="kassa-op-time">' + when + '</span>' +
           '<span class="kassa-op-desc">' + (op.type === 'безнал' ? 'БЕЗНАЛ · ' : '') + escapeHtml_(op.desc || '') + '</span>' +
           '<span class="kassa-op-amt">' + amt + '</span>' + del +
         '</div>';
       }).join('');
     }
   }
-  // Текст отчёта — отдельным вызовом (точный формат с сервера)
+  // Текст отчёта для Telegram — только в режиме одного дня
+  var ta = document.getElementById('kassa-report');
+  if (isR) { if (ta) ta.value = 'Отчёт для Telegram доступен в режиме «День».'; return; }
   google.script.run.withSuccessHandler(function(r){
-    var ta = document.getElementById('kassa-report');
     if (ta && r && r.ok) ta.value = r.data.text || '';
   }).getKassaReportText(kassaIsoToRu_(App._kassaDate));
 }

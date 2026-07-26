@@ -470,10 +470,25 @@
       <div>
         <div class="section-title-big">Касса <span style="font-weight:400;font-size:13px;color:var(--text3)">· наличные</span></div>
         <div class="kassa-datenav">
-          <button class="btn btn-ghost btn-sm" onclick="kassaShiftDay(-1)" title="Предыдущий день">‹</button>
-          <input class="form-input" id="kassa-date" type="date" onchange="loadKassa(true)">
-          <button class="btn btn-ghost btn-sm" onclick="kassaToday()">Сегодня</button>
-          <button class="btn btn-ghost btn-sm" onclick="kassaShiftDay(1)" title="Следующий день">›</button>
+          <select class="form-select" id="kassa-period" onchange="onKassaPeriodChange()" style="height:34px;font-size:13px;min-width:140px" title="Период">
+            <option value="day" selected>День</option>
+            <option value="month">Этот месяц</option>
+            <option value="prev_month">Прошлый месяц</option>
+            <option value="quarter">Квартал</option>
+            <option value="year">Год</option>
+            <option value="custom">Произвольный…</option>
+          </select>
+          <span id="kassa-daynav-wrap" style="display:inline-flex;gap:6px;align-items:center">
+            <button class="btn btn-ghost btn-sm" onclick="kassaShiftDay(-1)" title="Предыдущий день">‹</button>
+            <input class="form-input" id="kassa-date" type="date" onchange="loadKassa(true)">
+            <button class="btn btn-ghost btn-sm" onclick="kassaToday()">Сегодня</button>
+            <button class="btn btn-ghost btn-sm" onclick="kassaShiftDay(1)" title="Следующий день">›</button>
+          </span>
+          <span id="kassa-range-wrap" style="display:none;gap:6px;align-items:center">
+            <input class="form-input" id="kassa-from" type="date" onchange="loadKassa(true)" style="width:140px">
+            <span style="color:var(--text3)">—</span>
+            <input class="form-input" id="kassa-to" type="date" onchange="loadKassa(true)" style="width:140px">
+          </span>
         </div>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -491,15 +506,15 @@
     </div>
 
     <div class="clients-kpi-row" style="margin-bottom:16px">
-      <div class="clients-kpi-card"><div class="clients-kpi-label">Было на начало дня</div><div class="clients-kpi-val" id="kassa-opening">—</div></div>
-      <div class="clients-kpi-card" style="border-color:rgba(16,185,129,.3)"><div class="clients-kpi-label" style="color:var(--success)">Касса за день</div><div class="clients-kpi-val" id="kassa-daynet">—</div></div>
-      <div class="clients-kpi-card"><div class="clients-kpi-label">Безнал за день</div><div class="clients-kpi-val" id="kassa-beznal">—</div></div>
-      <div class="clients-kpi-card"><div class="clients-kpi-label">Итого на конец дня</div><div class="clients-kpi-val" id="kassa-closing">—</div></div>
+      <div class="clients-kpi-card"><div class="clients-kpi-label" id="kassa-lbl-opening">Было на начало дня</div><div class="clients-kpi-val" id="kassa-opening">—</div></div>
+      <div class="clients-kpi-card" style="border-color:rgba(16,185,129,.3)"><div class="clients-kpi-label" id="kassa-lbl-net" style="color:var(--success)">Касса за день</div><div class="clients-kpi-val" id="kassa-daynet">—</div></div>
+      <div class="clients-kpi-card"><div class="clients-kpi-label" id="kassa-lbl-beznal">Безнал за день</div><div class="clients-kpi-val" id="kassa-beznal">—</div></div>
+      <div class="clients-kpi-card"><div class="clients-kpi-label" id="kassa-lbl-closing">Итого на конец дня</div><div class="clients-kpi-val" id="kassa-closing">—</div></div>
     </div>
 
     <div class="kassa-grid">
       <div class="kassa-panel">
-        <div class="kassa-panel-title">Операции за день</div>
+        <div class="kassa-panel-title" id="kassa-ops-title">Операции за день</div>
         <div id="kassa-ops"><div style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</div></div>
       </div>
       <div class="kassa-panel">
