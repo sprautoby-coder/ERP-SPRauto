@@ -6150,7 +6150,6 @@ function renderDashData_(d) {
     kpiCard('Дебиторка',      fmt(k.debtSum),      '#f59e0b',       '🧾', "goPage('debt')") +
     kpiCard('Деньги в кассе', fmt(k.kassaBalance), 'var(--success)', '💵', "goPage('kassa')") +
     kpiCard('Расчётный счёт', fmt(k.bankBalance),  'var(--accent)',  '🏦', "goPage('dds')");
-  renderReconcile_(d.reconcile);
   renderRecentOrders(d.recentOrders || [], k.ordersCount || 0);
 }
 
