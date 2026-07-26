@@ -62,6 +62,36 @@ function addOrderPayment(orderId, payload) {
 }
 
 /**
+ * Сменить способ оплаты платежа (Нал / Нал с чеком / Безнал) и пересчитать заказ.
+ * Влияет на: касса/счёт (нал и нал с чеком → касса, безнал → счёт) и базу −15% для бонусов ЗП.
+ */
+function updatePaymentMethod(paymentId, method) {
+  return safeCall(function() {
+    bumpDataVersion_();
+    if (!paymentId) throw new Error('Не указан платёж');
+    method = String(method || 'Нал');
+    const sheet   = getTab('DATABASE', 'PAYMENTS');
+    const data    = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idIdx   = headers.indexOf('ID');
+    const ordIdx  = headers.indexOf('Заказ ID');
+    const mIdx    = headers.indexOf('Способ оплаты');
+    if (mIdx < 0) throw new Error('Нет колонки «Способ оплаты»');
+    let orderId = null;
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][idIdx]) === String(paymentId)) {
+        sheet.getRange(i + 1, mIdx + 1).setValue(method);
+        orderId = String(data[i][ordIdx]);
+        break;
+      }
+    }
+    if (!orderId) throw new Error('Платёж не найден: ' + paymentId);
+    updateOrderPaymentStatus_(orderId);   // пересчитает статус оплаты и финансы (−15% от официальных)
+    return { id: paymentId, method: method, orderId: orderId };
+  });
+}
+
+/**
  * Удалить платёж.
  */
 function deleteOrderPayment(paymentId) {

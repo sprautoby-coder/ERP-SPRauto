@@ -7696,6 +7696,20 @@ function deletePaymentFromCard(paymentId) {
   }, { okText: 'Удалить платёж' });
 }
 
+// Сменить способ оплаты платежа → авто-пересчёт (касса/счёт + −15% ЗП с официальных денег)
+function updatePaymentMethodCard(paymentId, method) {
+  if (!paymentId) return;
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+      toast('Способ оплаты обновлён, пересчитано', 'success');
+      App.orders = []; App._cardCache = {}; App._dashCache = null; App._debtCache = null;
+      if (App._currentOrderId) reopenCard(App._currentOrderId);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .updatePaymentMethod(paymentId, method);
+}
+
 function renderOrderCard(order) {
   var content = document.getElementById('order-card-content');
   if (!content) return;
@@ -7726,12 +7740,20 @@ function renderOrderCard(order) {
     return '<tr><td>' + (e['Название']||'—') + '</td><td style="text-align:right;font-weight:600">' + fmt(e['Сумма']) + '</td></tr>';
   }).join('') || '<tr><td colspan="2" style="text-align:center;color:var(--text3);padding:8px">Нет расходов</td></tr>';
 
-  // История платежей (с возможностью удалить платёж)
+  // История платежей: способ оплаты меняется прямо здесь → авто-пересчёт (касса/счёт + −15% ЗП)
+  var payMethodOpts_ = function(cur){
+    return ['Нал','Нал с чеком','Безнал'].map(function(m){
+      return '<option value="' + m + '"' + (String(cur||'') === m ? ' selected' : '') + '>' + m + '</option>';
+    }).join('');
+  };
   var payHistory = (order.payments && order.payments.length)
     ? order.payments.map(function(p){
         var pid = p['ID'] || '';
         return '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:4px 0;border-bottom:1px solid var(--border)">' +
-          '<span style="color:var(--text3)">' + (p['Дата']||'') + ' · ' + (p['Способ оплаты']||'') + '</span>' +
+          '<span style="display:flex;align-items:center;gap:6px;color:var(--text3)">' + (p['Дата']||'') +
+            (pid ? ' <select onchange="updatePaymentMethodCard(\'' + pid + '\', this.value)" style="font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:6px;background:var(--inp);color:var(--text)">' + payMethodOpts_(p['Способ оплаты']) + '</select>'
+                 : ' · ' + (p['Способ оплаты']||'')) +
+          '</span>' +
           '<span style="display:flex;align-items:center;gap:8px">' +
             '<span style="font-weight:600;color:var(--success)">' + fmt(p['Сумма']) + '</span>' +
             (pid ? '<button class="pay-del" title="Удалить платёж" onclick="deletePaymentFromCard(\'' + pid + '\')">✕</button>' : '') +
@@ -7761,8 +7783,8 @@ function renderOrderCard(order) {
     return '<div class="sched-row" data-paid="' + (paidS?'1':'0') + '" style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid var(--border)">' +
       '<span style="width:18px;text-align:center;color:' + (paidS?'var(--success)':'var(--text3)') + '" title="' + (paidS?'оплачен':'не оплачен') + '">' + (paidS?'✓':'○') + '</span>' +
       '<span style="width:22px;font-size:12px;color:var(--text3)">№' + (s['№']||(idx+1)) + '</span>' +
-      '<input type="date" class="sched-date" value="' + dISO + '" style="' + inpS + ';flex:1;min-width:0" onchange="updateSchedSum_()">' +
-      '<input type="number" class="sched-amt" min="0" step="0.01" value="' + (Number(s['Сумма'])||0) + '" style="' + inpS + ';width:92px;text-align:right" oninput="updateSchedSum_()">' +
+      '<input type="date" class="sched-date" value="' + dISO + '" style="' + inpS + ';flex:1;min-width:0" onchange="schedEdit_()">' +
+      '<input type="number" class="sched-amt" min="0" step="0.01" value="' + (Number(s['Сумма'])||0) + '" style="' + inpS + ';width:92px;text-align:right" oninput="schedEdit_()">' +
     '</div>';
   }).join('');
   var splitControl = (!isPaid)
@@ -7776,7 +7798,7 @@ function renderOrderCard(order) {
   var schedFooter = (sched.length && !isPaid)
     ? '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px">' +
         '<span id="sched-sum-hint" style="font-size:11px;color:var(--text3)"></span>' +
-        '<button class="btn" onclick="saveScheduleCard(\'' + oid + '\')" style="padding:5px 12px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:7px">💾 Сохранить суммы</button>' +
+        '<span id="sched-save-status" style="font-size:11px;color:var(--text3)"></span>' +
       '</div>'
     : '';
   var scheduleBlock =
@@ -8628,8 +8650,16 @@ function updateSchedSum_() {
   hint.style.color = Math.abs(sum - price) < 0.5 ? 'var(--success)' : 'var(--text3)';
 }
 
-// Сохранить отредактированные суммы/даты графика
-function saveScheduleCard(orderId) {
+// Правка графика → живой итог + дебаунс-автосохранение (без кнопки)
+function schedEdit_() {
+  updateSchedSum_();
+  var st = document.getElementById('sched-save-status'); if (st) { st.textContent = '● не сохранено'; st.style.color = 'var(--warning)'; }
+  clearTimeout(App._schedTimer);
+  App._schedTimer = setTimeout(function(){ saveScheduleCard(App._currentOrderId, true); }, 700);
+}
+
+// Сохранить суммы/даты графика. silent=true — тихо (автосохранение, без перерисовки карточки)
+function saveScheduleCard(orderId, silent) {
   var box = document.getElementById('card-schedule'); if (!box) return;
   var rows = [];
   box.querySelectorAll('.sched-row').forEach(function(r){
@@ -8637,15 +8667,16 @@ function saveScheduleCard(orderId) {
     var amt = a ? (Number(a.value) || 0) : 0;
     if (amt > 0) rows.push({ date: d ? d.value : '', amount: amt });
   });
-  if (!rows.length) { toast('Укажите суммы взносов', 'error'); return; }
+  if (!rows.length) return;
+  var st = document.getElementById('sched-save-status'); if (st) { st.textContent = 'сохранение…'; st.style.color = 'var(--text3)'; }
   google.script.run
     .withSuccessHandler(function(resp){
-      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
-      toast('График сохранён', 'success');
+      if (!resp || !resp.ok) { if (st) { st.textContent = 'ошибка'; st.style.color = 'var(--danger)'; } if (!silent) toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
       App._dashCache = null; App._debtCache = null;
-      reopenCard(orderId);
+      if (st) { st.textContent = '✓ сохранено'; st.style.color = 'var(--success)'; }
+      if (!silent) reopenCard(orderId);
     })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .withFailureHandler(function(e){ if (st) { st.textContent = 'ошибка'; st.style.color = 'var(--danger)'; } if (!silent) toast('Ошибка: ' + e.message, 'error'); })
     .saveInstallmentSchedule(orderId, rows);
 }
 
