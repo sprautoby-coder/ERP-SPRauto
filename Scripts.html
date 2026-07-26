@@ -9084,7 +9084,11 @@ function init() {
       if (data.config && data.config.positions) fillPositions(data.config.positions);
       if (data.config && data.config.leadSources) fillLeadSources(data.config.leadSources);
       else if (window.CONFIG_LEAD_SOURCES) fillLeadSources(window.CONFIG_LEAD_SOURCES);
-      onDashPeriodChange();   // заполняет календари текущим месяцем и грузит данные
+      // Период дашборда: восстанавливаем сохранённый; если его нет — текущий месяц
+      var hasSavedDash = false;
+      try { hasSavedDash = !!localStorage.getItem('sprauto-period-dash'); } catch (e) {}
+      if (hasSavedDash) { restorePeriod_('dash'); renderDashboard(); }
+      else { onDashPeriodChange(); }   // дефолт — текущий месяц + загрузка
       refreshSync();
     })
     .withFailureHandler(function(err) {
