@@ -7913,6 +7913,24 @@ function renderOrderCard(order) {
   loadOrderPhotos(oid);
   updateSchedSum_();      // показать итог по графику рассрочки при открытии
   renderDocButtons_(order); // кнопки документов (для мультиуслуги — по каждой услуге)
+
+  // Самопересчёт финансов при открытии: актуализирует −15% с фактически официальных
+  // платежей (безнал + нал с чеком) для заказов, оплаченных до изменения логики.
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok || !resp.data || !resp.data.finance) return;
+      var o2 = App._currentOrder;
+      if (!o2 || String(o2['ID']) !== String(oid)) return;   // карточку уже сменили
+      var f = resp.data.finance;
+      o2['Итого материалы'] = resp.data.totalMat; o2['Итого расходы'] = resp.data.totalExp;
+      o2['Валовая прибыль'] = f.grossProfit; o2['Бонус менеджера'] = f.managerBonus;
+      o2['Бонус оклейщика'] = f.masterBonus; o2['Бонус администратора'] = f.adminBonus;
+      if (f.tintMasterBonus !== undefined) o2['Бонус тонировщика'] = f.tintMasterBonus;
+      o2['Маржинальная прибыль'] = f.marginalProfit;
+      var box = document.getElementById('card-fin-box'); if (box) box.innerHTML = renderCardFinance_(o2);
+    })
+    .withFailureHandler(function(){})
+    .recalcOrderFinance(oid);
 }
 
 /* ===== ФОТО ДО/ПОСЛЕ ===== */
