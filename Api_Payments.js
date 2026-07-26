@@ -395,6 +395,42 @@ function createInstallmentPlan(orderId, payload) {
 }
 
 /**
+ * Сохранить график рассрочки с ручными суммами/датами (перезаписывает целиком).
+ * @param {string} orderId
+ * @param {Array} rows [{ date:'YYYY-MM-DD'|'dd.MM.yyyy', amount:Number }]
+ * Оплаченные взносы пересчитываются автоматически (updateScheduleProgress_).
+ */
+function saveInstallmentSchedule(orderId, rows) {
+  return safeCall(function() {
+    bumpDataVersion_();
+    if (!orderId) throw new Error('Не указан заказ');
+    rows = (rows || []).filter(function(r){ return r && (Number(r.amount) || 0) > 0; });
+    if (!rows.length) throw new Error('Добавьте хотя бы один взнос с суммой');
+
+    clearPaymentSchedule_(orderId);
+    const sheet   = getTab('DATABASE', 'SCHEDULE');
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const tz  = Session.getScriptTimeZone();
+    const now = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy HH:mm');
+
+    rows.forEach(function(r, i) {
+      let ds = String(r.date || '');
+      const iso = ds.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if (iso) ds = iso[3] + '.' + iso[2] + '.' + iso[1];   // ISO → dd.MM.yyyy
+      const row = {
+        'ID': orderId + '-Г-' + String(i + 1).padStart(2, '0'),
+        'Заказ ID': orderId, '№': i + 1, 'Дата': ds,
+        'Сумма': Math.round((Number(r.amount) || 0) * 100) / 100, 'Оплачен': 'Нет', 'Создан': now,
+      };
+      sheet.appendRow(headers.map(function(h){ return row[h] !== undefined ? row[h] : ''; }));
+    });
+
+    updateScheduleProgress_(orderId);
+    return { count: rows.length };
+  });
+}
+
+/**
  * Удалить график платежей заказа.
  */
 function deletePaymentSchedule(orderId) {

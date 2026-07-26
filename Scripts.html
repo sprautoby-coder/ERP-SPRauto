@@ -7704,21 +7704,31 @@ function renderOrderCard(order) {
   var dm = String(order['Срок оплаты']||'').match(/^(\d{2})\.(\d{2})\.(\d{4})/);
   if (dm) dueIso = dm[3] + '-' + dm[2] + '-' + dm[1];
 
-  // ── График рассрочки ──
+  // ── График рассрочки ── (суммы и даты редактируемые; оплаченные взносы заблокированы)
   var sched = order.schedule || [];
-  var schedRows = sched.map(function(s){
-    var paidS = s['Оплачен'] === 'Да';
-    return '<div style="display:flex;justify-content:space-between;font-size:12px;padding:3px 0;border-bottom:1px solid var(--border)">' +
-      '<span style="color:' + (paidS?'var(--success)':'var(--text3)') + '">' + (paidS?'✓':'○') + ' №' + (s['№']||'') + ' · ' + (s['Дата']||'') + '</span>' +
-      '<span style="font-weight:600;color:' + (paidS?'var(--success)':'var(--text)') + '">' + fmt(s['Сумма']) + '</span></div>';
-  }).join('');
   var inpS = 'font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:7px;background:var(--inp);color:var(--text)';
+  var schedRows = sched.map(function(s, idx){
+    var paidS = s['Оплачен'] === 'Да';
+    var dISO  = ruToIso_(s['Дата']);
+    return '<div class="sched-row" data-paid="' + (paidS?'1':'0') + '" style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid var(--border)">' +
+      '<span style="width:18px;text-align:center;color:' + (paidS?'var(--success)':'var(--text3)') + '">' + (paidS?'✓':'○') + '</span>' +
+      '<span style="width:22px;font-size:12px;color:var(--text3)">№' + (s['№']||(idx+1)) + '</span>' +
+      '<input type="date" class="sched-date" value="' + dISO + '"' + (paidS?' disabled':'') + ' style="' + inpS + ';flex:1;min-width:0" onchange="updateSchedSum_()">' +
+      '<input type="number" class="sched-amt" min="0" step="0.01" value="' + (Number(s['Сумма'])||0) + '"' + (paidS?' disabled':'') + ' style="' + inpS + ';width:92px;text-align:right" oninput="updateSchedSum_()">' +
+    '</div>';
+  }).join('');
   var splitControl = (!isPaid)
     ? '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">' +
-        '<input id="sched-months" type="number" min="1" max="36" value="3" style="' + inpS + ';width:58px">' +
+        '<input id="sched-months" type="number" min="1" max="36" value="' + (sched.length || 3) + '" style="' + inpS + ';width:58px">' +
         '<span style="font-size:12px;color:var(--text3)">мес. с</span>' +
         '<input id="sched-start" type="date" value="' + dueIso + '" style="' + inpS + '">' +
         '<button class="btn" onclick="createInstallmentPlanCard(\'' + oid + '\')" style="padding:5px 11px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:7px">Разбить поровну</button>' +
+      '</div>'
+    : '';
+  var schedFooter = (sched.length && !isPaid)
+    ? '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px">' +
+        '<span id="sched-sum-hint" style="font-size:11px;color:var(--text3)"></span>' +
+        '<button class="btn" onclick="saveScheduleCard(\'' + oid + '\')" style="padding:5px 12px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:7px">💾 Сохранить суммы</button>' +
       '</div>'
     : '';
   var scheduleBlock =
@@ -7727,7 +7737,9 @@ function renderOrderCard(order) {
         '<div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em">График рассрочки</div>' +
         (sched.length ? '<button class="btn btn-ghost" onclick="deleteScheduleCard(\'' + oid + '\')" style="padding:2px 8px;font-size:11px;color:var(--danger)">Удалить</button>' : '') +
       '</div>' +
-      splitControl + schedRows +
+      splitControl +
+      '<div id="card-schedule" data-remaining="' + (Math.max(0, price - (Number(order._paid)||0))) + '">' + schedRows + '</div>' +
+      schedFooter +
       (sched.length && order._finalPay ? '<div style="font-size:11px;color:var(--text2);margin-top:6px">Полная оплата до: <b>' + order._finalPay + '</b></div>' : '') +
     '</div>';
 
@@ -7857,6 +7869,7 @@ function renderOrderCard(order) {
     photosSection_(oid);
 
   loadOrderPhotos(oid);
+  updateSchedSum_();   // показать итог по графику рассрочки при открытии
 }
 
 /* ===== ФОТО ДО/ПОСЛЕ ===== */
@@ -8510,6 +8523,42 @@ function setOrderCardDueDate(orderId, val) {
 }
 
 /* --- Карточка заказа: график рассрочки --- */
+// dd.MM.yyyy → yyyy-MM-dd (для input[type=date])
+function ruToIso_(s){ var m = String(s || '').match(/^(\d{2})\.(\d{2})\.(\d{4})/); return m ? m[3] + '-' + m[2] + '-' + m[1] : ''; }
+
+// Живой итог по графику рассрочки (сумма взносов vs стоимость заказа)
+function updateSchedSum_() {
+  var box = document.getElementById('card-schedule'); if (!box) return;
+  var hint = document.getElementById('sched-sum-hint'); if (!hint) return;
+  var sum = 0;
+  box.querySelectorAll('.sched-amt').forEach(function(a){ sum += Number(a.value) || 0; });
+  var fmt = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+  var price = Number((App._currentOrder || {})['Стоимость заказа']) || 0;
+  hint.textContent = 'Сумма взносов: ' + fmt(sum) + ' (заказ ' + fmt(price) + ')';
+  hint.style.color = Math.abs(sum - price) < 0.5 ? 'var(--success)' : 'var(--text3)';
+}
+
+// Сохранить отредактированные суммы/даты графика
+function saveScheduleCard(orderId) {
+  var box = document.getElementById('card-schedule'); if (!box) return;
+  var rows = [];
+  box.querySelectorAll('.sched-row').forEach(function(r){
+    var d = r.querySelector('.sched-date'); var a = r.querySelector('.sched-amt');
+    var amt = a ? (Number(a.value) || 0) : 0;
+    if (amt > 0) rows.push({ date: d ? d.value : '', amount: amt });
+  });
+  if (!rows.length) { toast('Укажите суммы взносов', 'error'); return; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast('График сохранён', 'success');
+      App._dashCache = null; App._debtCache = null;
+      reopenCard(orderId);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .saveInstallmentSchedule(orderId, rows);
+}
+
 function createInstallmentPlanCard(orderId) {
   var months = Number((document.getElementById('sched-months') || {}).value) || 0;
   var start  = (document.getElementById('sched-start') || {}).value || '';
