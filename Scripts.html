@@ -3368,6 +3368,19 @@ App.orders       = [];
 App._orderFilter = 'all';
 App._ordersView  = 'table';   // 'table' | 'kanban'
 
+// Тихо обновить заказы с сервера в фоне (без скелетона) — для сверки после оптимистичных правок
+function refreshOrdersSilent_() {
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) return;
+      App.orders = resp.data || [];
+      markLoaded_('orders');
+      if (App.currentPage === 'orders') { filterOrders(); loadOrdersKpi(); }
+    })
+    .withFailureHandler(function(){})
+    .getOrders({});
+}
+
 function loadOrders(force) {
   var tbody = document.getElementById('orders-tbody');
   var err   = document.getElementById('orders-error');
@@ -3526,10 +3539,10 @@ function setOrdersView(view) {
 
 // ─── СТАТУСЫ ЗАКАЗОВ / ВОРОНКИ (из white-label конфига) ──────────────────────
 var DEFAULT_ORDER_STATUSES = [
-  { name: 'Новый',    color: '#6c8ebf' },
-  { name: 'В работе', color: '#f0a500' },
-  { name: 'Готов',    color: '#4da6ff' },
-  { name: 'Выдан',    color: '#5cb85c', done: true },
+  { name: 'Новый',    color: '#2f6fd0' },
+  { name: 'В работе', color: '#e08a00' },
+  { name: 'Готов',    color: '#2b8fd4' },
+  { name: 'Выдан',    color: '#3f9b3f', done: true },
   { name: 'Отменён',  color: '#d9534f', cancelled: true },
 ];
 function orderStatusList() {
@@ -3780,6 +3793,15 @@ function commitStatusRename(oldName, val) {
   pushStatuses_(list, [{ from: oldName, to: newName }]);
 }
 
+// Бейдж статуса заказа: насыщенный цвет + мягкая подложка, читается на любой строке
+function statusBadge_(status) {
+  if (!status) return '';
+  var c = orderStatusColor(status);
+  var bg = /^#[0-9a-fA-F]{6}$/.test(c) ? c + '33' : 'rgba(120,140,170,.18)';
+  return '<span style="display:inline-block;font-size:11px;font-weight:700;color:' + c +
+         ';background:' + bg + ';padding:2px 10px;border-radius:10px;white-space:nowrap">' + status + '</span>';
+}
+
 function renderOrdersTable(orders) {
   var tbody  = document.getElementById('orders-tbody');
   var footer = document.getElementById('orders-table-footer');
@@ -3881,7 +3903,7 @@ function renderOrdersTable(orders) {
       '<td style="text-align:right;font-weight:600">' + price.toLocaleString('ru') + ' ' + CUR + '</td>' +
       '<td style="text-align:right;font-size:12px;color:var(--text2)">' + costCell + '</td>' +
       '<td style="text-align:center">' + payBadge + payDates + '</td>' +
-      '<td style="text-align:center"><span style="font-size:12px;font-weight:600;color:' + color + '">' + status + '</span></td>' +
+      '<td style="text-align:center">' + statusBadge_(status) + '</td>' +
       '<td style="text-align:center">' + verCell + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + (o['Менеджер'] || '—') + '</td>' +
       '<td onclick="event.stopPropagation()">' +
@@ -4740,15 +4762,23 @@ function hardDeleteFromTrash(id) {
 
 function changeOrderStatus(orderId, selectEl) {
   var newStatus = selectEl.value;
+  // Оптимистично: меняем локально и перерисовываем СРАЗУ, не дожидаясь сервера
+  var prev = null;
+  for (var i = 0; i < App.orders.length; i++) {
+    if (App.orders[i]['ID'] === orderId) { prev = App.orders[i]['Статус']; App.orders[i]['Статус'] = newStatus; break; }
+  }
+  if (App.currentPage === 'orders') { filterOrders(); loadOrdersKpi(); }
+  var revert = function() {
+    for (var j = 0; j < App.orders.length; j++) { if (App.orders[j]['ID'] === orderId) { App.orders[j]['Статус'] = prev; break; } }
+    if (App.currentPage === 'orders') { filterOrders(); loadOrdersKpi(); }
+  };
   google.script.run
     .withSuccessHandler(function(resp) {
-      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
-      for (var i = 0; i < App.orders.length; i++) {
-        if (App.orders[i]['ID'] === orderId) { App.orders[i]['Статус'] = newStatus; break; }
-      }
-      toast('Статус обновлён', 'success');
+      if (!resp || !resp.ok) { revert(); toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+      // тихо помечаем кэш свежим — данные уже актуальны локально
+      markLoaded_('orders');
     })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .withFailureHandler(function(e){ revert(); toast('Ошибка: ' + e.message, 'error'); })
     .updateOrderStatus(orderId, newStatus);
 }
 
@@ -7267,8 +7297,16 @@ function confirmPayOrder() {
 
       toast(payType==='Безнал' ? 'Безнал → р/счёт зафиксирован' : 'Нал → касса зафиксирован', 'success');
       closeModal('modal-pay-order');
+      // Оптимистично помечаем заказ оплаченным/частичным локально — строка обновляется сразу
+      for (var i=0;i<App.orders.length;i++){
+        var o=App.orders[i]; if (o['ID']!==id) continue;
+        var price=Number(o['Стоимость заказа'])||0;
+        o._paid=(Number(o._paid)||0)+amount;
+        o['Статус оплаты']=(o._paid>=price-0.01)?'Оплачен':'Частично';
+        break;
+      }
       App._dashCache = null; App._debtCache = null;   // оплата меняет дашборд/дебиторку
-      if (App.currentPage==='orders')     loadOrders(true);
+      if (App.currentPage==='orders')     { filterOrders(); loadOrdersKpi(); refreshOrdersSilent_(); }
       if (App.currentPage==='dds')        loadDDS();
       if (App.currentPage==='debt')       loadDebt();
       if (App.currentPage==='order-card') reopenCard(id);
