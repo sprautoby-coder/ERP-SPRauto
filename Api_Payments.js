@@ -91,6 +91,21 @@ function updatePaymentMethod(paymentId, method) {
   });
 }
 
+/** Проставить всем платежам заказа один способ оплаты (для синхронизации с «Условиями оплаты»). */
+function setOrderPaymentsMethod_(orderId, method) {
+  var sheet   = getTab('DATABASE', 'PAYMENTS');
+  var data    = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var oidIdx  = headers.indexOf('Заказ ID');
+  var mIdx    = headers.indexOf('Способ оплаты');
+  if (mIdx < 0 || oidIdx < 0) return;
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][oidIdx]) === String(orderId) && String(data[i][mIdx]) !== String(method)) {
+      sheet.getRange(i + 1, mIdx + 1).setValue(method);
+    }
+  }
+}
+
 /**
  * Удалить платёж.
  */

@@ -543,6 +543,11 @@ function updateOrder(id, payload) {
       // он меняется только платежами (addOrderPayment / updateOrderPaymentStatus_).
       if (payload.payType !== undefined) {
         setCell('Тип оплаты', payload.payType);
+        // Если выбран КОНКРЕТНЫЙ способ (Нал/Нал с чеком/Безнал) — синхронизируем способ
+        // самих платежей: деньги перекладываются в кассу/на счёт, база −15% пересчитывается.
+        if (['Нал', 'Нал с чеком', 'Безнал'].indexOf(payload.payType) >= 0) {
+          try { setOrderPaymentsMethod_(id, payload.payType); } catch (e) {}
+        }
       }
 
       // Пересчёт финансов при изменении цены, условий оплаты или персонала
