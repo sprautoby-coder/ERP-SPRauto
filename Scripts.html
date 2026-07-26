@@ -3415,10 +3415,9 @@ function loadOrders(force) {
 }
 
 function loadOrdersKpi() {
-  // KPI считаем из уже загруженного App.orders — без отдельного round-trip к серверу.
-  // Логика 1-в-1 повторяет бывший getOrdersStats (всего/выручка по ВСЕМ заказам,
-  // включая отменённые; в работе = «В работе» или «Новый»).
-  var list = App.orders || [];
+  // KPI считаем по заказам ВЫБРАННОГО ПЕРИОДА (период + услуга + поиск, без учёта
+  // вкладки статуса) — чтобы цифры вверху совпадали с тем, что показано в таблице.
+  var list = App._ordersPeriodBase || App.orders || [];
   var totalCount = 0, totalRevenue = 0, inWork = 0;
   list.forEach(function(o) {
     if (!o['ID']) return;
@@ -3456,7 +3455,7 @@ function renderOrderStatusTabs() {
 // Счётчики на вкладках фильтра по статусам (всего по каждому статусу, без учёта поиска).
 function updateOrderTabCounts() {
   renderOrderStatusTabs();
-  var list = (App.orders || []).filter(function(o){ return o['ID']; });
+  var list = (App._ordersPeriodBase || App.orders || []).filter(function(o){ return o['ID']; });
   var counts = { all: list.length };
   list.forEach(function(o){ var s = o['Статус'] || ''; counts[s] = (counts[s] || 0) + 1; });
   document.querySelectorAll('#orders-status-tabs .tab-cnt').forEach(function(span){
@@ -3496,8 +3495,9 @@ function filterOrders() {
   var range   = getPeriodRangeFromUI('ord');   // {from,to} ISO или пусто (Всё время)
   var fromMs  = range.from ? new Date(range.from).getTime() : null;
   var toMs    = range.to   ? new Date(range.to).getTime()   : null;
-  var filtered = App.orders.filter(function(o) {
-    if (App._orderFilter !== 'all' && o['Статус'] !== App._orderFilter) return false;
+  // База периода: период + услуга + поиск (БЕЗ вкладки статуса) — для KPI и счётчиков
+  var periodBase = App.orders.filter(function(o) {
+    if (!o['ID']) return false;
     if (service && o['Услуга'] !== service) return false;
     if (fromMs || toMs) {
       var od = parseOrdDate_(o['Дата']);
@@ -3513,7 +3513,13 @@ function filterOrders() {
     }
     return true;
   });
+  App._ordersPeriodBase = periodBase;
+  // Таблица дополнительно фильтруется вкладкой статуса
+  var filtered = (App._orderFilter && App._orderFilter !== 'all')
+    ? periodBase.filter(function(o){ return o['Статус'] === App._orderFilter; })
+    : periodBase;
   App._ordersFiltered = filtered;
+  loadOrdersKpi();   // KPI/счётчики — по периоду (использует App._ordersPeriodBase)
   if (App._ordersView === 'kanban') renderOrdersKanban(filtered);
   else renderOrdersTable(filtered);
 }
@@ -3827,9 +3833,16 @@ function renderOrdersTable(orders) {
     var isLegal    = o._clientType === 'юр';
     var isPaid     = payStatus === 'Оплачен';
 
-    // Класс подсветки строки (контроль дебиторки)
+    // Просрочка: не оплачено и срок платежа (ближайший взнос / срок оплаты) уже прошёл
+    var todayStart = new Date(); todayStart.setHours(0,0,0,0);
+    var dueStr  = o._nextPay || o['Срок оплаты'] || o._finalPay || '';
+    var dueMs   = parseOrdDate_(dueStr);
+    var overdue = !isPaid && dueMs != null && dueMs < todayStart.getTime();
+
+    // Класс подсветки строки (контроль дебиторки). Просрочка — приоритетнее (красный).
     var rowClass = '';
     if (isPaid)                                       rowClass = 'row-paid';
+    else if (overdue)                                 rowClass = 'row-overdue';
     else if (isLegal)                                 rowClass = 'row-legal';
     else if (payStatus === 'Частично' || payType === 'Рассрочка') rowClass = 'row-rass';
     else if (payType === 'Отсрочка')                  rowClass = 'row-otsr';
@@ -3852,6 +3865,9 @@ function renderOrdersTable(orders) {
     }
     if (isLegal) {
       payBadge += ' <span style="font-size:10px;background:var(--purple-soft);color:var(--purple);padding:1px 5px;border-radius:8px;" title="Юридическое лицо">ЮЛ</span>';
+    }
+    if (overdue) {
+      payBadge += ' <span style="font-size:10px;background:var(--red-soft);color:var(--danger);padding:1px 6px;border-radius:8px;font-weight:700" title="Срок оплаты прошёл">⚠ просрочка</span>';
     }
 
     // Затраты = материалы + расходы (данные уже в заказе)

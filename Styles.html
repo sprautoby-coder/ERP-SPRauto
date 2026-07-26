@@ -30,11 +30,12 @@
   --inp:     #0D131C; --scroll:  #243040;
   --row-alt:   rgba(255,255,255,.025);   /* чередование строк (зебра) */
   /* Заливка строк заказов (тёмная тема) */
-  --row-paid:  rgba(46,204,113,.12);
-  --row-otsr:  rgba(243,156,18,.10);
-  --row-rass:  rgba(52,152,219,.10);
-  --row-legal: rgba(155,89,182,.10);
-  --row-debt:  rgba(231,76,60,.08);
+  --row-paid:    rgba(46,204,113,.12);
+  --row-otsr:    rgba(243,156,18,.20);
+  --row-rass:    rgba(52,152,219,.22);
+  --row-legal:   rgba(155,89,182,.16);
+  --row-debt:    rgba(243,156,18,.20);   /* долг (не просрочен) — янтарный, «на контроле» */
+  --row-overdue: rgba(231,76,60,.34);    /* ПРОСРОЧКА — красный, заметный */
 }
 [data-theme="light"] {
   color-scheme: light;
@@ -48,24 +49,27 @@
   --inp:     #EBF0F7; --scroll:  #D4DCE8;
   --row-alt:   rgba(15,35,65,.028);   /* чередование строк (зебра) — светло-серый */
   /* Заливка строк заказов (светлая тема) */
-  --row-paid:  rgba(46,204,113,.15);
-  --row-otsr:  rgba(243,156,18,.13);
-  --row-rass:  rgba(52,152,219,.13);
-  --row-legal: rgba(155,89,182,.12);
-  --row-debt:  rgba(231,76,60,.10);
+  --row-paid:    rgba(46,204,113,.16);
+  --row-otsr:    rgba(243,156,18,.22);
+  --row-rass:    rgba(52,152,219,.20);
+  --row-legal:   rgba(155,89,182,.16);
+  --row-debt:    rgba(243,156,18,.22);   /* долг (не просрочен) — янтарный, «на контроле» */
+  --row-overdue: rgba(231,76,60,.24);    /* ПРОСРОЧКА — красный, заметный */
 }
 
 /* ── Подсветка строк таблицы заказов (контроль дебиторки) ── */
-#orders-table tbody tr.row-paid  td { background: var(--row-paid)  !important; }
-#orders-table tbody tr.row-otsr  td { background: var(--row-otsr); }
-#orders-table tbody tr.row-rass  td { background: var(--row-rass); }
-#orders-table tbody tr.row-legal td { background: var(--row-legal); }
-#orders-table tbody tr.row-debt  td { background: var(--row-debt); }
-#orders-table tbody tr.row-otsr  td:first-child  { box-shadow: inset 4px 0 0 var(--warning); }
-#orders-table tbody tr.row-rass  td:first-child  { box-shadow: inset 4px 0 0 var(--blue); }
-#orders-table tbody tr.row-legal td:first-child  { box-shadow: inset 4px 0 0 var(--purple); }
-#orders-table tbody tr.row-debt  td:first-child  { box-shadow: inset 4px 0 0 var(--danger); }
-#orders-table tbody tr.row-paid  td:first-child  { box-shadow: inset 4px 0 0 var(--success); }
+#orders-table tbody tr.row-paid    td { background: var(--row-paid)  !important; }
+#orders-table tbody tr.row-otsr    td { background: var(--row-otsr); }
+#orders-table tbody tr.row-rass    td { background: var(--row-rass); }
+#orders-table tbody tr.row-legal   td { background: var(--row-legal); }
+#orders-table tbody tr.row-debt    td { background: var(--row-debt); }
+#orders-table tbody tr.row-overdue td { background: var(--row-overdue) !important; }
+#orders-table tbody tr.row-otsr    td:first-child  { box-shadow: inset 4px 0 0 var(--warning); }
+#orders-table tbody tr.row-rass    td:first-child  { box-shadow: inset 4px 0 0 var(--blue); }
+#orders-table tbody tr.row-legal   td:first-child  { box-shadow: inset 4px 0 0 var(--purple); }
+#orders-table tbody tr.row-debt    td:first-child  { box-shadow: inset 4px 0 0 var(--warning); }
+#orders-table tbody tr.row-overdue td:first-child  { box-shadow: inset 4px 0 0 var(--danger); }
+#orders-table tbody tr.row-paid    td:first-child  { box-shadow: inset 4px 0 0 var(--success); }
 /* Проверенный заказ — зеленоватый слой поверх любого тона строки + зелёная метка справа.
    Работает на обеих таблицах (Заказы и Дашборд) и в светлой/тёмной теме (тон-оверлей не зависит от фона). */
 #orders-table tbody tr.row-verified td,
