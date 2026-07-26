@@ -862,6 +862,9 @@
       <input type="date" class="form-input" id="sal-to" onchange="onSalDateEdit()" title="Дата окончания" style="height:38px;width:150px">
       <button class="btn btn-primary" onclick="calcSalary()">Рассчитать</button>
       <button class="btn btn-ghost" onclick="printSalary()">Распечатать</button>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--text2);white-space:nowrap;cursor:pointer" title="Прибавлять базовую ставку к итогу">
+        <input type="checkbox" id="sal-include-salary" onchange="renderSalaryFiltered()"> Начислить оклад
+      </label>
     </div>
     <div id="salary-result">
       <div style="text-align:center;padding:48px;color:var(--text3)">

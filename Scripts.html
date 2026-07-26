@@ -7141,6 +7141,14 @@ function renderSalary(data, periodLabel) {
     return;
   }
 
+  // Начислять ли оклад: галочка на странице ЗП (по умолчанию выкл — только бонусы).
+  // ЗП платится 2 раза в месяц → каждое начисление добавляет ПОЛОВИНУ оклада.
+  var inclOklad = !!((document.getElementById('sal-include-salary') || {}).checked);
+  var okladOf = function(e){ return (Number(e.baseSalary) || 0) / 2; };           // ½ ставки за начисление
+  // Сервер отдаёт total = ставка(полная) + бонусы − выданное; берём «бонусы−выданное» и добавляем ½ оклада
+  var etot = function(e){ return (Number(e.total || 0) - (Number(e.baseSalary) || 0)) + (inclOklad ? okladOf(e) : 0); };
+  var grandTotal = data.employees.reduce(function(s, e){ return s + etot(e); }, 0);
+
   var cards = data.employees.map(function(e) {
     var ini = e.name.split(' ').slice(0,2).map(function(s){ return s[0]||''; }).join('');
     var orderRows = e.orders.slice(0,5).map(function(o){
@@ -7156,12 +7164,12 @@ function renderSalary(data, periodLabel) {
         '<div><div style="font-weight:700;font-size:14px">' + e.name + '</div><div style="font-size:11px;color:var(--text3)">' + e.position + ' · ' + e.orderCount + ' заказов</div></div>' +
       '</div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;font-size:12px;margin-bottom:10px">' +
-        '<div><span style="color:var(--text3)">Ставка: </span><b>' + fmt(e.baseSalary) + '</b></div>' +
+        '<div><span style="color:var(--text3)">Оклад ½ (' + fmt(e.baseSalary) + '/2): </span><b style="color:' + (inclOklad ? 'var(--accent)' : 'var(--text3)') + '">' + (inclOklad ? fmt(okladOf(e)) : 'не начислен') + '</b></div>' +
         '<div><span style="color:var(--text3)">Бонус менеджер: </span><b style="color:var(--accent)">' + fmt(e.managerBonus) + '</b></div>' +
         '<div><span style="color:var(--text3)">Бонус мастер: </span><b style="color:var(--accent)">' + fmt(e.masterBonus) + '</b></div>' +
         (Number(e.adminBonus) > 0 ? '<div><span style="color:var(--text3)">Бонус админ.: </span><b style="color:var(--accent)">' + fmt(e.adminBonus) + '</b></div>' : '') +
         (Number(e.salaryPaid) > 0 ? '<div><span style="color:var(--text3)">Выдано (ЗП): </span><b style="color:var(--danger)">−' + fmt(e.salaryPaid) + '</b></div>' : '') +
-        '<div><span style="color:var(--text3)">' + (Number(e.total) < 0 ? 'Переплата: ' : 'Итого: ') + '</span><b style="font-size:15px;color:' + (Number(e.total) < 0 ? 'var(--danger)' : 'var(--success)') + '">' + fmt(e.total) + '</b></div>' +
+        '<div><span style="color:var(--text3)">' + (etot(e) < 0 ? 'Переплата: ' : 'Итого: ') + '</span><b style="font-size:15px;color:' + (etot(e) < 0 ? 'var(--danger)' : 'var(--success)') + '">' + fmt(etot(e)) + '</b></div>' +
       '</div>' +
       (orderRows ? '<div style="font-size:11px;color:var(--text3);margin-bottom:4px">Участвовал в заказах:</div>' + orderRows : '') +
     '</div>';
@@ -7172,7 +7180,7 @@ function renderSalary(data, periodLabel) {
       '<span style="font-size:13px;color:var(--text2)">Итого к выплате' +
         (periodLabel ? ' · <b style="color:var(--text)">' + periodLabel + '</b>' : '') +
         ' · ' + data.employees.length + ' чел.</span>' +
-      '<span style="font-size:20px;font-weight:700;color:var(--success)">' + fmt(data.grandTotal) + '</span>' +
+      '<span style="font-size:20px;font-weight:700;color:var(--success)">' + fmt(grandTotal) + '</span>' +
     '</div>' +
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">' + cards + '</div>';
 }
@@ -7183,16 +7191,19 @@ function printSalary() {
   var selName = (document.getElementById('sal-employee') || {}).value || '';
   var all = App._salaryData.employees || [];
   var emps = selName ? all.filter(function(e){ return e.name === selName; }) : all;
-  var grand = emps.reduce(function(s, r){ return s + (Number(r.total)||0); }, 0);
+  var inclOklad = !!((document.getElementById('sal-include-salary') || {}).checked);
+  var okladOf = function(e){ return inclOklad ? (Number(e.baseSalary)||0)/2 : 0; };  // ½ ставки
+  var etot = function(e){ return (Number(e.total||0) - (Number(e.baseSalary)||0)) + okladOf(e); };
+  var grand = emps.reduce(function(s, e){ return s + etot(e); }, 0);
   var lbl = App._salaryLabel || '';
   var fmt = function(n){ return (Number(n)||0).toFixed(2); };
   var rows = emps.map(function(e){
     return '<tr><td>' + e.name + '</td><td>' + e.position + '</td><td>' + e.orderCount + '</td>' +
-      '<td style="text-align:right">' + fmt(e.baseSalary) + '</td>' +
+      '<td style="text-align:right">' + fmt(okladOf(e)) + '</td>' +
       '<td style="text-align:right">' + fmt(e.managerBonus) + '</td>' +
       '<td style="text-align:right">' + fmt(e.masterBonus) + '</td>' +
       '<td style="text-align:right">' + fmt(e.adminBonus || 0) + '</td>' +
-      '<td style="text-align:right;font-weight:bold">' + fmt(e.total) + '</td></tr>';
+      '<td style="text-align:right;font-weight:bold">' + fmt(etot(e)) + '</td></tr>';
   }).join('');
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Расчёт ЗП</title>' +
     '<style>body{font-family:Arial;font-size:11px;margin:15mm}h2{text-align:center;font-size:13px;margin-bottom:2px}' +
@@ -7202,7 +7213,7 @@ function printSalary() {
     '<div class="no-print"><button onclick="window.print()">Печать</button></div>' +
     '<h2>РАСЧЁТ ЗАРАБОТНОЙ ПЛАТЫ</h2>' +
     (lbl ? '<div class="period">Период: ' + lbl + '</div>' : '') +
-    '<table><thead><tr><th>Сотрудник</th><th>Должность</th><th>Заказов</th><th>Ставка</th><th>Бонус (мен.)</th><th>Бонус (мастер)</th><th>Бонус (админ.)</th><th>ИТОГО</th></tr></thead>' +
+    '<table><thead><tr><th>Сотрудник</th><th>Должность</th><th>Заказов</th><th>Оклад ½</th><th>Бонус (мен.)</th><th>Бонус (мастер)</th><th>Бонус (админ.)</th><th>ИТОГО</th></tr></thead>' +
     '<tbody>' + rows + '</tbody>' +
     '<tfoot><tr><td colspan="7" style="text-align:right;font-weight:bold">Итого к выплате:</td>' +
     '<td style="font-weight:bold;text-align:right">' + fmt(grand) + ' ' + CUR + '</td></tr></tfoot>' +
