@@ -3488,8 +3488,13 @@ function loadOrdersKpi() {
   list.forEach(function(o) {
     if (!o['ID']) return;
     totalCount++;
-    totalRevenue += Number(o['Стоимость заказа']) || 0;
-    if (!isCancelledStatus(o['Статус']) && !isDoneStatus(o['Статус'])) inWork++;
+    if (isCancelledStatus(o['Статус'])) return;
+    // Выручка = признанная: оплаченные + отсрочка/рассрочка
+    var payType = String(o['Тип оплаты'] || '').trim();
+    var paidFull = String(o['Статус оплаты'] || '') === 'Оплачен';
+    var arrangement = (payType === 'Отсрочка' || payType === 'Рассрочка');
+    if (paidFull || arrangement) totalRevenue += Number(o['Стоимость заказа']) || 0;
+    if (!isDoneStatus(o['Статус'])) inWork++;
   });
   var avg = totalCount > 0 ? totalRevenue / totalCount : 0;
   var fmt = function(n){ return Math.round(n).toLocaleString('ru') + ' ' + CUR; };
@@ -6220,6 +6225,7 @@ function renderDashData_(d) {
   var fmt = function(n){ return (Math.round(Number(n)*100)/100).toLocaleString('ru') + ' ' + CUR; };
   if (kpi) kpi.innerHTML =
     kpiCard('Выручка',        fmt(k.revenue),     'var(--accent)',   '💰') +
+    kpiCard('В работе',       fmt(k.inWorkSum),    '#8b5cf6',       '🔧', "goPage('orders')") +
     kpiCard('Валовая прибыль',fmt(k.grossProfit),  'var(--success)', '📈') +
     kpiCard('Расходы',        fmt(k.expenses),     'var(--danger)',  '💸', "goPage('expenses')") +
     kpiCard('Дебиторка',      fmt(k.debtSum),      '#f59e0b',       '🧾', "goPage('debt')") +

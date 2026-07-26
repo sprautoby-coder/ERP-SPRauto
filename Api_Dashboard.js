@@ -59,39 +59,45 @@ function getDashboardData(period) {
 
     // KPI
     let revenue = 0, grossProfit = 0, materialCost = 0, expensesSum = 0;
-    let inWork = 0, debtSum = 0, debtCount = 0;
+    let inWork = 0, inWorkSum = 0, debtSum = 0, debtCount = 0;
     const byService = {};
     const cancelledSet = getCancelledStatusSet_();
     const doneSet = getDoneStatusSet_();
-    const receivableSet = getReceivableStatusSet_();   // дебиторка только с «Готов»
+    const receivableSet = getReceivableStatusSet_();   // дебиторка с «Готов» и позже
 
     filtered.forEach(function(o) {
       const price  = Number(o['Стоимость заказа'])  || 0;
       const gross  = Number(o['Валовая прибыль'])    || 0;
       const mat    = Number(o['Итого материалы'])     || 0;
-      const exp    = Number(o['Итого расходы'])       || 0;
       const status = o['Статус'] || '';
       const svc    = o['Услуга'] || 'Прочее';
+      if (cancelledSet[status]) return;   // отменённые в деньгах не учитываем
 
-      revenue     += price;
-      grossProfit += gross;
-      materialCost+= mat;
+      const payType = String(o['Тип оплаты'] || '').trim();
+      let payStatus = String(o['Статус оплаты'] || '').trim();
+      if (!payStatus) {
+        const bz = String(o['Безнал'] || '').trim();
+        payStatus = (bz === 'Да' || bz === 'Нет') ? 'Оплачен' : bz === 'Частично' ? 'Частично' : 'Не оплачен';
+      }
+      const paidFull    = payStatus === 'Оплачен';
+      const arrangement = (payType === 'Отсрочка' || payType === 'Рассрочка');   // отсрочка/рассрочка
 
-      if (!cancelledSet[status] && !doneSet[status]) inWork++;
+      // Выручка = оплаченные + отсрочка/рассрочка (признанная). Иначе — «В работе» (расчёт не произошёл).
+      if (paidFull || arrangement) {
+        revenue     += price;
+        grossProfit += gross;
+        materialCost+= mat;
+      } else {
+        inWorkSum   += price;   // заказ вбит, но оплата ещё не проведена
+      }
 
-      // Дебиторка = остаток по неоплаченным ГОТОВЫМ заказам (работа выполнена, но не оплачена).
-      // Заказы «Новый»/«В работе» долгом не считаются.
-      if (receivableSet[status]) {
-        let payStatus = String(o['Статус оплаты'] || '').trim();
-        if (!payStatus) {
-          const bz = String(o['Безнал'] || '').trim();
-          payStatus = (bz === 'Да' || bz === 'Нет') ? 'Оплачен' : bz === 'Частично' ? 'Частично' : 'Не оплачен';
-        }
-        if (payStatus !== 'Оплачен') {
-          const paid = paidByOrder[String(o['ID'])] || 0;
-          debtSum   += Math.max(0, price - paid);
-          debtCount++;
-        }
+      if (!doneSet[status]) inWork++;
+
+      // Дебиторка = остаток по неоплаченным: готовые (работа выполнена) + отсрочка/рассрочка
+      if (!paidFull && (receivableSet[status] || arrangement)) {
+        const paid = paidByOrder[String(o['ID'])] || 0;
+        debtSum   += Math.max(0, price - paid);
+        debtCount++;
       }
 
       if (!byService[svc]) byService[svc] = { count: 0, revenue: 0, gross: 0 };
@@ -165,6 +171,7 @@ function getDashboardData(period) {
         netProfit:   Math.round((grossProfit - expensesSum) * 100) / 100,
         ordersCount: filtered.length,
         inWork:      inWork,
+        inWorkSum:   Math.round(inWorkSum * 100) / 100,
         debtSum:     Math.round(debtSum * 100) / 100,
         expenses:    Math.round(expensesSum * 100) / 100,
         avgCheck:    filtered.length ? Math.round(revenue / filtered.length) : 0,
