@@ -51,6 +51,18 @@ function generateContractHtml(orderId) {
   });
 }
 
+/** Отдельный Акт выполненных работ (без договора) — для закрытия заказа. */
+function generateActHtml(orderId) {
+  return safeCall(function() {
+    var d = getDocData_(orderId);
+    var map = buildDocPlaceholders_(d);
+    var isLegal = String(d.client['Тип'] || '') === 'юр' || String(d.order['_clientType'] || '') === 'юр';
+    var byProxy = isLegal && String(d.order['Подписант'] || '').trim() !== '';
+    var body = fillTemplate_(actBodyHtml_(isLegal, byProxy, false), map);
+    return docWrap_('Акт ' + (map['Номер договора'] || ''), body, map['Логотип'], true);
+  });
+}
+
 // (старый генератор договора — оставлен как референс, не вызывается)
 function generateContractHtmlLegacy_(orderId) {
   return safeCall(function() {
@@ -801,8 +813,20 @@ function contractTemplateHtml_(isLegal, byProxy) {
   <p>Внесена предоплата за услуги: <span class="blank" style="min-width:340px"></span> руб.</p>
   <div class="sign"><span>Директор _____________ {{Директор}}</span><span>Заказчик _____________ / ` + clientActSign + `</span></div>
 
-  <!-- АКТ ВЫПОЛНЕННЫХ РАБОТ -->
-  <div style="border-top:1px solid #999;margin:10px 0 4px"></div>
+  ` + actBodyHtml_(isLegal, byProxy, true);
+}
+
+/** Акт выполненных работ. separator=true — с верхней разделительной линией (внутри договора).
+ *  Используется и в договоре, и отдельным документом (generateActHtml) — единый источник. */
+function actBodyHtml_(isLegal, byProxy, separator) {
+  var repClause = byProxy
+    ? `в лице {{Подписант род.}}, действующего на основании доверенности {{Доверенность}}`
+    : `в лице директора {{Директор заказчика род.}}, действующего на основании Устава`;
+  var clientAct = isLegal
+    ? `<b>{{Компания заказчика}}</b> ` + repClause + `, именуемое в дальнейшем «Заказчик»`
+    : `<b>{{ФИО}}</b>, именуемый в дальнейшем «Заказчик»`;
+  var clientActSign = isLegal ? (byProxy ? `{{Подписант}}` : `{{Директор заказчика}}`) : `{{Фамилия И.О.}}`;
+  return (separator ? `<div style="border-top:1px solid #999;margin:10px 0 4px"></div>` : ``) + `
   <h2>АКТ ВЫПОЛНЕННЫХ РАБОТ</h2>
   <div class="bar"><span>г. Минск</span><span>{{Дата ru}}</span></div>
   <p>{{Компания}} в лице директора {{Директор род.}}, именуемое в дальнейшем «Исполнитель», с одной стороны, и ` + clientAct + `, с другой стороны, составили настоящий акт о том, что в соответствии с условиями договора № {{Номер договора}} от {{Дата ru}}, Исполнитель выполнил следующую работу: {{Акт работа}}</p>
