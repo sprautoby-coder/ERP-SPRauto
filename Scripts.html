@@ -1972,6 +1972,24 @@ function submitKassaExpense() {
     .withFailureHandler(function(e){ if (btn) { btn.disabled = false; btn.textContent = 'Списать из кассы'; } toast(e.message, 'error'); })
     .addKassaExpense(payload);
 }
+// Изъять всю наличность (инкассация) — списывает текущий остаток изъятием владельца, касса → 0
+function kassaWithdrawAll() {
+  var k = App._kassa;
+  if (!k) { toast('Сначала откройте Кассу', 'error'); return; }
+  var bal = Number(k.balanceNow) || 0;
+  if (bal <= 0) { toast('Касса пуста — изымать нечего', 'error'); return; }
+  uiConfirm('Изъять всю наличность из кассы — ' + money(bal) + '?<br>Остаток станет 0. Операция запишется как «Изъятие владельца».', function(){
+    google.script.run
+      .withSuccessHandler(function(resp){
+        if (!resp || !resp.ok) { toast(resp?resp.error:'Ошибка', 'error'); return; }
+        toast('Изъято ' + money(bal) + ' — касса обнулена', 'success');
+        App._dashCache = null;   // касса влияет на дашборд
+        kassaToday();            // переходим на сегодня, где видно изъятие
+      })
+      .withFailureHandler(function(e){ toast(e.message, 'error'); })
+      .addKassaExpense({ kind: 'Изъятие', amount: bal, comment: 'обнуление кассы (инкассация)', date: kassaIsoToRu_(kassaTodayIso_()) });
+  }, { title: 'Изъятие из кассы', okText: 'Изъять' });
+}
 function deleteKassaExpense(id) {
   uiConfirm('Удалить этот расход из кассы?', function(){
     google.script.run
