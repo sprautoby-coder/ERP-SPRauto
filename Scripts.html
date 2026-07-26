@@ -355,7 +355,7 @@ function fillOrderEmployees() {
       var label = document.createElement('label');
       label.className = 'master-checkbox';
       label.innerHTML =
-        '<input type="checkbox" value="' + name + '" onchange="updateMastersField()"> ' + name;
+        '<input type="checkbox" value="' + name + '" onchange="onMasterToggle_()"> ' + name;
       masterWrap.appendChild(label);
     });
   }
@@ -4831,6 +4831,7 @@ function initOrderForm() {
   if (lbl) lbl.textContent = '— выбрать —';
   document.querySelectorAll('#ord-masters-wrap input[type=checkbox]').forEach(function(cb){ cb.checked = false; });
   var hid = document.getElementById('ord-masters'); if (hid) hid.value = '';
+  App._mastersManual = false;   // сбрасываем: мастер подтянется авто по роли под услугу
 
   // Авто-подстановка менеджера и администратора: последний использованный (запоминаем),
   // иначе — первый сотрудник с ролью менеджер/админ. Ставим всегда (форма новая).
@@ -5239,19 +5240,20 @@ function isMixedInForm_() {
   var t = formServicesText_();
   return /тонир|tint/i.test(t) && /оклей|ppf|антихром|полиров|керам|шумо|антикор|химч|защит/i.test(t);
 }
-// Авто-подтяжка мастера в поле «Мастер(а)» по роли под услугу (если мастер ещё не выбран вручную)
+// Ручной клик по мастеру — фиксируем, что выбор сделан вручную (авто-подтяжку больше не трогаем)
+function onMasterToggle_() { App._mastersManual = true; updateMastersField(); }
+
+// Авто-подтяжка мастера в поле «Мастер(а)» по роли под услугу.
+// Снимает все галочки и отмечает ТОЛЬКО сотрудников с нужной ролью
+// (чистая тонировка → тонировщик; иначе → оклейщик). Ручной выбор не трогаем.
 function autoPickMastersByService_() {
+  if (App._mastersManual) return;
   var wrap = document.getElementById('ord-masters-wrap'); if (!wrap) return;
-  if (wrap.querySelector('input[type=checkbox]:checked')) return;   // ручной выбор не трогаем
-  // Основной мастер: тонировщик — если чистая тонировка; иначе оклейщик
   var re = (isTintInForm_() && !isMixedInForm_()) ? /тонировщик/i : /оклейщик/i;
-  var picked = false;
-  (App.employees || []).forEach(function(e){
-    if (!empHasRole_(e, re)) return;
-    var n = empName_(e);
-    wrap.querySelectorAll('input[type=checkbox]').forEach(function(cb){ if (cb.value === n) { cb.checked = true; picked = true; } });
-  });
-  if (picked) updateMastersField();
+  var names = {};
+  (App.employees || []).forEach(function(e){ if (empHasRole_(e, re)) names[empName_(e)] = true; });
+  wrap.querySelectorAll('input[type=checkbox]').forEach(function(cb){ cb.checked = !!names[cb.value]; });
+  updateMastersField();
 }
 
 // Заполнить список тонировщиков (по роли), при первом показе — авто-отметить
@@ -6113,8 +6115,8 @@ function onDashPeriodChange() {
   renderDashboard();
 }
 
-// Ручная правка даты в календаре → пересчитываем
-function onDashDateEdit() { renderDashboard(); }
+// Ручная правка даты в календаре → сохраняем период и пересчитываем
+function onDashDateEdit() { savePeriod_('dash'); renderDashboard(); }
 
 function renderDashData_(d) {
   var kpi = document.getElementById('dash-kpi');
@@ -7766,6 +7768,8 @@ function renderOrderCard(order) {
     var label = t === '' ? '— не указано —' : t;
     return '<option value="' + t + '"' + (t===payType?' selected':'') + '>' + label + '</option>';
   }).join('');
+  // История платежей + график + срок — только для рассрочки/отсрочки/смешанной (иначе не нужны)
+  var showPaySchedule = ['Рассрочка','Отсрочка','Смешанная'].indexOf(payType) >= 0;
 
   // Срок оплаты в формате для input[type=date]
   var dueIso = '';
@@ -7919,11 +7923,13 @@ function renderOrderCard(order) {
           '</div>' +
           '<label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Условия оплаты (−15% ЗП с безнала и нала с чеком)</label>' +
           '<select onchange="updateOrderCardField(\'' + oid + '\',{payType:this.value})" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--inp);color:var(--text);margin-bottom:8px">' + payTypeOpts + '</select>' +
-          '<label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Срок оплаты / следующий взнос</label>' +
-          '<input type="date" value="' + dueIso + '" onchange="setOrderCardDueDate(\'' + oid + '\', this.value)" style="width:100%;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--inp);color:var(--text);margin-bottom:10px">' +
-          '<div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">История платежей</div>' +
-          payHistory +
-          scheduleBlock +
+          (showPaySchedule
+            ? '<label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Срок оплаты / следующий взнос</label>' +
+              '<input type="date" value="' + dueIso + '" onchange="setOrderCardDueDate(\'' + oid + '\', this.value)" style="width:100%;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--inp);color:var(--text);margin-bottom:10px">' +
+              '<div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">История платежей</div>' +
+              payHistory +
+              scheduleBlock
+            : '') +
         '</div>' +
 
         // Финансовый итог
