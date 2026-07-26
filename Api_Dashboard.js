@@ -141,7 +141,7 @@ function getDashboardData(period) {
     try { kassaBalance = getKassaBalance_(); } catch (e) {}
     try {
       let bIn = 0, bOut = 0;
-      readSheetAsObjects('DATABASE', 'PAYMENTS').forEach(function(p){ if (p['ID'] && String(p['Способ оплаты']) === 'Безнал') bIn += (Number(p['Сумма']) || 0) * 0.85; });
+      readSheetAsObjects('DATABASE', 'PAYMENTS').forEach(function(p){ if (p['ID'] && String(p['Способ оплаты']) === 'Безнал') bIn += Number(p['Сумма']) || 0; });   // на счёт приходит полная сумма (−15% — только база для бонусов ЗП)
       expenses.forEach(function(e){ if (e['ID'] && String(e['Способ оплаты'] || '') === 'Безнал') bOut += Number(e['Сумма']) || 0; });
       bankBalance = bIn - bOut;
     } catch (e) {}
