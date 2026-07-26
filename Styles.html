@@ -907,8 +907,9 @@ select.mat-inp { cursor:pointer; padding-right:2px; }
 @media (max-width: 900px) { .apt-layout { flex-direction: column; } .apt-legend { width: 100%; flex: none; position: static; } }
 
 /* ===== КАССА ===== */
-.kassa-datenav { display: flex; align-items: center; gap: 6px; margin-top: 8px; }
+.kassa-datenav { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
 .kassa-datenav .form-input { width: auto; padding: 6px 10px; }
+.kassa-datenav .form-select { width: auto; height: auto; padding: 6px 30px 6px 10px; font-size: 13px; }
 .kassa-balance-card { background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #000)); border-radius: 16px; padding: 22px 26px; color: #fff; margin-bottom: 16px; box-shadow: var(--shadow); }
 .kassa-balance-label { font-size: 13px; opacity: .85; letter-spacing: .3px; }
 .kassa-balance-val { font-size: 40px; font-weight: 800; line-height: 1.1; margin-top: 4px; }
