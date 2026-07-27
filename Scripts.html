@@ -8532,7 +8532,8 @@ function renderCardPersonnel() {
         '<label style="font-size:10px;color:var(--text3)">Администратор</label>' +
         '<select id="card-tint-admin" style="' + inp + ';margin:2px 0 8px" onchange="persAutoSave()">' + tintAdmOpts + '</select>' +
         '<label style="font-size:10px;color:var(--text3)">Стоимость тонировки, руб <span>(из общей суммы)</span></label>' +
-        '<input id="card-tint-price" type="number" min="0" value="' + tintPriceVal + '" style="' + inp + ';margin:2px 0 8px" oninput="persAutoSave()">' +
+        '<input id="card-tint-price" type="number" min="0" value="' + tintPriceVal + '" style="' + inp + ';margin:2px 0 8px" onchange="onTintPriceChange_()" title="Добавляется к общей стоимости заказа">' +
+        '<div style="font-size:10px;color:var(--text3);margin-bottom:2px">Стоимость тонировки добавляется к общей сумме заказа</div>' +
         '<div style="font-size:10px;color:var(--text3);margin-bottom:2px">Тонировщики (бонус — с части тонировки)</div>' +
         '<div style="max-height:100px;overflow:auto">' + tinterChecks + '</div>';
     }
@@ -8564,6 +8565,12 @@ function renderCardPersonnel() {
     (isMixedOrder ? '</div>' : '') +
     tintSection +
   '</div>';
+}
+
+// Стоимость тонировки изменилась → сохраняем и перерисовываем карточку (общая сумма меняется)
+function onTintPriceChange_() {
+  App._persDirty = true;
+  persFlush_(function(){ if (App._currentOrderId) reopenCard(App._currentOrderId); });
 }
 
 function persAutoSave() {

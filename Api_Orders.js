@@ -541,7 +541,7 @@ function updateOrder(id, payload) {
       if (payload.manager     !== undefined) setCell('Менеджер',        payload.manager);
       if (payload.masters     !== undefined) setCell('Оклейщики',       payload.masters);
       if (payload.tintMasters !== undefined) setCell('Тонировщики',     payload.tintMasters);
-      if (payload.tintPrice   !== undefined) setCell('Стоимость тонировки', Number(payload.tintPrice) || 0);
+      // Стоимость тонировки — аддитивная (добавляется к общей сумме). Обрабатывается в блоке пересчёта ниже.
       if (payload.tintManager !== undefined) setCell('Менеджер тонировки',      payload.tintManager);
       if (payload.tintAdmin   !== undefined) setCell('Администратор тонировки', payload.tintAdmin);
       if (payload.film        !== undefined) setCell('Пленка',          payload.film);
@@ -574,20 +574,35 @@ function updateOrder(id, payload) {
                        || payload.tintManager !== undefined || payload.tintAdmin !== undefined;
       let financeResult = null;
       if (needsRecalc) {
-        const price      = payload.price   !== undefined ? Number(payload.price)  : Number(row['Стоимость заказа']) || 0;
         const payType    = payload.payType !== undefined ? payload.payType         : String(row['Тип оплаты'] || '');
         const manager    = payload.manager !== undefined ? payload.manager         : String(row['Менеджер']   || '');
         const masters    = payload.masters !== undefined ? payload.masters         : String(row['Оклейщики']  || '');
         const admin      = payload.admin   !== undefined ? payload.admin           : String(row['Администратор'] || '');
-        const tintPrice  = payload.tintPrice   !== undefined ? Number(payload.tintPrice) : Number(row['Стоимость тонировки']) || 0;
         const tintMasters= payload.tintMasters !== undefined ? payload.tintMasters       : String(row['Тонировщики'] || '');
         const tintManager= payload.tintManager !== undefined ? payload.tintManager       : String(row['Менеджер тонировки'] || '');
         const tintAdmin  = payload.tintAdmin   !== undefined ? payload.tintAdmin         : String(row['Администратор тонировки'] || '');
         const matCost    = Number(row['Итого материалы']) || 0;
         const expCost    = Number(row['Итого расходы'])   || 0;
+
+        // Аддитивная стоимость: тонировка ДОБАВЛЯЕТСЯ к общей сумме.
+        // Оклейка сохраняется (= старая общая − старая тонировка), новая общая = оклейка + новая тонировка.
+        let price     = Number(row['Стоимость заказа']) || 0;
+        let tintPrice = Number(row['Стоимость тонировки']) || 0;
+        if (payload.tintPrice !== undefined) {
+          const wrapBase = price - tintPrice;               // часть оклейки (без тонировки)
+          tintPrice = Number(payload.tintPrice) || 0;
+          price     = wrapBase + tintPrice;                 // добавляем тонировку к оклейке
+          setCell('Стоимость тонировки', tintPrice);
+          setCell('Стоимость заказа',    price);
+        }
+        if (payload.price !== undefined) {                  // прямая правка общей суммы (шапка)
+          price = Number(payload.price) || 0;
+          if (tintPrice > price) tintPrice = price;
+          setCell('Стоимость заказа', price);
+        }
+
         financeResult    = calcOrderFinance_(price, matCost, expCost, payType, manager, masters, admin, getEmployeeBonusPct_(admin, 5), tintPrice, tintMasters, getOfficialPaid_(id), tintManager, tintAdmin);
 
-        if (payload.price !== undefined) setCell('Стоимость заказа', price);
         setCell('Валовая прибыль',      financeResult.grossProfit);
         setCell('Бонус менеджера',      financeResult.managerBonus);
         setCell('Бонус оклейщика',      financeResult.masterBonus);
