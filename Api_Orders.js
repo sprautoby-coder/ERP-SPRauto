@@ -538,6 +538,10 @@ function updateOrder(id, payload) {
       if (payload.service !== undefined) {
         setCell('Услуга', getServiceName_(payload.service));
       }
+      // Список услуг заказа (несколько через запятую) — добавление/удаление услуги в карточке
+      if (payload.services !== undefined) {
+        setCell('Услуга', String(payload.services));
+      }
 
       // Тип оплаты (условия) — редактируется свободно. Статус оплаты НЕ трогаем:
       // он меняется только платежами (addOrderPayment / updateOrderPaymentStatus_).

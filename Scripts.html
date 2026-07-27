@@ -7950,6 +7950,11 @@ function renderOrderCard(order) {
       '</div>' +
     '</div>' +
 
+    // Услуги заказа — чипы + «Добавить услугу»
+    '<div id="card-services" style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:9px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+      cardServicesHtml_(order) +
+    '</div>' +
+
     // ── ТЕЛО КАРТОЧКИ: две колонки (эффективно используем ширину) ──
     '<div style="display:grid;grid-template-columns:1.6fr 1fr;gap:12px;align-items:start">' +
 
@@ -8835,6 +8840,70 @@ function cardSection_(title, content) {
   return '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:12px">' +
     '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2);margin-bottom:6px">' + title + '</div>' +
     content + '</div>';
+}
+
+// ── Услуги заказа: чипы текущих услуг + меню «Добавить услугу» ──
+function cardServicesHtml_(order) {
+  var current = String(order['Услуга'] || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  var catalog = (App.config && App.config.services) || [];
+  var oid = order['ID'] || '';
+  var esc = function(s){ return String(s).replace(/'/g, "\\'"); };
+  var metaByName = function(nm){ for (var i = 0; i < catalog.length; i++){ if (catalog[i].name === nm) return catalog[i]; } return null; };
+  var chips = current.map(function(nm){
+    var m = metaByName(nm);
+    var color = (m && m.color) || 'var(--accent)';
+    var icon = (m && m.icon) ? m.icon + ' ' : '';
+    var canRemove = current.length > 1;
+    return '<span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:' + color + ';background:' + color + '1a;border:1px solid ' + color + '66;padding:3px 6px 3px 11px;border-radius:14px">' +
+      icon + escapeHtml_(nm) +
+      (canRemove ? '<button onclick="removeOrderService(\'' + esc(oid) + '\',\'' + esc(nm) + '\')" title="Убрать услугу" style="border:none;background:none;color:' + color + ';cursor:pointer;font-size:13px;line-height:1;padding:0 2px">✕</button>' : '') +
+    '</span>';
+  }).join('');
+  var available = catalog.filter(function(s){ return s.active !== false && current.indexOf(s.name) < 0; });
+  var addMenu = available.length
+    ? '<div style="position:relative;display:inline-block">' +
+        '<button onclick="toggleAddServiceMenu_(event)" style="font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);border:1px dashed var(--border-h);border-radius:14px;padding:4px 12px;cursor:pointer">+ Добавить услугу</button>' +
+        '<div id="card-add-svc-menu" style="display:none;position:absolute;top:100%;left:0;z-index:60;margin-top:4px;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;box-shadow:var(--shadow);padding:6px;min-width:190px;max-height:260px;overflow:auto">' +
+          available.map(function(s){
+            return '<div onclick="addOrderService(\'' + esc(oid) + '\',\'' + esc(s.name) + '\')" style="padding:7px 10px;font-size:13px;cursor:pointer;border-radius:7px;display:flex;align-items:center;gap:8px;white-space:nowrap" onmouseover="this.style.background=\'var(--bg-hover)\'" onmouseout="this.style.background=\'transparent\'">' + (s.icon ? s.icon + ' ' : '') + escapeHtml_(s.name) + '</div>';
+          }).join('') +
+        '</div>' +
+      '</div>'
+    : '';
+  return '<span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2)">Услуги</span>' + chips + addMenu;
+}
+function toggleAddServiceMenu_(ev) {
+  ev.stopPropagation();
+  var m = document.getElementById('card-add-svc-menu'); if (!m) return;
+  var open = m.style.display !== 'none';
+  m.style.display = open ? 'none' : 'block';
+  if (!open) setTimeout(function(){ document.addEventListener('click', closeAddSvcMenu_); }, 30);
+}
+function closeAddSvcMenu_(){ var m = document.getElementById('card-add-svc-menu'); if (m) m.style.display = 'none'; document.removeEventListener('click', closeAddSvcMenu_); }
+function addOrderService(orderId, name) {
+  var o = App._currentOrder; if (!o) return;
+  var cur = String(o['Услуга'] || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  if (cur.indexOf(name) < 0) cur.push(name);
+  saveOrderServices_(orderId, cur.join(', '));
+}
+function removeOrderService(orderId, name) {
+  var o = App._currentOrder; if (!o) return;
+  var cur = String(o['Услуга'] || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  cur = cur.filter(function(s){ return s !== name; });
+  if (!cur.length) { toast('В заказе должна остаться хотя бы одна услуга', 'error'); return; }
+  saveOrderServices_(orderId, cur.join(', '));
+}
+function saveOrderServices_(orderId, servicesStr) {
+  var o = App._currentOrder; if (o) o['Услуга'] = servicesStr;   // оптимистично
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast('Услуги обновлены', 'success');
+      App.orders = []; App._dashCache = null; if (App._cardCache) delete App._cardCache[orderId];
+      reopenCard(orderId);
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .updateOrder(orderId, { services: servicesStr });
 }
 
 function infoLine_(label, value) {
