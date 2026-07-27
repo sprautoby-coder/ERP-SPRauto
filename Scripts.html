@@ -8506,6 +8506,9 @@ function renderCardPersonnel() {
   var isMixedOrder = svcHasTint_(svc) && svcHasOkl_(svc);
   var tintList     = String(o['Тонировщики'] || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
   var tintPriceVal = (Number(o['Стоимость тонировки']) || '') === '' ? '' : Number(o['Стоимость тонировки']);
+  // Стоимость оклейки = хранимая или (общая − тонировка)
+  var _tot = Number(o['Стоимость заказа']) || 0, _tnt = Number(o['Стоимость тонировки']) || 0;
+  var wrapPriceVal = (o['Стоимость оклейки'] !== '' && o['Стоимость оклейки'] != null) ? (Number(o['Стоимость оклейки']) || 0) : Math.max(0, _tot - _tnt);
   var TINT_ACCENT = '#e0559a';   // розовый акцент тонировки (для визуального разделения)
   var tintSection  = '';
   if (isTintOrder) {
@@ -8539,7 +8542,7 @@ function renderCardPersonnel() {
     }
     tintSection =
       '<div style="border:1px solid ' + TINT_ACCENT + '55;border-left:3px solid ' + TINT_ACCENT + ';border-radius:8px;background:' + TINT_ACCENT + '0d;margin-top:10px;padding:8px 10px">' +
-        '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:' + TINT_ACCENT + ';margin-bottom:6px">🎨 Тонировка' + (isMixedOrder ? ' — своя команда' : '') + '</div>' +
+        '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:' + TINT_ACCENT + ';margin-bottom:6px">🎨 Тонировка</div>' +
         '<div style="display:grid;grid-template-columns:1fr 88px;gap:8px">' +
           '<div><label style="font-size:10px;color:var(--text3)">Плёнка (для документов)</label>' +
             '<input id="card-tint-film" value="' + filmVal + '" placeholder="напр. Nano Ceramic" style="' + inp + ';margin:2px 0 8px" oninput="persAutoSave()"></div>' +
@@ -8555,7 +8558,9 @@ function renderCardPersonnel() {
       '<span id="card-pers-status" style="font-size:11px;color:var(--text3)"></span>' +
     '</div>' +
     (isMixedOrder ? '<div style="border:1px solid var(--border-h);border-left:3px solid var(--accent);border-radius:8px;padding:8px 10px;margin-bottom:2px">' +
-      '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:6px">🛡 Оклейка — своя команда</div>' : '') +
+      '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:6px">🛡 Оклейка</div>' +
+      '<label style="font-size:10px;color:var(--text3)">Стоимость оклейки, руб</label>' +
+      '<input id="card-wrap-price" type="number" min="0" value="' + wrapPriceVal + '" style="' + inp + ';margin:2px 0 8px" onchange="onWrapPriceChange_()" title="Итого заказа = оклейка + тонировка"> ' : '') +
     '<label style="font-size:10px;color:var(--text3)">Менеджер</label>' +
     '<select id="card-mgr" style="' + inp + ';margin:2px 0 8px" onchange="persAutoSave()">' + mgrOpts + '</select>' +
     '<label style="font-size:10px;color:var(--text3)">Администратор</label>' +
@@ -8567,8 +8572,12 @@ function renderCardPersonnel() {
   '</div>';
 }
 
-// Стоимость тонировки изменилась → сохраняем и перерисовываем карточку (общая сумма меняется)
+// Стоимость оклейки/тонировки изменилась → сохраняем и перерисовываем (общая сумма = оклейка + тонировка)
 function onTintPriceChange_() {
+  App._persDirty = true;
+  persFlush_(function(){ if (App._currentOrderId) reopenCard(App._currentOrderId); });
+}
+function onWrapPriceChange_() {
   App._persDirty = true;
   persFlush_(function(){ if (App._currentOrderId) reopenCard(App._currentOrderId); });
 }
@@ -8615,6 +8624,8 @@ function persFlush_(cb) {
   var payload = { manager: mgr, masters: masters.join(', '), admin: admin };
   if (hasFilm)  { payload.film = tintFilm; payload.lightTransmission = tintLight; }
   if (hasMixed) { payload.tintPrice = tintPrice; payload.tintMasters = tintMasters; payload.tintManager = tintMgr; payload.tintAdmin = tintAdm; }
+  var wrapEl = document.getElementById('card-wrap-price');
+  if (wrapEl) payload.wrapPrice = Number(wrapEl.value) || 0;
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) { st('ошибка сохранения', 'var(--danger)'); if (cb) cb(); return; }

@@ -87,7 +87,8 @@ function ensureColumns_(sheet, names) {
   return headers;
 }
 var TINT_COLUMNS_ = ['Стоимость тонировки', 'Тонировщики', 'Бонус тонировщика', 'Пленка', 'Светопропускаемость',
-                     'Менеджер тонировки', 'Администратор тонировки', 'Бонус менеджера тонировки', 'Бонус администратора тонировки'];
+                     'Менеджер тонировки', 'Администратор тонировки', 'Бонус менеджера тонировки', 'Бонус администратора тонировки',
+                     'Стоимость оклейки'];
 
 /** Сумма ОФИЦИАЛЬНО полученных денег по заказу (безнал + нал с чеком) — база для −15% бонусов. */
 function getOfficialPaid_(orderId) {
@@ -383,6 +384,7 @@ function createOrder(payload) {
       'Оклейщики':             payload.masters || '',
       'Тонировщики':           tintMasters,
       'Стоимость тонировки':   tintPrice || '',
+      'Стоимость оклейки':     Math.max(0, (Number(payload.price) || 0) - tintPrice),
       'Бонус тонировщика':     finance.tintMasterBonus,
       'Менеджер тонировки':    tintManagers,
       'Администратор тонировки': tintAdmin,
@@ -571,7 +573,8 @@ function updateOrder(id, payload) {
                        || payload.manager !== undefined || payload.masters !== undefined
                        || payload.admin !== undefined
                        || payload.tintPrice !== undefined || payload.tintMasters !== undefined
-                       || payload.tintManager !== undefined || payload.tintAdmin !== undefined;
+                       || payload.tintManager !== undefined || payload.tintAdmin !== undefined
+                       || payload.wrapPrice !== undefined;
       let financeResult = null;
       if (needsRecalc) {
         const payType    = payload.payType !== undefined ? payload.payType         : String(row['Тип оплаты'] || '');
@@ -584,22 +587,22 @@ function updateOrder(id, payload) {
         const matCost    = Number(row['Итого материалы']) || 0;
         const expCost    = Number(row['Итого расходы'])   || 0;
 
-        // Аддитивная стоимость: тонировка ДОБАВЛЯЕТСЯ к общей сумме.
-        // Оклейка сохраняется (= старая общая − старая тонировка), новая общая = оклейка + новая тонировка.
-        let price     = Number(row['Стоимость заказа']) || 0;
-        let tintPrice = Number(row['Стоимость тонировки']) || 0;
-        if (payload.tintPrice !== undefined) {
-          const wrapBase = price - tintPrice;               // часть оклейки (без тонировки)
-          tintPrice = Number(payload.tintPrice) || 0;
-          price     = wrapBase + tintPrice;                 // добавляем тонировку к оклейке
-          setCell('Стоимость тонировки', tintPrice);
-          setCell('Стоимость заказа',    price);
+        // Итоговая сумма = стоимость оклейки + стоимость тонировки (услуги складываются).
+        const curTotal = Number(row['Стоимость заказа']) || 0;
+        let tintPrice  = Number(row['Стоимость тонировки']) || 0;
+        const rawWrap  = row['Стоимость оклейки'];
+        let wrapPrice  = (rawWrap !== '' && rawWrap != null) ? Number(rawWrap) || 0 : (curTotal - tintPrice);
+        if (payload.wrapPrice !== undefined) wrapPrice = Number(payload.wrapPrice) || 0;   // правка цены оклейки
+        if (payload.tintPrice !== undefined) tintPrice = Number(payload.tintPrice) || 0;   // правка цены тонировки
+        if (payload.price !== undefined) {                  // прямая правка ОБЩЕЙ суммы (шапка) → подгоняем оклейку
+          const total = Number(payload.price) || 0;
+          if (tintPrice > total) tintPrice = total;
+          wrapPrice = total - tintPrice;
         }
-        if (payload.price !== undefined) {                  // прямая правка общей суммы (шапка)
-          price = Number(payload.price) || 0;
-          if (tintPrice > price) tintPrice = price;
-          setCell('Стоимость заказа', price);
-        }
+        let price = wrapPrice + tintPrice;
+        setCell('Стоимость оклейки',   wrapPrice);
+        setCell('Стоимость тонировки', tintPrice);
+        setCell('Стоимость заказа',    price);
 
         financeResult    = calcOrderFinance_(price, matCost, expCost, payType, manager, masters, admin, getEmployeeBonusPct_(admin, 5), tintPrice, tintMasters, getOfficialPaid_(id), tintManager, tintAdmin);
 
