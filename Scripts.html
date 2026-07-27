@@ -7941,7 +7941,7 @@ function renderOrderCard(order) {
       '</div>' +
       '<div style="display:flex;align-items:center;gap:14px">' +
         '<div style="text-align:right">' +
-          '<div style="font-size:20px;font-weight:700">' + fmt(price) + '</div>' +
+          '<div style="font-size:20px;font-weight:700;white-space:nowrap"><input type="number" min="0" step="0.01" value="' + price + '" onchange="updateOrderPrice_(\'' + oid + '\', this.value)" title="Цена заказа — можно изменить (например, скидка)" style="width:100px;text-align:right;font-size:20px;font-weight:700;color:var(--text);background:transparent;border:none;border-bottom:1px dashed var(--text3);padding:0;outline:none"> ' + CUR + '</div>' +
           '<span style="font-size:11px;padding:2px 9px;border-radius:20px;background:' + payStatusColor + '22;color:' + payStatusColor + '">' + payStatus + '</span>' +
         '</div>' +
         '<select style="font-size:12px;font-weight:700;padding:5px 8px;border-radius:8px;border:2px solid ' + statusColor + ';background:var(--inp);color:var(--text)" onchange="changeOrderStatus(\'' + oid + '\', this)">' +
@@ -8740,6 +8740,21 @@ function updateOrderCardField(orderId, payload) {
     })
     .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
     .updateOrder(orderId, payload);
+}
+
+// Изменить стоимость заказа прямо в карточке (скидка / правка цены) → пересчёт финансов
+function updateOrderPrice_(orderId, val) {
+  var price = Math.max(0, Number(val) || 0);
+  var o = App._currentOrder; if (o) o['Стоимость заказа'] = price;   // оптимистично
+  google.script.run
+    .withSuccessHandler(function(resp) {
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast('Цена обновлена: ' + price.toLocaleString('ru') + ' ' + CUR, 'success');
+      App.orders = []; App._dashCache = null; App._debtCache = null; if (App._cardCache) delete App._cardCache[orderId];
+      reopenCard(orderId);   // обновит шапку, «Оплату» (сумма/остаток) и «Финансовый итог»
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .updateOrder(orderId, { price: price });
 }
 
 function setOrderCardDueDate(orderId, val) {
