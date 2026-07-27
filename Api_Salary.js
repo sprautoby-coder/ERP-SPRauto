@@ -61,27 +61,27 @@ function calcSalaryForPeriod(from, to) {
       orders.forEach(function(o) {
         const managers    = splitNames_(o['Менеджер'] || '');
         const masters     = splitNames_(o['Оклейщики'] || '');
-        const tintMasters = splitNames_(o['Тонировщики'] || '');
         const admins      = splitNames_(o['Администратор'] || '');
+        // Команда тонировки: своя (или по умолчанию как в оклейке)
+        const tintMasters  = splitNames_(o['Тонировщики'] || '');
+        const tintManagers = splitNames_(String(o['Менеджер тонировки'] || '').trim() || o['Менеджер'] || '');
+        const tintAdmins   = splitNames_(String(o['Администратор тонировки'] || '').trim() || o['Администратор'] || '');
         const gross       = Number(o['Валовая прибыль']) || 0;
-        // Бонус мастера = master% от ВСЕЙ валовой, поровну между всеми мастерами
-        // (оклейщики + тонировщики) — тонировка тоже входит в базу.
-        const totalMasters = masters.length + tintMasters.length;
-        const masterEach   = totalMasters > 0 ? gross * (rates.master / 100) / totalMasters : 0;
+        const price       = Number(o['Стоимость заказа']) || 0;
+        // Валовая делится по доле цены: тонировка ← своя часть, оклейка ← остальное.
+        const tintPrice   = Number(o['Стоимость тонировки']) || 0;
+        const tintGross   = price > 0 ? gross * (tintPrice / price) : 0;
+        const wrapGross   = gross - tintGross;
         let involved      = false;
 
-        if (managers.indexOf(name) >= 0) {
-          const share = managers.length > 0 ? gross * (rates.manager / 100) / managers.length : 0;
-          managerBonus += share;
-          involved = true;
-        }
-        if (masters.indexOf(name) >= 0)     { masterBonus += masterEach; involved = true; }
-        if (tintMasters.indexOf(name) >= 0) { masterBonus += masterEach; involved = true; }
-        if (admins.indexOf(name) >= 0) {
-          const share = admins.length > 0 ? gross * (rates.admin / 100) / admins.length : 0;
-          adminBonus += share;
-          involved = true;
-        }
+        // Оклейка (со своей части)
+        if (managers.indexOf(name) >= 0) { managerBonus += managers.length > 0 ? wrapGross * (rates.manager / 100) / managers.length : 0; involved = true; }
+        if (masters.indexOf(name)  >= 0) { masterBonus  += masters.length  > 0 ? wrapGross * (rates.master  / 100) / masters.length  : 0; involved = true; }
+        if (admins.indexOf(name)   >= 0) { adminBonus   += admins.length   > 0 ? wrapGross * (rates.admin   / 100) / admins.length   : 0; involved = true; }
+        // Тонировка (со своей части)
+        if (tintManagers.indexOf(name) >= 0) { managerBonus += tintManagers.length > 0 ? tintGross * (rates.manager / 100) / tintManagers.length : 0; involved = true; }
+        if (tintMasters.indexOf(name)  >= 0) { masterBonus  += tintMasters.length  > 0 ? tintGross * (rates.master  / 100) / tintMasters.length  : 0; involved = true; }
+        if (tintAdmins.indexOf(name)   >= 0) { adminBonus   += tintAdmins.length   > 0 ? tintGross * (rates.admin   / 100) / tintAdmins.length   : 0; involved = true; }
         if (involved) {
           orderCount++;
           ordersList.push({

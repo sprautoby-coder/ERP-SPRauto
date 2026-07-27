@@ -8075,7 +8075,9 @@ function renderOrderCard(order) {
       o2['Итого материалы'] = resp.data.totalMat; o2['Итого расходы'] = resp.data.totalExp;
       o2['Валовая прибыль'] = f.grossProfit; o2['Бонус менеджера'] = f.managerBonus;
       o2['Бонус оклейщика'] = f.masterBonus; o2['Бонус администратора'] = f.adminBonus;
-      if (f.tintMasterBonus !== undefined) o2['Бонус тонировщика'] = f.tintMasterBonus;
+      if (f.tintMasterBonus  !== undefined) o2['Бонус тонировщика'] = f.tintMasterBonus;
+      if (f.tintManagerBonus !== undefined) o2['Бонус менеджера тонировки'] = f.tintManagerBonus;
+      if (f.tintAdminBonus   !== undefined) o2['Бонус администратора тонировки'] = f.tintAdminBonus;
       o2['Маржинальная прибыль'] = f.marginalProfit;
       var box = document.getElementById('card-fin-box'); if (box) box.innerHTML = renderCardFinance_(o2);
     })
@@ -8504,6 +8506,7 @@ function renderCardPersonnel() {
   var isMixedOrder = svcHasTint_(svc) && svcHasOkl_(svc);
   var tintList     = String(o['Тонировщики'] || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
   var tintPriceVal = (Number(o['Стоимость тонировки']) || '') === '' ? '' : Number(o['Стоимость тонировки']);
+  var TINT_ACCENT = '#e0559a';   // розовый акцент тонировки (для визуального разделения)
   var tintSection  = '';
   if (isTintOrder) {
     var filmVal  = String(o['Пленка'] || '').replace(/"/g,'&quot;');
@@ -8520,16 +8523,24 @@ function renderCardPersonnel() {
         return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">' +
           '<input type="checkbox" class="card-tinter-cb" value="' + n.replace(/"/g,'&quot;') + '"' + (on ? ' checked' : '') + ' onchange="persAutoSave()"> ' + n + (isTinter ? ' 🎨' : '') + '</label>';
       }).join('');
+      // Менеджер/админ тонировки — по умолчанию как в оклейке
+      var tintMgrOpts = managerOptionsHtml_(String(o['Менеджер тонировки'] || o['Менеджер'] || ''), '— менеджер —');
+      var tintAdmOpts = managerOptionsHtml_(String(o['Администратор тонировки'] || o['Администратор'] || ''), '— администратор —');
       mixedPart =
-        '<label style="font-size:10px;color:var(--text3);margin-top:6px;display:block">🎨 Стоимость тонировки, руб <span>(из общей суммы)</span></label>' +
+        '<label style="font-size:10px;color:var(--text3)">Менеджер</label>' +
+        '<select id="card-tint-mgr" style="' + inp + ';margin:2px 0 8px" onchange="persAutoSave()">' + tintMgrOpts + '</select>' +
+        '<label style="font-size:10px;color:var(--text3)">Администратор</label>' +
+        '<select id="card-tint-admin" style="' + inp + ';margin:2px 0 8px" onchange="persAutoSave()">' + tintAdmOpts + '</select>' +
+        '<label style="font-size:10px;color:var(--text3)">Стоимость тонировки, руб <span>(из общей суммы)</span></label>' +
         '<input id="card-tint-price" type="number" min="0" value="' + tintPriceVal + '" style="' + inp + ';margin:2px 0 8px" oninput="persAutoSave()">' +
         '<div style="font-size:10px;color:var(--text3);margin-bottom:2px">Тонировщики (бонус — с части тонировки)</div>' +
         '<div style="max-height:100px;overflow:auto">' + tinterChecks + '</div>';
     }
     tintSection =
-      '<div style="border-top:1px solid var(--border);margin:8px 0 0;padding-top:8px">' +
+      '<div style="border:1px solid ' + TINT_ACCENT + '55;border-left:3px solid ' + TINT_ACCENT + ';border-radius:8px;background:' + TINT_ACCENT + '0d;margin-top:10px;padding:8px 10px">' +
+        '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:' + TINT_ACCENT + ';margin-bottom:6px">🎨 Тонировка' + (isMixedOrder ? ' — своя команда' : '') + '</div>' +
         '<div style="display:grid;grid-template-columns:1fr 88px;gap:8px">' +
-          '<div><label style="font-size:10px;color:var(--text3)">🎨 Плёнка (для документов)</label>' +
+          '<div><label style="font-size:10px;color:var(--text3)">Плёнка (для документов)</label>' +
             '<input id="card-tint-film" value="' + filmVal + '" placeholder="напр. Nano Ceramic" style="' + inp + ';margin:2px 0 8px" oninput="persAutoSave()"></div>' +
           '<div><label style="font-size:10px;color:var(--text3)">Светопр., %</label>' +
             '<input id="card-tint-light" type="number" min="0" max="100" value="' + lightVal + '" style="' + inp + ';margin:2px 0 8px" oninput="persAutoSave()"></div>' +
@@ -8542,12 +8553,15 @@ function renderCardPersonnel() {
       '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text2)">Персонал · кто клеил</div>' +
       '<span id="card-pers-status" style="font-size:11px;color:var(--text3)"></span>' +
     '</div>' +
+    (isMixedOrder ? '<div style="border:1px solid var(--border-h);border-left:3px solid var(--accent);border-radius:8px;padding:8px 10px;margin-bottom:2px">' +
+      '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--accent);margin-bottom:6px">🛡 Оклейка — своя команда</div>' : '') +
     '<label style="font-size:10px;color:var(--text3)">Менеджер</label>' +
     '<select id="card-mgr" style="' + inp + ';margin:2px 0 8px" onchange="persAutoSave()">' + mgrOpts + '</select>' +
     '<label style="font-size:10px;color:var(--text3)">Администратор</label>' +
     '<select id="card-admin" style="' + inp + ';margin:2px 0 8px" onchange="persAutoSave()">' + adminOpts + '</select>' +
-    '<div style="font-size:10px;color:var(--text3);margin-bottom:2px">Мастера (оклейщики)</div>' +
+    '<div style="font-size:10px;color:var(--text3);margin-bottom:2px">' + (isMixedOrder ? 'Оклейщики (бонус — с части оклейки)' : 'Мастера') + '</div>' +
     '<div style="max-height:118px;overflow:auto">' + masterChecks + '</div>' +
+    (isMixedOrder ? '</div>' : '') +
     tintSection +
   '</div>';
 }
@@ -8577,21 +8591,23 @@ function persFlush_(cb) {
   var tintFilm  = hasFilm ? (filmEl.value || '') : null;
   var tintLight = hasFilm ? ((document.getElementById('card-tint-light') || {}).value || '') : null;
   var tintPrice = hasMixed ? (Number(priceEl.value) || 0) : null;
-  var tintMasters = null;
+  var tintMasters = null, tintMgr = null, tintAdm = null;
   if (hasMixed) {
     var tm = [];
     document.querySelectorAll('.card-tinter-cb:checked').forEach(function(cb2){ tm.push(cb2.value); });
     tintMasters = tm.join(', ');
+    tintMgr = (document.getElementById('card-tint-mgr')   || {}).value || '';
+    tintAdm = (document.getElementById('card-tint-admin') || {}).value || '';
   }
   var st = function(t,c){ var e=document.getElementById('card-pers-status'); if(e){e.textContent=t; e.style.color=c||'var(--text3)';} };
   st('сохранение…');
   // обновим модель сразу (для документов/перерисовки)
   o['Менеджер'] = mgr; o['Оклейщики'] = masters.join(', '); o['Администратор'] = admin;
   if (hasFilm)  { o['Пленка'] = tintFilm; o['Светопропускаемость'] = tintLight; }
-  if (hasMixed) { o['Стоимость тонировки'] = tintPrice; o['Тонировщики'] = tintMasters; }
+  if (hasMixed) { o['Стоимость тонировки'] = tintPrice; o['Тонировщики'] = tintMasters; o['Менеджер тонировки'] = tintMgr; o['Администратор тонировки'] = tintAdm; }
   var payload = { manager: mgr, masters: masters.join(', '), admin: admin };
   if (hasFilm)  { payload.film = tintFilm; payload.lightTransmission = tintLight; }
-  if (hasMixed) { payload.tintPrice = tintPrice; payload.tintMasters = tintMasters; }
+  if (hasMixed) { payload.tintPrice = tintPrice; payload.tintMasters = tintMasters; payload.tintManager = tintMgr; payload.tintAdmin = tintAdm; }
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) { st('ошибка сохранения', 'var(--danger)'); if (cb) cb(); return; }
@@ -8599,7 +8615,9 @@ function persFlush_(cb) {
       if (f) {
         o['Валовая прибыль']=f.grossProfit; o['Бонус менеджера']=f.managerBonus;
         o['Бонус оклейщика']=f.masterBonus; o['Бонус администратора']=f.adminBonus; o['Маржинальная прибыль']=f.marginalProfit;
-        if (f.tintMasterBonus !== undefined) o['Бонус тонировщика']=f.tintMasterBonus;
+        if (f.tintMasterBonus  !== undefined) o['Бонус тонировщика']=f.tintMasterBonus;
+        if (f.tintManagerBonus !== undefined) o['Бонус менеджера тонировки']=f.tintManagerBonus;
+        if (f.tintAdminBonus   !== undefined) o['Бонус администратора тонировки']=f.tintAdminBonus;
         var box=document.getElementById('card-fin-box'); if(box) box.innerHTML=renderCardFinance_(o);
       }
       App.orders = []; App._dashCache = null; if (App._cardCache) delete App._cardCache[id];
@@ -8732,7 +8750,9 @@ function updateOrderCardField(orderId, payload) {
         var f = resp.data.finance;
         o['Валовая прибыль']=f.grossProfit; o['Бонус менеджера']=f.managerBonus;
         o['Бонус оклейщика']=f.masterBonus; o['Бонус администратора']=f.adminBonus; o['Маржинальная прибыль']=f.marginalProfit;
-        if (f.tintMasterBonus !== undefined) o['Бонус тонировщика']=f.tintMasterBonus;
+        if (f.tintMasterBonus  !== undefined) o['Бонус тонировщика']=f.tintMasterBonus;
+        if (f.tintManagerBonus !== undefined) o['Бонус менеджера тонировки']=f.tintManagerBonus;
+        if (f.tintAdminBonus   !== undefined) o['Бонус администратора тонировки']=f.tintAdminBonus;
         var box=document.getElementById('card-fin-box'); if(box) box.innerHTML=renderCardFinance_(o);
       }
       App.orders = []; App._dashCache = null; App._debtCache = null;
@@ -9083,7 +9103,9 @@ function matFlush_(cb) {
           o['Итого материалы'] = r3.data.totalMat; o['Итого расходы'] = r3.data.totalExp;
           o['Валовая прибыль'] = f.grossProfit; o['Бонус менеджера'] = f.managerBonus;
           o['Бонус оклейщика'] = f.masterBonus; o['Бонус администратора'] = f.adminBonus; o['Маржинальная прибыль'] = f.marginalProfit;
-          if (f.tintMasterBonus !== undefined) o['Бонус тонировщика'] = f.tintMasterBonus;
+          if (f.tintMasterBonus  !== undefined) o['Бонус тонировщика'] = f.tintMasterBonus;
+          if (f.tintManagerBonus !== undefined) o['Бонус менеджера тонировки'] = f.tintManagerBonus;
+          if (f.tintAdminBonus   !== undefined) o['Бонус администратора тонировки'] = f.tintAdminBonus;
           var box = document.getElementById('card-fin-box'); if (box) box.innerHTML = renderCardFinance_(o);
         }
         App.orders = []; App._dashCache = null; if (App._cardCache) delete App._cardCache[id];
@@ -9116,9 +9138,11 @@ function renderCardFinance_(order) {
     '<div style="border-top:1px solid var(--border);margin:8px 0"></div>' +
     finLine_('Валовая прибыль', fmt(order['Валовая прибыль']), 'var(--success)') +
     finLine_('Бонус менеджера', fmt(order['Бонус менеджера']), 'var(--accent)') +
-    finLine_('Бонус мастера',   fmt(order['Бонус оклейщика']), 'var(--accent)') +
-    (Number(order['Бонус тонировщика']) > 0 ? finLine_('Бонус тонировщика', fmt(order['Бонус тонировщика']), 'var(--accent)') : '') +
+    finLine_('Бонус мастера' + (Number(order['Бонус тонировщика']) > 0 ? ' (оклейка)' : ''),   fmt(order['Бонус оклейщика']), 'var(--accent)') +
     (Number(order['Бонус администратора']) > 0 ? finLine_('Бонус администратора', fmt(order['Бонус администратора']), 'var(--accent)') : '') +
+    (Number(order['Бонус тонировщика']) > 0 ? finLine_('🎨 Бонус тонировщика', fmt(order['Бонус тонировщика']), '#e0559a') : '') +
+    (Number(order['Бонус менеджера тонировки']) > 0 ? finLine_('🎨 Бонус менеджера (тонировка)', fmt(order['Бонус менеджера тонировки']), '#e0559a') : '') +
+    (Number(order['Бонус администратора тонировки']) > 0 ? finLine_('🎨 Бонус админ. (тонировка)', fmt(order['Бонус администратора тонировки']), '#e0559a') : '') +
     '<div style="border-top:2px solid var(--border);margin:8px 0"></div>' +
     finLine_('Маржинальная',    fmt(order['Маржинальная прибыль']), 'var(--success)', true);
 }

@@ -19,7 +19,7 @@
  * и редактируются в любой момент), а НЕ от статуса оплаты. Это единый источник истины.
  * Поддержан и legacy 'Да' для обратной совместимости со старыми вызовами.
  */
-function calcOrderFinance_(price, materialCost, totalExpenses, payType, managersStr, mastersStr, adminName, adminPct, tintPrice, tintMastersStr, officialPaid) {
+function calcOrderFinance_(price, materialCost, totalExpenses, payType, managersStr, mastersStr, adminName, adminPct, tintPrice, tintMastersStr, officialPaid, tintManagersStr, tintAdminName) {
   price          = Number(price)          || 0;
   materialCost   = Number(materialCost)   || 0;
   totalExpenses  = Number(totalExpenses)  || 0;
@@ -27,9 +27,7 @@ function calcOrderFinance_(price, materialCost, totalExpenses, payType, managers
   if (tintPrice < 0)     tintPrice = 0;
   if (tintPrice > price) tintPrice = price;   // тонировка не может стоить больше всего заказа
 
-  // База −15% для бонусов = ОФИЦИАЛЬНО полученные деньги (безнал + нал с чеком):
-  // при выводе с них теряется ~15% на налоги. «Нал без чека» базу не уменьшает.
-  // Если официальных платежей ещё нет — оценка по условиям оплаты (Безнал/Нал с чеком → вся сумма).
+  // База −15% для бонусов = ОФИЦИАЛЬНО полученные деньги (безнал + нал с чеком).
   officialPaid = Number(officialPaid) || 0;
   var official;
   if (officialPaid > 0) official = Math.min(officialPaid, price);
@@ -37,41 +35,43 @@ function calcOrderFinance_(price, materialCost, totalExpenses, payType, managers
   var bezналDiscount = official * 0.15;
   var grossProfit    = price - materialCost - totalExpenses - bezналDiscount;
 
-  var managersCount = managersStr ? managersStr.split(',').filter(function(s){ return s.trim(); }).length : 0;
-  var mastersCount  = mastersStr  ? mastersStr.split(',').filter(function(s){ return s.trim(); }).length  : 0;
-  var tintCount     = tintMastersStr ? tintMastersStr.split(',').filter(function(s){ return s.trim(); }).length : 0;
-
-  // Ставки бонусов — глобальные из Настроек (менеджер/мастер/администратор)
   var rates = getBonusRates_();
+  var cnt_ = function(s){ return s ? String(s).split(',').filter(function(x){ return x.trim(); }).length : 0; };
 
-  // Менеджер и администратор — со ВСЕЙ валовой (не зависят от разбивки услуг)
-  var managerBonusTotal = (managersCount > 0) ? grossProfit * (rates.manager / 100) : 0;
-  var managerBonusEach  = (managersCount > 0) ? managerBonusTotal / managersCount : 0;
+  // Менеджер/админ тонировки по умолчанию = как в оклейке (первой услуге)
+  var tintMgrStr = (tintManagersStr && String(tintManagersStr).trim()) ? tintManagersStr : managersStr;
+  var tintAdm    = (tintAdminName   && String(tintAdminName).trim())   ? tintAdminName   : adminName;
 
-  // Бонус мастера = master% от ВСЕЙ валовой (все услуги, включая тонировку),
-  // делится поровну между ВСЕМИ назначенными мастерами (оклейщики + тонировщики).
-  // Так тонировка тоже входит в базу бонуса, а не теряется, если тонировщик не назначен.
-  var totalMasters    = mastersCount + tintCount;
-  var masterPool      = (totalMasters > 0) ? grossProfit * (rates.master / 100) : 0;
-  var masterEach      = (totalMasters > 0) ? masterPool / totalMasters : 0;
-  var masterBonusTotal = masterEach * mastersCount;
-  var tintBonusTotal   = masterEach * tintCount;
-  var masterBonusEach  = (mastersCount > 0) ? masterEach : 0;
-  var tintBonusEach    = (tintCount    > 0) ? masterEach : 0;
+  // Валовая делится по доле цены: тонировка ← своя часть, оклейка ← остальное.
+  // Каждая услуга — своя команда (менеджер/админ/мастер) и свой бонус со своей части.
+  var tintGross = (price > 0) ? grossProfit * (tintPrice / price) : 0;
+  var wrapGross = grossProfit - tintGross;
 
-  // Бонус администратора: глобальная ставка из Настроек
-  var hasAdmin        = !!(adminName && String(adminName).trim());
-  var adminBonusTotal = hasAdmin ? grossProfit * (rates.admin / 100) : 0;
+  var wMgr = cnt_(managersStr), wMas = cnt_(mastersStr), wAdm = !!(adminName && String(adminName).trim());
+  var tMgr = cnt_(tintMgrStr),  tMas = cnt_(tintMastersStr), tAdm = !!(tintAdm && String(tintAdm).trim());
 
-  var marginalProfit = grossProfit - managerBonusTotal - masterBonusTotal - tintBonusTotal - adminBonusTotal;
+  // Оклейка (wrapGross)
+  var managerBonusEach = wMgr > 0 ? wrapGross * (rates.manager / 100) / wMgr : 0;
+  var masterBonusEach  = wMas > 0 ? wrapGross * (rates.master  / 100) / wMas : 0;
+  var adminBonusTotal  = wAdm     ? wrapGross * (rates.admin   / 100)        : 0;
+  // Тонировка (tintGross)
+  var tintManagerEach  = tMgr > 0 ? tintGross * (rates.manager / 100) / tMgr : 0;
+  var tintMasterEach   = tMas > 0 ? tintGross * (rates.master  / 100) / tMas : 0;
+  var tintAdminTotal   = tAdm     ? tintGross * (rates.admin   / 100)        : 0;
+
+  var totalBonuses = managerBonusEach*wMgr + masterBonusEach*wMas + adminBonusTotal
+                   + tintManagerEach*tMgr + tintMasterEach*tMas + tintAdminTotal;
+  var marginalProfit = grossProfit - totalBonuses;
 
   return {
-    grossProfit:     round2(grossProfit),
-    managerBonus:    round2(managerBonusEach),
-    masterBonus:     round2(masterBonusEach),
-    tintMasterBonus: round2(tintBonusEach),
-    adminBonus:      round2(adminBonusTotal),
-    marginalProfit:  round2(marginalProfit),
+    grossProfit:      round2(grossProfit),
+    managerBonus:     round2(managerBonusEach),
+    masterBonus:      round2(masterBonusEach),
+    adminBonus:       round2(adminBonusTotal),
+    tintManagerBonus: round2(tintManagerEach),
+    tintMasterBonus:  round2(tintMasterEach),
+    tintAdminBonus:   round2(tintAdminTotal),
+    marginalProfit:   round2(marginalProfit),
   };
 }
 
@@ -86,7 +86,8 @@ function ensureColumns_(sheet, names) {
   }
   return headers;
 }
-var TINT_COLUMNS_ = ['Стоимость тонировки', 'Тонировщики', 'Бонус тонировщика', 'Пленка', 'Светопропускаемость'];
+var TINT_COLUMNS_ = ['Стоимость тонировки', 'Тонировщики', 'Бонус тонировщика', 'Пленка', 'Светопропускаемость',
+                     'Менеджер тонировки', 'Администратор тонировки', 'Бонус менеджера тонировки', 'Бонус администратора тонировки'];
 
 /** Сумма ОФИЦИАЛЬНО полученных денег по заказу (безнал + нал с чеком) — база для −15% бонусов. */
 function getOfficialPaid_(orderId) {
@@ -346,7 +347,9 @@ function createOrder(payload) {
     const adminPct      = getEmployeeBonusPct_(payload.admin, 5);
     const tintPrice     = Number(payload.tintPrice) || 0;
     const tintMasters   = payload.tintMasters || '';
-    const finance       = calcOrderFinance_(payload.price, totalMaterialCost, totalExpenses, payType, payload.manager, payload.masters, payload.admin, adminPct, tintPrice, tintMasters);
+    const tintManagers  = payload.tintManagers || payload.manager || '';   // по умолчанию — как в оклейке
+    const tintAdmin     = payload.tintAdmin    || payload.admin   || '';
+    const finance       = calcOrderFinance_(payload.price, totalMaterialCost, totalExpenses, payType, payload.manager, payload.masters, payload.admin, adminPct, tintPrice, tintMasters, 0, tintManagers, tintAdmin);
     const contractNum   = generateContractNumber_(payload.service);
     // «Услуга» — все выбранные услуги через запятую (основная + доп.), номер договора — по основной
     const codes         = (payload.serviceCodes && payload.serviceCodes.length) ? payload.serviceCodes : [payload.service];
@@ -381,6 +384,10 @@ function createOrder(payload) {
       'Тонировщики':           tintMasters,
       'Стоимость тонировки':   tintPrice || '',
       'Бонус тонировщика':     finance.tintMasterBonus,
+      'Менеджер тонировки':    tintManagers,
+      'Администратор тонировки': tintAdmin,
+      'Бонус менеджера тонировки':     finance.tintManagerBonus,
+      'Бонус администратора тонировки': finance.tintAdminBonus,
       'Пленка':                payload.film || '',
       'Светопропускаемость':   payload.lightTransmission || '',
       'Администратор':         payload.admin || '',
@@ -445,7 +452,8 @@ function recalcOrderFinance(orderId) {
         rowData['Тип оплаты'], rowData['Менеджер'], rowData['Оклейщики'],
         adminNameR, getEmployeeBonusPct_(adminNameR, 5),
         rowData['Стоимость тонировки'], rowData['Тонировщики'],
-        getOfficialPaid_(orderId)
+        getOfficialPaid_(orderId),
+        rowData['Менеджер тонировки'], rowData['Администратор тонировки']
       );
 
       const tz  = Session.getScriptTimeZone();
@@ -459,6 +467,8 @@ function recalcOrderFinance(orderId) {
         'Бонус оклейщика':      finance.masterBonus,
         'Бонус тонировщика':    finance.tintMasterBonus,
         'Бонус администратора': finance.adminBonus,
+        'Бонус менеджера тонировки':     finance.tintManagerBonus,
+        'Бонус администратора тонировки': finance.tintAdminBonus,
         'Маржинальная прибыль': finance.marginalProfit,
         'Обновлён':             now,
       };
@@ -532,6 +542,8 @@ function updateOrder(id, payload) {
       if (payload.masters     !== undefined) setCell('Оклейщики',       payload.masters);
       if (payload.tintMasters !== undefined) setCell('Тонировщики',     payload.tintMasters);
       if (payload.tintPrice   !== undefined) setCell('Стоимость тонировки', Number(payload.tintPrice) || 0);
+      if (payload.tintManager !== undefined) setCell('Менеджер тонировки',      payload.tintManager);
+      if (payload.tintAdmin   !== undefined) setCell('Администратор тонировки', payload.tintAdmin);
       if (payload.film        !== undefined) setCell('Пленка',          payload.film);
       if (payload.admin       !== undefined) setCell('Администратор',   payload.admin);
 
@@ -558,7 +570,8 @@ function updateOrder(id, payload) {
       const needsRecalc = payload.price !== undefined || payload.payType !== undefined
                        || payload.manager !== undefined || payload.masters !== undefined
                        || payload.admin !== undefined
-                       || payload.tintPrice !== undefined || payload.tintMasters !== undefined;
+                       || payload.tintPrice !== undefined || payload.tintMasters !== undefined
+                       || payload.tintManager !== undefined || payload.tintAdmin !== undefined;
       let financeResult = null;
       if (needsRecalc) {
         const price      = payload.price   !== undefined ? Number(payload.price)  : Number(row['Стоимость заказа']) || 0;
@@ -568,9 +581,11 @@ function updateOrder(id, payload) {
         const admin      = payload.admin   !== undefined ? payload.admin           : String(row['Администратор'] || '');
         const tintPrice  = payload.tintPrice   !== undefined ? Number(payload.tintPrice) : Number(row['Стоимость тонировки']) || 0;
         const tintMasters= payload.tintMasters !== undefined ? payload.tintMasters       : String(row['Тонировщики'] || '');
+        const tintManager= payload.tintManager !== undefined ? payload.tintManager       : String(row['Менеджер тонировки'] || '');
+        const tintAdmin  = payload.tintAdmin   !== undefined ? payload.tintAdmin         : String(row['Администратор тонировки'] || '');
         const matCost    = Number(row['Итого материалы']) || 0;
         const expCost    = Number(row['Итого расходы'])   || 0;
-        financeResult    = calcOrderFinance_(price, matCost, expCost, payType, manager, masters, admin, getEmployeeBonusPct_(admin, 5), tintPrice, tintMasters, getOfficialPaid_(id));
+        financeResult    = calcOrderFinance_(price, matCost, expCost, payType, manager, masters, admin, getEmployeeBonusPct_(admin, 5), tintPrice, tintMasters, getOfficialPaid_(id), tintManager, tintAdmin);
 
         if (payload.price !== undefined) setCell('Стоимость заказа', price);
         setCell('Валовая прибыль',      financeResult.grossProfit);
@@ -578,6 +593,8 @@ function updateOrder(id, payload) {
         setCell('Бонус оклейщика',      financeResult.masterBonus);
         setCell('Бонус тонировщика',    financeResult.tintMasterBonus);
         setCell('Бонус администратора', financeResult.adminBonus);
+        setCell('Бонус менеджера тонировки',     financeResult.tintManagerBonus);
+        setCell('Бонус администратора тонировки', financeResult.tintAdminBonus);
         setCell('Маржинальная прибыль', financeResult.marginalProfit);
       }
 
