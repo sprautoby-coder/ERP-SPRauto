@@ -7764,7 +7764,6 @@ function openSalarySlip_(empId) {
       '<td>' + esc(o.contract) + '</td>' +
       '<td class="wrap">' + esc((o.car||'') + (o.client ? ((o.car?' · ':'') + o.client) : '')) + '</td>' +
       '<td class="wrap">' + esc(o.service) + '</td>' +
-      '<td class="wrap">' + esc(o.roles) + '</td>' +
       '<td class="r">' + fmt(o.price) + '</td>' +
       '<td class="r">' + (Number(o.materials)>0?'−'+fmt(o.materials):'—') + '</td>' +
       '<td class="r">' + (Number(o.expenses)>0?'−'+fmt(o.expenses):'—') + '</td>' +
@@ -7772,7 +7771,7 @@ function openSalarySlip_(empId) {
       '<td class="r">' + fmt(o.gross) + '</td>' +
       '<td class="r b">' + fmt(o.bonus) + '</td>' +
     '</tr>';
-  }).join('') || '<tr><td colspan="12" style="text-align:center;color:#888">Нет заказов за период</td></tr>';
+  }).join('') || '<tr><td colspan="11" style="text-align:center;color:#888">Нет заказов за период</td></tr>';
 
   var thanks = firstName + ', спасибо за работу! Твой вклад по-настоящему важен для команды и успеха ' + company +
                '. Мы ценим твой труд и профессионализм — так держать! 🙌';
@@ -7818,8 +7817,8 @@ function openSalarySlip_(empId) {
       '</table>' +
       '<div style="font-weight:700;margin-bottom:6px">Заказы за период (' + (e.orders||[]).length + ')</div>' +
       '<table class="ord">' +
-      '<colgroup><col style="width:3%"><col style="width:7%"><col style="width:8%"><col style="width:17%"><col style="width:11%"><col style="width:10%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:6%"><col style="width:8%"><col style="width:9%"></colgroup>' +
-      '<thead><tr><th>№</th><th>Дата</th><th>Договор</th><th>Авто / клиент</th><th>Услуга</th><th>Роль</th><th>Цена</th><th>Плёнка</th><th>Расходы</th><th>−15%</th><th>Валовая</th><th>Бонус</th></tr></thead><tbody>' + orderRows + '</tbody></table>' +
+      '<colgroup><col style="width:3%"><col style="width:8%"><col style="width:9%"><col style="width:23%"><col style="width:15%"><col style="width:8%"><col style="width:8%"><col style="width:8%"><col style="width:6%"><col style="width:9%"><col style="width:10%"></colgroup>' +
+      '<thead><tr><th>№</th><th>Дата</th><th>Договор</th><th>Авто / клиент</th><th>Услуга</th><th>Цена</th><th>Плёнка</th><th>Расходы</th><th>−15%</th><th>Валовая</th><th>Бонус</th></tr></thead><tbody>' + orderRows + '</tbody></table>' +
       '<div class="thanks">' + esc(thanks) + '</div>' +
     '</div></body></html>';
 
