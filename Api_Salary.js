@@ -64,11 +64,10 @@ function calcSalaryForPeriod(from, to) {
         const tintMasters = splitNames_(o['Тонировщики'] || '');
         const admins      = splitNames_(o['Администратор'] || '');
         const gross       = Number(o['Валовая прибыль']) || 0;
-        const price       = Number(o['Стоимость заказа']) || 0;
-        // Валовая делится по доле цены: тонировщик — с части тонировки, оклейщик — с оклейки
-        const tintPrice   = Number(o['Стоимость тонировки']) || 0;
-        const tintGross   = price > 0 ? gross * (tintPrice / price) : 0;
-        const wrapGross   = gross - tintGross;
+        // Бонус мастера = master% от ВСЕЙ валовой, поровну между всеми мастерами
+        // (оклейщики + тонировщики) — тонировка тоже входит в базу.
+        const totalMasters = masters.length + tintMasters.length;
+        const masterEach   = totalMasters > 0 ? gross * (rates.master / 100) / totalMasters : 0;
         let involved      = false;
 
         if (managers.indexOf(name) >= 0) {
@@ -76,16 +75,8 @@ function calcSalaryForPeriod(from, to) {
           managerBonus += share;
           involved = true;
         }
-        if (masters.indexOf(name) >= 0) {
-          const share = masters.length > 0 ? wrapGross * (rates.master / 100) / masters.length : 0;
-          masterBonus += share;
-          involved = true;
-        }
-        if (tintMasters.indexOf(name) >= 0) {
-          const share = tintMasters.length > 0 ? tintGross * (rates.master / 100) / tintMasters.length : 0;
-          masterBonus += share;
-          involved = true;
-        }
+        if (masters.indexOf(name) >= 0)     { masterBonus += masterEach; involved = true; }
+        if (tintMasters.indexOf(name) >= 0) { masterBonus += masterEach; involved = true; }
         if (admins.indexOf(name) >= 0) {
           const share = admins.length > 0 ? gross * (rates.admin / 100) / admins.length : 0;
           adminBonus += share;

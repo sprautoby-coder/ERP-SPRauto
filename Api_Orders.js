@@ -48,16 +48,16 @@ function calcOrderFinance_(price, materialCost, totalExpenses, payType, managers
   var managerBonusTotal = (managersCount > 0) ? grossProfit * (rates.manager / 100) : 0;
   var managerBonusEach  = (managersCount > 0) ? managerBonusTotal / managersCount : 0;
 
-  // Валовая делится на части по доле цены услуги (материалы/расходы распределяются
-  // пропорционально): тонировщик получает бонус мастера с части тонировки,
-  // оклейщик — с части оклейки (остальное).
-  var tintGross = (price > 0) ? grossProfit * (tintPrice / price) : 0;
-  var wrapGross = grossProfit - tintGross;
-
-  var masterBonusTotal = (mastersCount > 0) ? wrapGross * (rates.master / 100) : 0;
-  var masterBonusEach  = (mastersCount > 0) ? masterBonusTotal / mastersCount  : 0;
-  var tintBonusTotal   = (tintCount    > 0) ? tintGross * (rates.master / 100) : 0;
-  var tintBonusEach    = (tintCount    > 0) ? tintBonusTotal / tintCount       : 0;
+  // Бонус мастера = master% от ВСЕЙ валовой (все услуги, включая тонировку),
+  // делится поровну между ВСЕМИ назначенными мастерами (оклейщики + тонировщики).
+  // Так тонировка тоже входит в базу бонуса, а не теряется, если тонировщик не назначен.
+  var totalMasters    = mastersCount + tintCount;
+  var masterPool      = (totalMasters > 0) ? grossProfit * (rates.master / 100) : 0;
+  var masterEach      = (totalMasters > 0) ? masterPool / totalMasters : 0;
+  var masterBonusTotal = masterEach * mastersCount;
+  var tintBonusTotal   = masterEach * tintCount;
+  var masterBonusEach  = (mastersCount > 0) ? masterEach : 0;
+  var tintBonusEach    = (tintCount    > 0) ? masterEach : 0;
 
   // Бонус администратора: глобальная ставка из Настроек
   var hasAdmin        = !!(adminName && String(adminName).trim());
