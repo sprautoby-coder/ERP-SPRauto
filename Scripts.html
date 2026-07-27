@@ -5969,7 +5969,7 @@ function submitNewSale(){
   var prepay=(document.getElementById('sale-prepay')||{}).value;
   var chosen=App._saleClientByLabel[clientLabel];
   var clientName = chosen ? (chosen['Имя']||'') : (clientLabel.split(' — ')[0]||'').trim();
-  if(!clientName){ toast('Укажите клиента','error'); return; }
+  // Клиент необязателен: без него — розничная продажа
   var btn=document.getElementById('sale-submit-btn'); if(btn){btn.disabled=true;btn.textContent='Проводим…';}
   var restore=function(){ if(btn){btn.disabled=false;btn.textContent='Провести продажу';} };
   var manager=(document.getElementById('sale-manager')||{}).value||'';
@@ -5985,12 +5985,16 @@ function submitNewSale(){
     }).withFailureHandler(function(e){ restore(); toast('Ошибка: '+e.message,'error'); }).createSale(payload);
   };
   if(clientId && chosen){ doCreate(clientId, clientName, chosen['Телефон']||''); }
-  else {
+  else if(clientName){
     // клиент не из списка → создаём нового оптовика (физлицо)
     google.script.run.withSuccessHandler(function(resp){
       if(!resp||!resp.ok){ restore(); toast('Ошибка создания клиента: '+(resp?resp.error:''),'error'); return; }
       var nc=resp.data||{}; App.clients=[]; doCreate(nc['ID']||'', clientName, '');
     }).withFailureHandler(function(e){ restore(); toast('Ошибка: '+e.message,'error'); }).createClient({ type:'физ', name:clientName, wholesale:true });
+  }
+  else {
+    // без клиента — розничная продажа
+    doCreate('', 'Розничный покупатель', '');
   }
 }
 
