@@ -4939,6 +4939,7 @@ function initOrderForm() {
   document.querySelectorAll('#ord-masters-wrap input[type=checkbox]').forEach(function(cb){ cb.checked = false; });
   var hid = document.getElementById('ord-masters'); if (hid) hid.value = '';
   App._mastersManual = false;   // сбрасываем: мастер подтянется авто по роли под услугу
+  setOrderPaidNow_(false);      // сбрасываем «Принять оплату сразу»
 
   // Авто-подстановка менеджера и администратора: последний использованный (запоминаем),
   // иначе — первый сотрудник с ролью менеджер/админ. Ставим всегда (форма новая).
@@ -5151,7 +5152,29 @@ function setOrderPayType(val, btn) {
   var dueLabel = document.getElementById('ord-duepay-label');
   if (dueLabel) dueLabel.textContent = isRassr ? 'Дата первого взноса' : 'Срок оплаты';
 
+  // «Принять оплату сразу» доступно только для конкретного способа (Нал/Нал с чеком/Безнал)
+  if (['Нал','Нал с чеком','Безнал'].indexOf(App._orderPayType) < 0) setOrderPaidNow_(false);
+
   recalcOrderPreview();
+}
+
+// Кнопка «Принять оплату сразу» в форме нового заказа (полная оплата + статус «Выдан»)
+function setOrderPaidNow_(on) {
+  App._orderPaidNow = !!on;
+  var btn = document.getElementById('ord-paidnow-btn');
+  if (btn) {
+    btn.classList.toggle('active', App._orderPaidNow);
+    btn.style.background = App._orderPaidNow ? 'var(--success)' : 'var(--green-soft)';
+    btn.style.color      = App._orderPaidNow ? '#fff' : 'var(--success)';
+    btn.textContent      = App._orderPaidNow ? '✓ Оплачено — будет «Выдан»' : '✓ Принять оплату сразу';
+  }
+}
+function toggleOrderPaidNow() {
+  if (['Нал','Нал с чеком','Безнал'].indexOf(App._orderPayType || '') < 0) {
+    toast('Сначала выберите способ оплаты: Нал, Нал с чеком или Безнал', 'error');
+    return;
+  }
+  setOrderPaidNow_(!App._orderPaidNow);
 }
 
 // Заполнить datalist имён клиентов для автоподбора в форме заказа.
@@ -5430,6 +5453,7 @@ function cancelNewOrder() {
   var preview = document.getElementById('ord-finance-preview'); if (preview) preview.style.display = 'none';
   App._orderPayType = '';
   var hid = document.getElementById('ord-paytype'); if (hid) hid.value = '';
+  setOrderPaidNow_(false);
   setOrderClientType('физ', document.getElementById('ord-ctype-phys'));
   initOrderForm();
   closeModal('modal-new-order');
@@ -5474,6 +5498,8 @@ function submitNewOrderProceed() {
   var prepay      = Number((document.getElementById('ord-prepay') || {}).value || 0);
   var prepayMeth  = (document.getElementById('ord-prepay-method') || {}).value || 'Нал';
   var rassrMonths = Number((document.getElementById('ord-rassr-months') || {}).value || 0);
+  // Полная оплата при создании (для уже оплаченных заказов) → статус «Выдан»
+  var paidNow     = !!App._orderPaidNow && ['Нал','Нал с чеком','Безнал'].indexOf(payType) >= 0;
 
   var clientType = App._orderClientType || 'физ';
 
@@ -5571,8 +5597,19 @@ function submitNewOrderProceed() {
             .createInstallmentPlan(orderId, { months: rassrMonths, startDate: duePay });
         } else done();
       };
-      // Шаг 2: предоплата (если указана)
-      if (prepay > 0) {
+      // Шаг 2: оплата.
+      if (paidNow) {
+        // Полная оплата при создании → списываем всю сумму и ставим статус «Выдан»
+        google.script.run
+          .withSuccessHandler(function(){
+            google.script.run
+              .withSuccessHandler(function(){ done(); })
+              .withFailureHandler(function(){ done(); })   // оплата прошла, статус не критичен
+              .updateOrderStatus(orderId, 'Выдан');
+          })
+          .withFailureHandler(function(e){ resetBtn(); toast('Заказ создан, но оплата не внесена: ' + e.message, 'error'); finalizeNewOrder(); })
+          .addOrderPayment(orderId, { amount: price, payType: payType, comment: 'Оплата при создании' });
+      } else if (prepay > 0) {
         google.script.run
           .withSuccessHandler(function(){ buildPlan(); })
           .withFailureHandler(function(e){ resetBtn(); toast('Заказ создан, но предоплата не внесена: ' + e.message, 'error'); finalizeNewOrder(); })
