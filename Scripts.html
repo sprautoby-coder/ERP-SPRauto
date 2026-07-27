@@ -3588,7 +3588,13 @@ function filterOrders() {
   // Таблица дополнительно фильтруется вкладкой статуса
   var filtered = (App._orderFilter && App._orderFilter !== 'all')
     ? periodBase.filter(function(o){ return o['Статус'] === App._orderFilter; })
-    : periodBase;
+    : periodBase.slice();
+  // Новые заказы — сверху: по дате (новее выше), затем по ID (последний созданный выше)
+  filtered.sort(function(a, b){
+    var da = parseOrdDate_(a['Дата']) || 0, db = parseOrdDate_(b['Дата']) || 0;
+    if (db !== da) return db - da;
+    return String(b['ID'] || '').localeCompare(String(a['ID'] || ''), undefined, { numeric: true });
+  });
   App._ordersFiltered = filtered;
   loadOrdersKpi();   // KPI/счётчики — по периоду (использует App._ordersPeriodBase)
   if (App._ordersView === 'kanban') renderOrdersKanban(filtered);
@@ -4573,9 +4579,9 @@ function renderOrdersKanban(orders) {
   var byStatus = {};
   STATUS_NAMES.forEach(function(s){ byStatus[s] = []; });
   orders.forEach(function(o){
+    // Карточка показывается в колонке своего РЕАЛЬНОГО статуса (куда перетащили — там и остаётся).
+    // Без авто-прыжка оплаченных в «Выдан» — иначе заказ «исчезал» из колонки, куда его бросили.
     var s = o['Статус'] || defStatus;
-    // Оплаченный заказ автоматически перемещается в «Выдан» (кроме отменённых)
-    if (doneName && String(o['Статус оплаты'] || '').trim() === 'Оплачен' && !isCancelledStatus(s)) s = doneName;
     if (!byStatus[s]) byStatus[s] = [];   // нестандартный статус (напр. из старых данных)
     byStatus[s].push(o);
   });
@@ -5350,7 +5356,8 @@ function onMasterToggle_() { App._mastersManual = true; updateMastersField(); }
 function autoPickMastersByService_() {
   if (App._mastersManual) return;
   var wrap = document.getElementById('ord-masters-wrap'); if (!wrap) return;
-  var re = (isTintInForm_() && !isMixedInForm_()) ? /тонировщик/i : /оклейщик/i;
+  // Есть тонировка (в т.ч. как доп.услуга) → тянем ТОНИРОВЩИКА (Саня); иначе — оклейщика
+  var re = isTintInForm_() ? /тонировщик/i : /оклейщик/i;
   var names = {};
   (App.employees || []).forEach(function(e){ if (empHasRole_(e, re)) names[empName_(e)] = true; });
   wrap.querySelectorAll('input[type=checkbox]').forEach(function(cb){ cb.checked = !!names[cb.value]; });
