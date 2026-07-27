@@ -6228,8 +6228,8 @@ function renderDashData_(d) {
     kpiCard('В работе',       fmt(k.inWorkSum),    '#8b5cf6',       '🔧', "goPage('orders')") +
     kpiCard('Валовая прибыль',fmt(k.grossProfit),  'var(--success)', '📈') +
     kpiCard('Расходы',        fmt(k.expenses),     'var(--danger)',  '💸', "goPage('expenses')") +
-    kpiCard('Дебиторка',      fmt(k.debtSum),      '#f59e0b',       '🧾', "goPage('debt')") +
     kpiCard('Деньги в кассе', fmt(k.kassaBalance), 'var(--success)', '💵', "goPage('kassa')") +
+    kpiCard('Дебиторка',      fmt(k.debtSum),      '#f59e0b',       '🧾', "goPage('debt')") +
     kpiCard('Расчётный счёт', fmt(k.bankBalance),  'var(--accent)',  '🏦', "goPage('dds')");
   renderRecentOrders(d.recentOrders || [], k.ordersCount || 0);
 }
