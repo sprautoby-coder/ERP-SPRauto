@@ -5379,10 +5379,11 @@ function onMasterToggle_() { App._mastersManual = true; updateMastersField(); }
 function autoPickMastersByService_() {
   if (App._mastersManual) return;
   var wrap = document.getElementById('ord-masters-wrap'); if (!wrap) return;
-  // Есть тонировка (в т.ч. как доп.услуга) → тянем ТОНИРОВЩИКА (Саня); иначе — оклейщика
-  var re = isTintInForm_() ? /тонировщик/i : /оклейщик/i;
+  // Авто-подтяжка ТОЛЬКО для чистой тонировки (тонировщик — обычно один, Саня).
+  // Для оклейки/смешанного/прочего — оставляем ПУСТО (мастеров выбирают вручную).
+  var tintOnly = isTintInForm_() && !isMixedInForm_();
   var names = {};
-  (App.employees || []).forEach(function(e){ if (empHasRole_(e, re)) names[empName_(e)] = true; });
+  if (tintOnly) (App.employees || []).forEach(function(e){ if (empHasRole_(e, /тонировщик/i)) names[empName_(e)] = true; });
   wrap.querySelectorAll('input[type=checkbox]').forEach(function(cb){ cb.checked = !!names[cb.value]; });
   updateMastersField();
 }
@@ -6188,7 +6189,7 @@ function submitNewMaterial() {
   var price = Number((document.getElementById('mat-price') || {}).value || 0);
   var unit  = (document.getElementById('mat-unit') || {}).value || 'пм';
   if (!name)  { toast('Укажите название', 'error'); return; }
-  if (!price) { toast('Укажите цену', 'error'); return; }
+  // Себестоимость может быть 0 (перепродажа / неизвестна) — не блокируем сохранение
 
   var numOrEmpty = function(eid){ var v = (document.getElementById(eid) || {}).value; return (v === '' || v == null) ? '' : Number(v); };
   var payload = {
@@ -7716,6 +7717,7 @@ function renderSalary(data, periodLabel) {
         '<div><span style="color:var(--text3)">' + (etot(e) < 0 ? 'Переплата: ' : 'Итого: ') + '</span><b style="font-size:15px;color:' + (etot(e) < 0 ? 'var(--danger)' : 'var(--success)') + '">' + fmt(etot(e)) + '</b></div>' +
       '</div>' +
       (orderRows ? '<div style="font-size:11px;color:var(--text3);margin-bottom:4px">Участвовал в заказах:</div>' + orderRows : '') +
+      '<button onclick="openSalarySlip_(\'' + String(e.id).replace(/'/g,"\\'") + '\')" style="width:100%;margin-top:12px;padding:8px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:8px;cursor:pointer">📄 Расчётный лист</button>' +
     '</div>';
   }).join('');
 
@@ -7727,6 +7729,95 @@ function renderSalary(data, periodLabel) {
       '<span style="font-size:20px;font-weight:700;color:var(--success)">' + fmt(grandTotal) + '</span>' +
     '</div>' +
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">' + cards + '</div>';
+}
+
+// Имя для обращения (ФИО → Имя, второе слово)
+function getFirstName_(fullName) {
+  var parts = String(fullName || '').trim().split(/\s+/);
+  return parts.length >= 2 ? parts[1] : (parts[0] || 'коллега');
+}
+
+// Печатный расчётный лист сотрудника: разбивка ЗП, все заказы с затратами, водяной знак, благодарность
+function openSalarySlip_(empId) {
+  var data = App._salaryData;
+  if (!data) { toast('Сначала рассчитайте ЗП', 'error'); return; }
+  var e = (data.employees || []).filter(function(x){ return String(x.id) === String(empId); })[0];
+  if (!e) { toast('Сотрудник не найден', 'error'); return; }
+
+  var inclOklad = !!((document.getElementById('sal-include-salary') || {}).checked);
+  var oklad = inclOklad ? (Number(e.baseSalary) || 0) / 2 : 0;
+  var paid  = Number(e.salaryPaid) || 0;
+  var total = oklad + (Number(e.totalBonus) || 0) - paid;
+
+  var fmt = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+  var esc = function(s){ return String(s==null?'':s).replace(/[&<>]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;'})[c];}); };
+  var isoRu = function(s){ var m=String(s||'').match(/(\d{4})-(\d{2})-(\d{2})/); return m ? m[3]+'.'+m[2]+'.'+m[1] : String(s||''); };
+  var firstName = getFirstName_(e.name);
+  var company = (App.brand && App.brand.companyName) || 'SPRauto';
+  var logo    = (App.brand && App.brand.logoDataUrl) || '';
+  var period  = isoRu(data.from) + ' — ' + isoRu(data.to);
+
+  var orderRows = (e.orders || []).map(function(o, i){
+    return '<tr>' +
+      '<td>' + (i+1) + '</td>' +
+      '<td>' + esc(o.date) + '</td>' +
+      '<td>' + esc(o.contract) + '</td>' +
+      '<td>' + esc((o.car||'') + (o.client ? ((o.car?' · ':'') + o.client) : '')) + '</td>' +
+      '<td>' + esc(o.service) + '</td>' +
+      '<td>' + esc(o.roles) + '</td>' +
+      '<td class="r">' + fmt(o.price) + '</td>' +
+      '<td class="r">' + (Number(o.materials)>0?'−'+fmt(o.materials):'—') + '</td>' +
+      '<td class="r">' + (Number(o.expenses)>0?'−'+fmt(o.expenses):'—') + '</td>' +
+      '<td class="r">' + (Number(o.beznal)>0?'−'+fmt(o.beznal):'—') + '</td>' +
+      '<td class="r">' + fmt(o.gross) + '</td>' +
+      '<td class="r b">' + fmt(o.bonus) + '</td>' +
+    '</tr>';
+  }).join('') || '<tr><td colspan="12" style="text-align:center;color:#888">Нет заказов за период</td></tr>';
+
+  var thanks = firstName + ', спасибо за работу! Твой вклад по-настоящему важен для команды и успеха ' + company +
+               '. Мы ценим твой труд и профессионализм — так держать! 🙌';
+
+  var watermark = logo
+    ? '<div class="wm"><img src="' + logo + '"></div>'
+    : '<div class="wm wm-text">' + esc(company) + '</div>';
+
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Расчётный лист — ' + esc(e.name) + '</title>' +
+    '<style>' +
+    'body{font-family:Arial,sans-serif;color:#1a2233;margin:0;padding:22mm 16mm;position:relative}' +
+    '.wm{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:0;pointer-events:none;opacity:.06}' +
+    '.wm img{width:58%;max-width:520px}' +
+    '.wm-text{font-size:88px;font-weight:800;color:#0a7;transform:rotate(-20deg)}' +
+    '.pg{position:relative;z-index:1}' +
+    'h1{font-size:20px;margin:0 0 2px}.sub{color:#667;font-size:12px}' +
+    '.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0a7;padding-bottom:10px;margin-bottom:14px}' +
+    '.emp{font-size:16px;font-weight:700}.pos{color:#667;font-size:12px}' +
+    '.sum{border-collapse:collapse;margin-bottom:16px;min-width:360px}' +
+    '.sum td{padding:5px 10px;font-size:13px}.sum tr:not(:last-child) td{border-bottom:1px solid #eee}' +
+    '.sum .tot td{border-top:2px solid #0a7;font-weight:800;font-size:16px}' +
+    'table.ord{width:100%;border-collapse:collapse;font-size:10.5px}' +
+    'table.ord th,table.ord td{border:1px solid #ddd;padding:4px 6px}table.ord th{background:#f2f7f5}' +
+    '.r{text-align:right;white-space:nowrap}.b{font-weight:700;color:#0a7}' +
+    '.thanks{margin-top:22px;padding:16px 18px;background:#f0faf7;border:1px solid #bfe6d8;border-radius:10px;font-size:14px;line-height:1.6;color:#0a5a44}' +
+    '@media print{.no-print{display:none}body{padding:12mm}}' +
+    '</style></head><body>' + watermark +
+    '<div class="pg">' +
+      '<div class="no-print" style="text-align:right;margin-bottom:8px"><button onclick="window.print()" style="padding:8px 20px;cursor:pointer">🖨 Печать</button></div>' +
+      '<div class="hdr"><div><h1>Расчётный лист</h1><div class="sub">' + esc(company) + ' · период: ' + esc(period) + '</div></div>' +
+        '<div style="text-align:right"><div class="emp">' + esc(e.name) + '</div><div class="pos">' + esc(e.position) + '</div></div></div>' +
+      '<table class="sum">' +
+        (inclOklad ? '<tr><td>Оклад (½ ставки)</td><td class="r">' + fmt(oklad) + '</td></tr>' : '') +
+        (Number(e.managerBonus)>0 ? '<tr><td>Бонус менеджера</td><td class="r">' + fmt(e.managerBonus) + '</td></tr>' : '') +
+        (Number(e.masterBonus)>0  ? '<tr><td>Бонус мастера</td><td class="r">' + fmt(e.masterBonus) + '</td></tr>' : '') +
+        (Number(e.adminBonus)>0   ? '<tr><td>Бонус администратора</td><td class="r">' + fmt(e.adminBonus) + '</td></tr>' : '') +
+        (paid>0 ? '<tr><td>Уже выдано за период</td><td class="r">−' + fmt(paid) + '</td></tr>' : '') +
+        '<tr class="tot"><td>К выплате</td><td class="r">' + fmt(total) + '</td></tr>' +
+      '</table>' +
+      '<div style="font-weight:700;margin-bottom:6px">Заказы за период (' + (e.orders||[]).length + ')</div>' +
+      '<table class="ord"><thead><tr><th>№</th><th>Дата</th><th>Договор</th><th>Авто / клиент</th><th>Услуга</th><th>Роль</th><th>Цена</th><th>Плёнка</th><th>Расходы</th><th>−15%</th><th>Валовая</th><th>Бонус</th></tr></thead><tbody>' + orderRows + '</tbody></table>' +
+      '<div class="thanks">' + esc(thanks) + '</div>' +
+    '</div></body></html>';
+
+  var w = window.open('', '_blank'); if (w) { w.document.write(html); w.document.close(); }
 }
 
 function printSalary() {

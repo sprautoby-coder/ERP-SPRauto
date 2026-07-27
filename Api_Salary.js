@@ -72,25 +72,37 @@ function calcSalaryForPeriod(from, to) {
         const tintPrice   = Number(o['Стоимость тонировки']) || 0;
         const tintGross   = price > 0 ? gross * (tintPrice / price) : 0;
         const wrapGross   = gross - tintGross;
-        let involved      = false;
+        let involved   = false;
+        let orderBonus = 0;
+        const roles    = [];
 
         // Оклейка (со своей части)
-        if (managers.indexOf(name) >= 0) { managerBonus += managers.length > 0 ? wrapGross * (rates.manager / 100) / managers.length : 0; involved = true; }
-        if (masters.indexOf(name)  >= 0) { masterBonus  += masters.length  > 0 ? wrapGross * (rates.master  / 100) / masters.length  : 0; involved = true; }
-        if (admins.indexOf(name)   >= 0) { adminBonus   += admins.length   > 0 ? wrapGross * (rates.admin   / 100) / admins.length   : 0; involved = true; }
+        if (managers.indexOf(name) >= 0) { const b = managers.length > 0 ? wrapGross * (rates.manager / 100) / managers.length : 0; managerBonus += b; orderBonus += b; roles.push('Менеджер'); involved = true; }
+        if (masters.indexOf(name)  >= 0) { const b = masters.length  > 0 ? wrapGross * (rates.master  / 100) / masters.length  : 0; masterBonus  += b; orderBonus += b; roles.push('Оклейщик'); involved = true; }
+        if (admins.indexOf(name)   >= 0) { const b = admins.length   > 0 ? wrapGross * (rates.admin   / 100) / admins.length   : 0; adminBonus   += b; orderBonus += b; roles.push('Администратор'); involved = true; }
         // Тонировка (со своей части)
-        if (tintManagers.indexOf(name) >= 0) { managerBonus += tintManagers.length > 0 ? tintGross * (rates.manager / 100) / tintManagers.length : 0; involved = true; }
-        if (tintMasters.indexOf(name)  >= 0) { masterBonus  += tintMasters.length  > 0 ? tintGross * (rates.master  / 100) / tintMasters.length  : 0; involved = true; }
-        if (tintAdmins.indexOf(name)   >= 0) { adminBonus   += tintAdmins.length   > 0 ? tintGross * (rates.admin   / 100) / tintAdmins.length   : 0; involved = true; }
+        if (tintManagers.indexOf(name) >= 0) { const b = tintManagers.length > 0 ? tintGross * (rates.manager / 100) / tintManagers.length : 0; managerBonus += b; orderBonus += b; roles.push('Менеджер (тонировка)'); involved = true; }
+        if (tintMasters.indexOf(name)  >= 0) { const b = tintMasters.length  > 0 ? tintGross * (rates.master  / 100) / tintMasters.length  : 0; masterBonus  += b; orderBonus += b; roles.push('Тонировщик'); involved = true; }
+        if (tintAdmins.indexOf(name)   >= 0) { const b = tintAdmins.length   > 0 ? tintGross * (rates.admin   / 100) / tintAdmins.length   : 0; adminBonus   += b; orderBonus += b; roles.push('Администратор (тонировка)'); involved = true; }
         if (involved) {
           orderCount++;
+          const materials  = Number(o['Итого материалы']) || 0;
+          const expenses   = Number(o['Итого расходы'])   || 0;
+          const beznalDisc = Math.max(0, price - materials - expenses - gross);   // −15% (безнал/нал с чеком)
           ordersList.push({
-            id:       o['ID'],
-            contract: o['Номер договора'] || '',
-            date:     o['Дата'] || '',
-            client:   o['Клиент'] || '',
-            price:    price,
-            gross:    gross,
+            id:        o['ID'],
+            contract:  o['Номер договора'] || '',
+            date:      o['Дата'] || '',
+            client:    o['Клиент'] || '',
+            service:   o['Услуга'] || '',
+            car:       o['Авто'] || '',
+            price:     price,
+            materials: round2Sal_(materials),
+            expenses:  round2Sal_(expenses),
+            beznal:    round2Sal_(beznalDisc),
+            gross:     gross,
+            bonus:     round2Sal_(orderBonus),
+            roles:     roles.join(', '),
           });
         }
       });
