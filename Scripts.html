@@ -7762,9 +7762,9 @@ function openSalarySlip_(empId) {
       '<td>' + (i+1) + '</td>' +
       '<td>' + esc(o.date) + '</td>' +
       '<td>' + esc(o.contract) + '</td>' +
-      '<td>' + esc((o.car||'') + (o.client ? ((o.car?' · ':'') + o.client) : '')) + '</td>' +
-      '<td>' + esc(o.service) + '</td>' +
-      '<td>' + esc(o.roles) + '</td>' +
+      '<td class="wrap">' + esc((o.car||'') + (o.client ? ((o.car?' · ':'') + o.client) : '')) + '</td>' +
+      '<td class="wrap">' + esc(o.service) + '</td>' +
+      '<td class="wrap">' + esc(o.roles) + '</td>' +
       '<td class="r">' + fmt(o.price) + '</td>' +
       '<td class="r">' + (Number(o.materials)>0?'−'+fmt(o.materials):'—') + '</td>' +
       '<td class="r">' + (Number(o.expenses)>0?'−'+fmt(o.expenses):'—') + '</td>' +
@@ -7783,22 +7783,26 @@ function openSalarySlip_(empId) {
 
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Расчётный лист — ' + esc(e.name) + '</title>' +
     '<style>' +
-    'body{font-family:Arial,sans-serif;color:#1a2233;margin:0;padding:22mm 16mm;position:relative}' +
+    '@page{size:A4 landscape;margin:10mm}' +
+    'body{font-family:Arial,sans-serif;color:#1a2233;margin:0;padding:16px 20px;position:relative}' +
     '.wm{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:0;pointer-events:none;opacity:.06}' +
-    '.wm img{width:58%;max-width:520px}' +
-    '.wm-text{font-size:88px;font-weight:800;color:#0a7;transform:rotate(-20deg)}' +
-    '.pg{position:relative;z-index:1}' +
-    'h1{font-size:20px;margin:0 0 2px}.sub{color:#667;font-size:12px}' +
-    '.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0a7;padding-bottom:10px;margin-bottom:14px}' +
-    '.emp{font-size:16px;font-weight:700}.pos{color:#667;font-size:12px}' +
-    '.sum{border-collapse:collapse;margin-bottom:16px;min-width:360px}' +
-    '.sum td{padding:5px 10px;font-size:13px}.sum tr:not(:last-child) td{border-bottom:1px solid #eee}' +
-    '.sum .tot td{border-top:2px solid #0a7;font-weight:800;font-size:16px}' +
-    'table.ord{width:100%;border-collapse:collapse;font-size:10.5px}' +
-    'table.ord th,table.ord td{border:1px solid #ddd;padding:4px 6px}table.ord th{background:#f2f7f5}' +
-    '.r{text-align:right;white-space:nowrap}.b{font-weight:700;color:#0a7}' +
-    '.thanks{margin-top:22px;padding:16px 18px;background:#f0faf7;border:1px solid #bfe6d8;border-radius:10px;font-size:14px;line-height:1.6;color:#0a5a44}' +
-    '@media print{.no-print{display:none}body{padding:12mm}}' +
+    '.wm img{width:46%;max-width:420px}' +
+    '.wm-text{font-size:80px;font-weight:800;color:#0a7;transform:rotate(-20deg)}' +
+    '.pg{position:relative;z-index:1;max-width:1080px;margin:0 auto}' +
+    'h1{font-size:18px;margin:0 0 2px}.sub{color:#667;font-size:11px}' +
+    '.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #0a7;padding-bottom:8px;margin-bottom:12px}' +
+    '.emp{font-size:15px;font-weight:700}.pos{color:#667;font-size:11px}' +
+    '.sum{border-collapse:collapse;margin-bottom:14px}' +
+    '.sum td{padding:3px 12px 3px 0;font-size:12px}.sum td:last-child{text-align:right;font-weight:600;padding-right:0}' +
+    '.sum tr:not(:last-child) td{border-bottom:1px solid #eee}' +
+    '.sum .tot td{border-top:2px solid #0a7;font-weight:800;font-size:14px;padding-top:5px}' +
+    'table.ord{width:100%;border-collapse:collapse;font-size:9.5px;table-layout:fixed}' +
+    'table.ord th,table.ord td{border:1px solid #ddd;padding:3px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}' +
+    'table.ord th{background:#f2f7f5;font-size:9px}' +
+    'table.ord td.wrap{white-space:normal}' +
+    '.r{text-align:right}.b{font-weight:700;color:#0a7}' +
+    '.thanks{margin-top:16px;padding:12px 16px;background:#f0faf7;border:1px solid #bfe6d8;border-radius:10px;font-size:13px;line-height:1.5;color:#0a5a44}' +
+    '@media print{.no-print{display:none}body{padding:0}.pg{max-width:none}}' +
     '</style></head><body>' + watermark +
     '<div class="pg">' +
       '<div class="no-print" style="text-align:right;margin-bottom:8px"><button onclick="window.print()" style="padding:8px 20px;cursor:pointer">🖨 Печать</button></div>' +
@@ -7813,7 +7817,9 @@ function openSalarySlip_(empId) {
         '<tr class="tot"><td>К выплате</td><td class="r">' + fmt(total) + '</td></tr>' +
       '</table>' +
       '<div style="font-weight:700;margin-bottom:6px">Заказы за период (' + (e.orders||[]).length + ')</div>' +
-      '<table class="ord"><thead><tr><th>№</th><th>Дата</th><th>Договор</th><th>Авто / клиент</th><th>Услуга</th><th>Роль</th><th>Цена</th><th>Плёнка</th><th>Расходы</th><th>−15%</th><th>Валовая</th><th>Бонус</th></tr></thead><tbody>' + orderRows + '</tbody></table>' +
+      '<table class="ord">' +
+      '<colgroup><col style="width:3%"><col style="width:7%"><col style="width:8%"><col style="width:17%"><col style="width:11%"><col style="width:10%"><col style="width:7%"><col style="width:7%"><col style="width:7%"><col style="width:6%"><col style="width:8%"><col style="width:9%"></colgroup>' +
+      '<thead><tr><th>№</th><th>Дата</th><th>Договор</th><th>Авто / клиент</th><th>Услуга</th><th>Роль</th><th>Цена</th><th>Плёнка</th><th>Расходы</th><th>−15%</th><th>Валовая</th><th>Бонус</th></tr></thead><tbody>' + orderRows + '</tbody></table>' +
       '<div class="thanks">' + esc(thanks) + '</div>' +
     '</div></body></html>';
 
