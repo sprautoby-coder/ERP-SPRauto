@@ -228,6 +228,15 @@ function getDefaultStatusName_() {
   return (list[0] && list[0].name) ? list[0].name : 'Новый';
 }
 
+/** Имя «завершённого» статуса (первый с done:true, обычно «Выдан»). */
+function getCompletedStatusName_() {
+  try {
+    var list = getOrderStatuses();
+    for (var i = 0; i < list.length; i++) { if (list[i] && list[i].done) return String(list[i].name); }
+  } catch (e) {}
+  return 'Выдан';
+}
+
 /**
  * Сохранить список статусов-«воронок».
  * payload = { list: [{id,name,color,cancelled}], renames: [{from,to}] }

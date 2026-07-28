@@ -3919,6 +3919,14 @@ function statusBadge_(status) {
          ';background:' + bg + ';border:1px solid ' + bd + ';padding:1px 9px;border-radius:10px;white-space:nowrap">' + status + '</span>';
 }
 
+// Мастера заказа для колонки таблицы: оклейщики + тонировщики через запятую
+function ordersMastersText_(o) {
+  var a = [];
+  var w = String(o['Оклейщики'] || '').trim(); if (w) a.push(w);
+  var t = String(o['Тонировщики'] || '').trim(); if (t) a.push(t);
+  return a.join(', ');
+}
+
 function renderOrdersTable(orders) {
   var tbody  = document.getElementById('orders-tbody');
   var footer = document.getElementById('orders-table-footer');
@@ -4040,6 +4048,7 @@ function renderOrdersTable(orders) {
       '<td style="text-align:center">' + statusBadge_(status) + '</td>' +
       '<td style="text-align:center">' + verCell + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + (o['Менеджер'] || '—') + '</td>' +
+      '<td style="font-size:12px;color:var(--text-secondary)">' + (ordersMastersText_(o) || '—') + '</td>' +
       '<td onclick="event.stopPropagation()">' +
         '<select class="form-select" style="font-size:11px;padding:2px 4px;height:26px;width:100%;min-width:0;max-width:100%" onchange="changeOrderStatus(\'' + oid + '\', this)">' +
           orderStatusNames().map(function(s){
@@ -4246,8 +4255,9 @@ var ORDER_COLS = [
   { n: 8,  label: 'Сумма' },
   { n: 9,  label: 'Затраты' },
   { n: 10, label: 'Оплата (метка)' },
-  { n: 12, label: 'Проверено' },
-  { n: 13, label: 'Менеджер' },
+  { n: 13, label: 'Проверено' },
+  { n: 14, label: 'Менеджер' },
+  { n: 15, label: 'Мастера' },
 ];
 function orderHiddenCols_() {
   try { var raw = localStorage.getItem('orders_hidden_cols'); if (raw) return JSON.parse(raw) || []; } catch (e) {}

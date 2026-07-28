@@ -145,6 +145,7 @@ function updateOrderPaymentStatus_(orderId) {
   const idIdx    = oHeaders.indexOf('ID');
   const priceIdx = oHeaders.indexOf('Стоимость заказа');
   const statIdx  = oHeaders.indexOf('Статус оплаты');
+  const ordStIdx = oHeaders.indexOf('Статус');
   const bzIdx    = oHeaders.indexOf('Безнал');
   const dueIdx   = oHeaders.indexOf('Срок оплаты');
   const updIdx   = oHeaders.indexOf('Обновлён');
@@ -181,6 +182,16 @@ function updateOrderPaymentStatus_(orderId) {
     legacyBeznal = beznalSum >= orderPrice * 0.5 ? 'Да' : 'Нет';
     // При полной оплате сбрасываем срок следующего платежа
     if (dueIdx >= 0) oSheet.getRange(orderRow, dueIdx + 1).setValue('');
+    // …и автоматически переводим заказ в завершённый статус («Выдан»),
+    // кроме отменённых (их «оживлять» оплатой не нужно).
+    if (ordStIdx >= 0) {
+      var curOrdStatus = String(oData[orderRow - 1][ordStIdx] || '').trim();
+      var doneName = getCompletedStatusName_();
+      var cancelledSet = getCancelledStatusSet_();
+      if (doneName && !cancelledSet[curOrdStatus] && curOrdStatus !== doneName) {
+        oSheet.getRange(orderRow, ordStIdx + 1).setValue(doneName);
+      }
+    }
   } else {
     newStatus    = 'Частично';
     legacyBeznal = 'Частично';
