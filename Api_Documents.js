@@ -47,6 +47,8 @@ function generateContractHtml(orderId, service) {
     var isLegal = String(d.client['Тип'] || '') === 'юр' || String(d.order['_clientType'] || '') === 'юр';
     var byProxy = isLegal && String(d.order['Подписант'] || '').trim() !== '';
     var body = fillTemplate_(contractTemplateHtml_(isLegal, byProxy), map);
+    // Блок рассрочки (график платежей) — вставляем в готовый текст вместо токена (пусто, если не рассрочка)
+    body = body.replace('<!--RASSROCHKA_BLOCK-->', map['_rassrochkaBlock'] || '');
     return docWrap_('Договор ' + (map['Номер договора'] || '') + docSvcSuffix_(service), body, map['Логотип'], true);
   });
 }
@@ -463,10 +465,62 @@ function getDocData_(orderId) {
   }
   var expenses = readSheetAsObjects('DATABASE', 'ORDER_EXPENSES')
     .filter(function(r){ return String(r['Заказ ID']) === String(orderId); });
+  // График рассрочки (плановые взносы) — для договора с графиком платежей
+  var schedule = [];
+  try {
+    schedule = readSheetAsObjects('DATABASE', 'SCHEDULE')
+      .filter(function(r){ return String(r['Заказ ID']) === String(orderId); })
+      .sort(function(a, b){ return (Number(a['№']) || 0) - (Number(b['№']) || 0); });
+  } catch (e) { /* лист графика может отсутствовать */ }
   // Реквизиты компании — позиционным чтением (ключ→значение), надёжно
   var sResp = getSettings();
   var company = (sResp && sResp.ok) ? sResp.data : {};
-  return { order: order, client: client, company: company, materials: materials, expenses: expenses };
+  return { order: order, client: client, company: company, materials: materials, expenses: expenses, schedule: schedule };
+}
+
+/**
+ * Юридически корректный блок «Порядок оплаты (рассрочка)» с графиком платежей.
+ * Вставляется в договор как подпункты раздела 2 (Цена договора).
+ * Берёт реальные взносы из графика (SCHEDULE); если графика ещё нет — печатает
+ * пустые строки для ручного заполнения (документ редактируемый).
+ */
+function buildRassrochkaSection_(d, totalPrice) {
+  var rows = (d.schedule || []);
+  var tableRows = '';
+  var sum = 0;
+  rows.forEach(function(r, i){
+    var n   = r['№'] || (i + 1);
+    var dt  = String(r['Дата'] || '').trim();
+    var amt = Number(r['Сумма']) || 0;
+    sum += amt;
+    tableRows += '<tr><td class="center">' + n + '</td><td class="center">' + (dt || '____________') +
+      '</td><td class="right">' + amt.toFixed(2) + ' руб.</td><td>' + numToWords_(amt) + '</td></tr>';
+  });
+  if (!rows.length) {
+    for (var i = 0; i < 3; i++) {
+      tableRows += '<tr><td class="center">' + (i + 1) +
+        '</td><td class="center">____________</td><td class="right">____________</td><td>____________</td></tr>';
+    }
+  }
+  var totalVal = rows.length ? sum : totalPrice;
+  return '' +
+    '<p>2.4. Оплата стоимости работ, указанной в п.2.2, производится Заказчиком в <b>рассрочку</b> ' +
+    'согласно графику платежей, установленному настоящим пунктом. При оплате в рассрочку условия п.3.2.1 ' +
+    'настоящего договора о порядке предоплаты не применяются.</p>' +
+    '<table><thead><tr><th style="width:70px">№ платежа</th><th style="width:110px">Срок оплаты</th>' +
+    '<th style="width:110px">Сумма</th><th>Сумма прописью</th></tr></thead>' +
+    '<tbody>' + tableRows + '</tbody>' +
+    '<tfoot><tr><td class="right" colspan="2"><b>Итого к оплате:</b></td>' +
+    '<td class="right"><b>' + totalVal.toFixed(2) + ' руб.</b></td><td><b>' + numToWords_(totalVal) + '</b></td></tr></tfoot>' +
+    '</table>' +
+    '<p>2.5. Каждый платёж вносится не позднее даты, указанной в графике. Датой оплаты считается дата ' +
+    'поступления денежных средств Исполнителю (в кассу либо на расчётный счёт).</p>' +
+    '<p>2.6. Заказчик вправе досрочно погасить оставшуюся сумму полностью или частично без взимания ' +
+    'дополнительных комиссий и штрафов.</p>' +
+    '<p>2.7. В случае просрочки любого из платежей более чем на 5 (пять) календарных дней Заказчик ' +
+    'уплачивает Исполнителю пеню в размере 0,1% от суммы просроченного платежа за каждый день просрочки. ' +
+    'При просрочке платежа более чем на 30 (тридцать) календарных дней Исполнитель вправе потребовать ' +
+    'досрочной оплаты всей оставшейся суммы по настоящему договору.</p>';
 }
 
 /** Фамилия + инициалы: «Иванов Иван Иванович» → «Иванов И.И.» */
@@ -595,7 +649,13 @@ function buildDocPlaceholders_(d, serviceMode) {
   // Дата договора = дата начала работ; дата акта = дата окончания работ
   var startDate = o['Дата начала работ'] || o['Дата'] || formatToday_();
   var endDate   = o['Дата окончания работ'] || o['Дата выполнения'] || '';
+  // Блок рассрочки (график платежей) — только для полного договора при условии оплаты «Рассрочка».
+  var payTypeCond = String(o['Тип оплаты'] || '').trim();
+  var rassrochkaBlock = (payTypeCond === 'Рассрочка' && serviceMode !== 'wrap' && serviceMode !== 'tint')
+    ? buildRassrochkaSection_(d, Number(o['Стоимость заказа']) || price)
+    : '';
   return {
+    '_rassrochkaBlock': rassrochkaBlock,
     'Номер договора':  o['Номер договора'] || '',
     'Дата':            startDate,
     'Дата прописью':   dateLong_(startDate),
@@ -787,6 +847,7 @@ function contractTemplateHtml_(isLegal, byProxy) {
   <p>2.1. Цена выполненных работ согласовывается сторонами в Протоколе согласования цены.</p>
   <p>2.2. Стоимость работ по настоящему договору составляет <b>{{Сумма цел}} бел. рублей 00 коп.</b></p>
   <p>2.3. Цена договора, предусмотренная п.2.2., является предварительной и может быть изменена в ходе выполнения работ в связи с изменением объёма производимых работ. Окончательная стоимость выполненных работ по настоящему договору отражается в Акте приёма-передачи выполненных работ, который является неотъемлемой частью настоящего договора.</p>
+  <!--RASSROCHKA_BLOCK-->
 
   <h3>3. Права и обязанности сторон</h3>
   <p>3.1. Исполнитель обязуется:</p>
