@@ -7834,13 +7834,61 @@ function renderSalary(data, periodLabel) {
   }).join('');
 
   res.innerHTML =
-    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding:12px 16px;background:var(--bg-card);border-radius:10px;border:1px solid var(--border)">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px;padding:12px 16px;background:var(--bg-card);border-radius:10px;border:1px solid var(--border);flex-wrap:wrap">' +
       '<span style="font-size:13px;color:var(--text2)">Итого к выплате' +
         (periodLabel ? ' · <b style="color:var(--text)">' + periodLabel + '</b>' : '') +
         ' · ' + data.employees.length + ' чел.</span>' +
-      '<span style="font-size:20px;font-weight:700;color:var(--success)">' + fmt(grandTotal) + '</span>' +
+      '<div style="display:flex;align-items:center;gap:12px">' +
+        '<button onclick="runBonusAudit()" title="Найти заказы, где бонус мастера/тонировщика не начислен из-за пустых полей" style="padding:6px 12px;font-size:12px;font-weight:600;background:rgba(243,156,18,.12);color:var(--warning);border:1px solid rgba(243,156,18,.35);border-radius:8px;cursor:pointer">⚠ Проверить бонусы заказов</button>' +
+        '<span style="font-size:20px;font-weight:700;color:var(--success)">' + fmt(grandTotal) + '</span>' +
+      '</div>' +
     '</div>' +
+    '<div id="salary-audit"></div>' +
     '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">' + cards + '</div>';
+}
+
+// Аудит бонусов: найти заказы с «утечкой» бонуса из-за пустых мастеров/тонировщика
+function runBonusAudit() {
+  var range = getSalaryRange();
+  var box = document.getElementById('salary-audit');
+  if (box) box.innerHTML = '<div style="padding:12px 16px;color:var(--text3);font-size:13px">Проверяем заказы…</div>';
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { if (box) box.innerHTML = ''; toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      renderBonusAudit_(resp.data);
+    })
+    .withFailureHandler(function(e){ if (box) box.innerHTML = ''; toast('Ошибка: ' + e.message, 'error'); })
+    .auditBonusGaps(range.from||null, range.to||null);
+}
+
+function renderBonusAudit_(data) {
+  var box = document.getElementById('salary-audit'); if (!box) return;
+  var fmt = function(n){ return (Number(n)||0).toLocaleString('ru') + ' ' + CUR; };
+  if (!data.count) {
+    box.innerHTML = '<div style="margin-bottom:12px;padding:12px 16px;background:var(--green-soft);border:1px solid rgba(46,204,113,.35);border-radius:10px;color:var(--success);font-size:13px">✓ Проблем не найдено — во всех заказах периода мастера и тонировщики заполнены, бонусы начисляются корректно.</div>';
+    return;
+  }
+  var rows = data.issues.map(function(i){
+    return '<div style="padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer" onclick="openOrderCard(\'' + String(i.id).replace(/'/g,"\\'") + '\')">' +
+      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline">' +
+        '<div style="font-weight:600;font-size:13px">' + (i.contract||i.id) + ' · ' + (i.client||'') + '</div>' +
+        (i.lost > 0 ? '<div style="color:var(--danger);font-weight:700;white-space:nowrap">−' + fmt(i.lost) + '</div>' : '') +
+      '</div>' +
+      '<div style="font-size:11px;color:var(--text3);margin:2px 0">' + (i.service||'') + ' · ' + fmt(i.price) +
+        (i.tintPrice>0 ? ' · тонировка ' + fmt(i.tintPrice) : '') +
+        ' · оклейщики: ' + (i.masters||'—') + ' · тонировщики: ' + (i.tintMasters||'—') + '</div>' +
+      i.problems.map(function(p){ return '<div style="font-size:12px;color:var(--warning)">⚠ ' + p + '</div>'; }).join('') +
+    '</div>';
+  }).join('');
+  box.innerHTML =
+    '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden;margin-bottom:12px">' +
+      '<div style="padding:12px 16px;background:rgba(243,156,18,.12);border-bottom:1px solid var(--border);font-weight:700;font-size:13px;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">' +
+        '<span>⚠ Заказы с проблемой начисления бонуса: ' + data.count + '</span>' +
+        (data.totalLost > 0 ? '<span style="color:var(--danger)">Не начислено ~' + fmt(data.totalLost) + '</span>' : '') +
+      '</div>' +
+      rows +
+      '<div style="padding:8px 14px;font-size:11px;color:var(--text3)">Нажмите на заказ, чтобы открыть карточку и заполнить мастера/тонировщика и «Стоимость тонировки». После правки бонусы пересчитаются автоматически.</div>' +
+    '</div>';
 }
 
 // Имя для обращения (ФИО → Имя, второе слово)

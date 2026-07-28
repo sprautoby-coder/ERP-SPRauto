@@ -137,6 +137,84 @@ function splitNames_(str) {
   return str.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
 }
 
+/**
+ * Аудит начисления бонусов за период (тот же фильтр заказов, что и в ЗП).
+ * Находит заказы, где бонус мастера/тонировщика «утекает» из-за незаполненных полей:
+ *  - смешанный (оклейка+тонировка) без тонировщика → доля тонировки 35% не начислена;
+ *  - смешанный без заполненной «Стоимости тонировки» → тонировка не отделена;
+ *  - есть оклейка-часть, но не указан оклейщик;
+ *  - чистая услуга без исполнителя;
+ *  - не указан ни менеджер, ни администратор.
+ */
+function auditBonusGaps(from, to) {
+  return safeCall(function() {
+    var cancelledSet = getCancelledStatusSet_();
+    var rates = getBonusRates_();
+    var orders = readSheetAsObjects('DATABASE', 'ORDERS').filter(function(o){
+      if (!o['ID']) return false;
+      if (!o['Статус'] || cancelledSet[o['Статус']]) return false;
+      if (from || to) {
+        var d = parseSalDate_(o['Дата']);
+        if (from && d && d < new Date(from)) return false;
+        if (to   && d && d > new Date(to))   return false;
+      }
+      return true;
+    });
+
+    var issues = [];
+    orders.forEach(function(o){
+      var price     = Number(o['Стоимость заказа']) || 0;
+      var gross     = Number(o['Валовая прибыль']) || 0;
+      var tintPrice = Number(o['Стоимость тонировки']) || 0;
+      var svc       = String(o['Услуга'] || '');
+      var hasTint   = /тонир|tint/i.test(svc) || tintPrice > 0;
+      var hasWrap   = /оклей|ppf|полиров|керам|антихром|шумо|химч|бронир/i.test(svc);
+      var mixed     = hasTint && hasWrap;
+      var masters      = splitNames_(o['Оклейщики'] || '');
+      var tintMasters  = splitNames_(o['Тонировщики'] || '');
+      var managers     = splitNames_(o['Менеджер'] || '');
+      var admins       = splitNames_(o['Администратор'] || '');
+      var tintGross = price > 0 ? gross * (tintPrice / price) : 0;
+      var wrapGross = gross - tintGross;
+      var probs = [];
+      var lost = 0;
+
+      if (mixed && tintPrice > 0 && tintMasters.length === 0) {
+        var lt = tintGross * (rates.master / 100); lost += lt;
+        probs.push('смешанный заказ без тонировщика — не начислен бонус с тонировки ~' + round2Sal_(lt));
+      }
+      if (mixed && tintPrice <= 0) {
+        probs.push('смешанный заказ, но «Стоимость тонировки» не заполнена — тонировка не отделена, весь бонус ушёл в оклейку');
+      }
+      if (hasWrap && wrapGross > 0.5 && masters.length === 0) {
+        var lw = wrapGross * (rates.master / 100); lost += lw;
+        probs.push('не указан оклейщик — не начислен бонус с оклейки ~' + round2Sal_(lw));
+      }
+      if (hasTint && !hasWrap && masters.length === 0 && tintMasters.length === 0 && gross > 0.5) {
+        var lp = gross * (rates.master / 100); lost += lp;
+        probs.push('не указан исполнитель — бонус ~' + round2Sal_(lp) + ' не начислен');
+      }
+      if (gross > 0.5 && managers.length === 0 && admins.length === 0) {
+        probs.push('не указан ни менеджер, ни администратор');
+      }
+
+      if (probs.length) {
+        issues.push({
+          id: o['ID'], contract: o['Номер договора'] || o['ID'], date: o['Дата'] || '',
+          client: o['Клиент'] || '', car: o['Авто'] || '', service: svc,
+          price: price, tintPrice: tintPrice,
+          masters: o['Оклейщики'] || '', tintMasters: o['Тонировщики'] || '',
+          lost: round2Sal_(lost), problems: probs
+        });
+      }
+    });
+
+    issues.sort(function(a, b){ return (b.lost || 0) - (a.lost || 0); });
+    return { issues: issues, count: issues.length,
+             totalLost: round2Sal_(issues.reduce(function(s, i){ return s + (i.lost || 0); }, 0)) };
+  });
+}
+
 function parseSalDate_(val) {
   if (!val) return null;
   if (val instanceof Date) return val;
