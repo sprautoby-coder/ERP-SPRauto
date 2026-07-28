@@ -147,6 +147,9 @@ function goPage(name) {
       actionBtn.style.display = 'none';
     }
   }
+  // Глобальную «+ Заказ» прячем на странице «Заказы» — там уже есть своя кнопка (без дубля)
+  var orderBtn = document.getElementById('topbar-order-btn');
+  if (orderBtn) orderBtn.style.display = (name === 'orders') ? 'none' : '';
 
   window.scrollTo(0,0);
   loadCurrentPage();
@@ -6272,11 +6275,14 @@ function renderDashData_(d) {
   var kpi = document.getElementById('dash-kpi');
   var k = d.kpi || {};
   var fmt = function(n){ return (Math.round(Number(n)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+  var kpiHead = function(t){ return '<div style="grid-column:1/-1;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--text3);margin:2px 0 -4px">' + t + '</div>'; };
   if (kpi) kpi.innerHTML =
+    kpiHead('За выбранный период') +
     kpiCard('Выручка',        fmt(k.revenue),     'var(--accent)',   '💰') +
     kpiCard('В работе',       fmt(k.inWorkSum),    '#8b5cf6',       '🔧', "goPage('orders')") +
     kpiCard('Валовая прибыль',fmt(k.grossProfit),  'var(--success)', '📈') +
     kpiCard('Расходы',        fmt(k.expenses),     'var(--danger)',  '💸', "goPage('expenses')") +
+    kpiHead('Деньги и долги') +
     kpiCard('Деньги в кассе', fmt(k.kassaBalance), 'var(--success)', '💵', "goPage('kassa')") +
     kpiCard('Дебиторка',      fmt(k.debtSum),      '#f59e0b',       '🧾', "goPage('debt')") +
     kpiCard('Расчётный счёт', fmt(k.bankBalance),  'var(--accent)',  '🏦', "goPage('dds')");
