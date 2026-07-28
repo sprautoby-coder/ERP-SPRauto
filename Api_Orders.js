@@ -355,6 +355,7 @@ function createOrder(payload) {
     // «Услуга» — все выбранные услуги через запятую (основная + доп.), номер договора — по основной
     const codes         = (payload.serviceCodes && payload.serviceCodes.length) ? payload.serviceCodes : [payload.service];
     const serviceName   = codes.map(function(c){ return getServiceName_(c); }).filter(String).join(', ') || getServiceName_(payload.service);
+    ensureColumns_(sheet, ['Паспорт']);   // для документов физлица
     const headers       = ensureColumns_(sheet, TINT_COLUMNS_);
 
     const defaultStatus = getDefaultStatusName_();
@@ -368,6 +369,7 @@ function createOrder(payload) {
       'Клиент ID':             payload.clientId   || '',
       'Клиент':                payload.clientName  || '',
       'Телефон':               payload.clientPhone || '',
+      'Паспорт':               payload.passport || '',
       'Авто':                  payload.car   || '',
       'Госномер':              payload.plate || '',
       'VIN':                   payload.vin   || '',
@@ -971,7 +973,7 @@ function ensureClientForOrder_(payload) {
     }
     // 3) создаём новую карточку (тип и реквизиты — из формы заказа)
     var type = (String(payload.clientType || '') === 'юр') ? 'юр' : 'физ';
-    var newClient = { type: type, name: name, phone: phone };
+    var newClient = { type: type, name: name, phone: phone, passport: payload.passport || '' };
     if (type === 'юр') {
       newClient.unp          = payload.unp || '';
       newClient.director     = payload.director || '';
