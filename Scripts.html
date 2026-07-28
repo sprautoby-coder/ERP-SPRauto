@@ -9410,6 +9410,40 @@ function renderCardFinance_(order) {
 
 // Печать документа: сперва досохраняем правки (cvFlush_), затем генерируем.
 // service: '' | 'wrap' (оклейка) | 'tint' (тонировка) — для отдельных документов мультиуслуги.
+// Делает открытый документ РЕДАКТИРУЕМЫМ: весь текст можно править прямо во вкладке,
+// сверху — панель с кнопкой печати (она не попадает в печать). Правки видны при печати/сохранении в PDF.
+function makeDocEditable_(w) {
+  try {
+    var d = w.document;
+    if (!d || !d.body) return;
+
+    var style = d.createElement('style');
+    style.textContent =
+      '@media print{.doc-editbar{display:none!important}}' +
+      '.doc-editbar button{cursor:pointer;border:none;border-radius:6px;padding:6px 14px;font:600 13px inherit}' +
+      'body{caret-color:#0ea5b7}' +
+      '[contenteditable="true"]:focus{outline:2px solid rgba(14,165,183,.35);outline-offset:2px}';
+    if (d.head) d.head.appendChild(style);
+
+    var bar = d.createElement('div');
+    bar.className = 'doc-editbar';
+    bar.setAttribute('contenteditable', 'false');
+    bar.style.cssText =
+      'position:fixed;top:0;left:0;right:0;z-index:99999;display:flex;gap:10px;align-items:center;' +
+      'padding:8px 14px;background:#0ea5b7;color:#fff;' +
+      'font:600 13px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;' +
+      'box-shadow:0 2px 10px rgba(0,0,0,.22)';
+    bar.innerHTML =
+      '<span style="flex:1">✏️ Документ можно редактировать — правьте текст прямо здесь, затем печатайте.</span>' +
+      '<button onclick="window.print()" style="background:#fff;color:#0ea5b7">🖨️ Печать / PDF</button>';
+
+    d.body.setAttribute('contenteditable', 'true');
+    d.body.setAttribute('spellcheck', 'false');
+    d.body.style.marginTop = '52px';               // чтобы контент не прятался под панелью
+    d.body.insertBefore(bar, d.body.firstChild);
+  } catch (e) {}
+}
+
 // Блокирует кнопки документов и показывает «Формируется…» на нажатой.
 // Возвращает функцию восстановления исходного состояния.
 function docBtnBusy_(btn) {
@@ -9438,7 +9472,7 @@ function printDoc_(genFnName, service, btn) {
       .withSuccessHandler(function(resp) {
         done();
         if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
-        var w = window.open('','_blank'); if(w){ w.document.write(resp.data); w.document.close(); }
+        var w = window.open('','_blank'); if(w){ w.document.write(resp.data); w.document.close(); makeDocEditable_(w); }
         else toast('Разрешите всплывающие окна, чтобы открыть документ', 'error');
       })
       .withFailureHandler(function(e){ done(); toast('Ошибка: '+e.message,'error'); })
