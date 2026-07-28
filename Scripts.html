@@ -4197,7 +4197,7 @@ function toggleOrderVer(id, btn) {
 // Ресайз столбцов перетаскиванием правой границы заголовка (один раз на таблицу).
 // Ширина запоминается в localStorage по ключу таблицы и восстанавливается при загрузке.
 // v2 — сброс старых сохранённых ширин после добавления столбца-чекбокса (сдвиг индексов)
-function colWidthsKey_(table) { return 'colw2_' + (table.id || 'table'); }
+function colWidthsKey_(table) { return 'colw3_' + (table.id || 'table'); }
 
 // Применить ширины столбцов. По умолчанию таблица УЖИМАЕТСЯ под ширину экрана
 // (чтобы все колонки были видны без прокрутки); ячейки обрезаются многоточием.
@@ -4224,8 +4224,14 @@ function applyColWidths_(table) {
   }
   // Снимаем инлайновый min-width из разметки, иначе он не даст столбцу ужаться.
   ths.forEach(function(th, i){ th.style.width = widths[i] + 'px'; th.style.minWidth = '0'; });
-  // Влезло — тянем на всю ширину (без пустого края); шире экрана — по сумме (бегунок)
-  table.style.width = (fitted || (containerW && sum <= containerW)) ? '100%' : (sum + 'px');
+  // Пользователь задал ширины вручную (saved) → уважаем их ТОЧНО, в пикселях, без растягивания
+  // на 100% (иначе колонки, влезающие в экран, распираются и «плывут» при возврате в раздел).
+  // Первый показ (без saved): влезло — тянем на всю ширину; шире экрана — по сумме (бегунок).
+  if (saved) {
+    table.style.width = sum + 'px';
+  } else {
+    table.style.width = (fitted || (containerW && sum <= containerW)) ? '100%' : (sum + 'px');
+  }
 }
 
 function saveColWidths_(table) {
