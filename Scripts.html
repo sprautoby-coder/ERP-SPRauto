@@ -5311,18 +5311,50 @@ function recalcOrderPreview() {
   var fmt        = function(n){ return Math.round(n * 100) / 100; };
   var bezDisc    = (payType === 'Безнал') ? price * 0.15 : 0;
   var gross      = price - totalMat - totalExp - bezDisc;
+
+  // Смешанный заказ: валовая делится по доле цены — тонировка ← своя часть, оклейка ← остальное.
+  var mixed      = isMixedInForm_();
+  var tintPrice  = mixed ? (Number((document.getElementById('ord-tint-price') || {}).value) || 0) : 0;
+  if (tintPrice < 0) tintPrice = 0;
+  if (tintPrice > price) tintPrice = price;
+  var tintGross  = price > 0 ? gross * (tintPrice / price) : 0;
+  var wrapGross  = gross - tintGross;
+
+  // Кол-во оклейщиков (общий список «Мастер(а)») и тонировщиков (блок тонировки)
   var mgrCount   = manager ? 1 : 0;
   var mstrCount  = masters.split(',').filter(function(s){ return s.trim(); }).length;
+  var tintCount  = 0;
+  if (mixed) document.querySelectorAll('.ord-tinter-cb:checked').forEach(function(){ tintCount++; });
+
   // Ставки бонусов — глобальные из Настроек (те же, что на сервере)
   var rates      = (App.config && App.config.bonusRates) || { manager:10, master:35, admin:5 };
-  var mgrBonus   = mgrCount  > 0 ? gross * (rates.manager/100) / mgrCount  : 0;
-  var mstrBonus  = mstrCount > 0 ? gross * (rates.master/100)  / mstrCount : 0;
+  // Менеджер и админ ведут заказ целиком → бонус с полной валовой. Мастера — каждый со своей услуги.
+  var mgrBonus   = mgrCount  > 0 ? gross     * (rates.manager/100) / mgrCount  : 0;
+  var mstrBonus  = mstrCount > 0 ? wrapGross * (rates.master/100)  / mstrCount : 0;   // оклейщик — с оклейки
+  var tintBonus  = tintCount > 0 ? tintGross * (rates.master/100)  / tintCount : 0;   // тонировщик — с тонировки
   var admBonus   = admin ? gross * (rates.admin/100) : 0;
-  var margin     = gross - (mgrCount > 0 ? gross * (rates.manager/100) : 0) - (mstrCount > 0 ? gross * (rates.master/100) : 0) - admBonus;
+
+  var mgrTotal   = mgrCount  > 0 ? gross     * (rates.manager/100) : 0;
+  var mstrTotal  = mstrCount > 0 ? wrapGross * (rates.master/100)  : 0;
+  var tintTotal  = tintCount > 0 ? tintGross * (rates.master/100)  : 0;
+  var margin     = gross - mgrTotal - mstrTotal - tintTotal - admBonus;
 
   document.getElementById('prev-gross').textContent  = fmt(gross)     + ' ' + CUR;
   document.getElementById('prev-mgr').textContent    = fmt(mgrBonus)  + ' ' + CUR;
+
+  // Подпись бонуса мастера: для смешанного — «оклейщиков», иначе «мастера»
+  var mLbl = document.getElementById('prev-master-lbl');
+  if (mLbl) mLbl.textContent = mixed ? 'Бонус оклейщика:' : 'Бонус мастера:';
   document.getElementById('prev-master').textContent = fmt(mstrBonus) + ' ' + CUR;
+
+  // Отдельная строка бонуса тонировщика — только для смешанного заказа
+  var tLbl = document.getElementById('prev-tint-master-lbl'), tVal = document.getElementById('prev-tint-master');
+  if (tLbl && tVal) {
+    var tShow = (mixed && tintCount > 0) ? '' : 'none';
+    tLbl.style.display = tShow; tVal.style.display = tShow;
+    tVal.textContent = fmt(tintBonus) + ' ' + CUR;
+  }
+
   var admLbl = document.getElementById('prev-admin-lbl'), admVal = document.getElementById('prev-admin');
   if (admLbl && admVal) {
     var show = admin ? '' : 'none';
@@ -5331,6 +5363,17 @@ function recalcOrderPreview() {
   }
   document.getElementById('prev-margin').textContent = fmt(margin)    + ' ' + CUR;
   var p = document.getElementById('ord-finance-preview'); if(p) p.style.display = 'block';
+}
+
+// Подпись поля «Мастер(а)» под контекст услуг: тонировка → «Тонировщик(и)», оклейка → «Оклейщики».
+function updateMastersRoleLabel_() {
+  var t    = formServicesText_();
+  var tint = /тонир|tint/i.test(t);
+  var wrap = /оклей|ppf/i.test(t);
+  var lbl  = document.getElementById('ord-masters-role-label');
+  var hint = document.getElementById('ord-masters-hint');
+  if (lbl)  lbl.textContent = (tint && !wrap) ? 'Тонировщик(и)' : (wrap ? 'Оклейщики' : 'Мастер(а)');
+  if (hint) hint.style.display = (tint && wrap) ? 'block' : 'none';   // подсказка только для смешанного
 }
 
 // Заполнить выпадающий список комплексов в форме заказа (из white-label каталога)
@@ -5407,11 +5450,12 @@ function fillOrderTinters_() {
   var checked = {};
   wrap.querySelectorAll('.ord-tinter-cb:checked').forEach(function(cb){ checked[cb.value] = true; });
   var firstFill = !wrap.getAttribute('data-filled');
-  wrap.innerHTML = list.map(function(e){
+  wrap.innerHTML = list.map(function(e, idx){
     var n = e['ФИО'] || e['Имя'] || ''; if (!n) return '';
-    var on = checked[n] || (firstFill && tinters.length > 0);   // авто-подтягивание тонировщиков
+    // Авто-отмечаем только ШТАТНОГО (первого) тонировщика — остальных выбирают вручную.
+    var on = checked[n] || (firstFill && tinters.length > 0 && idx === 0);
     return '<label style="display:flex;align-items:center;gap:6px;font-size:12px;padding:2px 0;cursor:pointer">' +
-      '<input type="checkbox" class="ord-tinter-cb" value="' + n.replace(/"/g,'&quot;') + '"' + (on ? ' checked' : '') + '> ' + n + '</label>';
+      '<input type="checkbox" class="ord-tinter-cb" value="' + n.replace(/"/g,'&quot;') + '" onchange="recalcOrderPreview()"' + (on ? ' checked' : '') + '> ' + n + '</label>';
   }).join('');
   wrap.setAttribute('data-filled', '1');
 }
@@ -5431,6 +5475,7 @@ function updateOrderTintBlock_() {
     var p = document.getElementById('ord-tint-price'); if (p) p.value = '';
   }
   autoPickMastersByService_();   // подтянуть основного мастера по роли под услугу
+  updateMastersRoleLabel_();     // подпись поля мастеров под контекст (оклейщики / тонировщик)
   if (typeof recalcOrderPreview === 'function') recalcOrderPreview();
 }
 
