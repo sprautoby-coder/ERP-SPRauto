@@ -9410,23 +9410,45 @@ function renderCardFinance_(order) {
 
 // Печать документа: сперва досохраняем правки (cvFlush_), затем генерируем.
 // service: '' | 'wrap' (оклейка) | 'tint' (тонировка) — для отдельных документов мультиуслуги.
-function printDoc_(genFnName, service) {
+// Блокирует кнопки документов и показывает «Формируется…» на нажатой.
+// Возвращает функцию восстановления исходного состояния.
+function docBtnBusy_(btn) {
+  var box  = document.getElementById('order-card-docbtns');
+  var btns = box ? Array.prototype.slice.call(box.querySelectorAll('button')) : [];
+  var orig = btn ? btn.innerHTML : '';
+  btns.forEach(function(el){ el.disabled = true; el.style.opacity = '.5'; el.style.cursor = 'wait'; });
+  if (btn) { btn.innerHTML = '⏳ Формируется…'; btn.style.opacity = '1'; }
+  return function(){
+    btns.forEach(function(el){ el.disabled = false; el.style.opacity = ''; el.style.cursor = ''; });
+    if (btn) btn.innerHTML = orig;
+  };
+}
+
+function printDoc_(genFnName, service, btn) {
   var id = App._currentOrderId;
   if (!id) return;
+  if (App._docBusy) return;              // уже формируется — игнорируем повторные клики
+  App._docBusy = true;
+  var restore = docBtnBusy_(btn);        // визуально: кнопки заблокированы, идёт «⏳ Формируется…»
+  var finished = false;
+  var done = function(){ if (finished) return; finished = true; clearTimeout(guard); restore(); App._docBusy = false; };
+  var guard = setTimeout(function(){ if (!finished) { done(); toast('Документ формируется дольше обычного — попробуйте ещё раз', 'error'); } }, 30000);
   flushCard_(function(){
     google.script.run
       .withSuccessHandler(function(resp) {
+        done();
         if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
         var w = window.open('','_blank'); if(w){ w.document.write(resp.data); w.document.close(); }
+        else toast('Разрешите всплывающие окна, чтобы открыть документ', 'error');
       })
-      .withFailureHandler(function(e){ toast('Ошибка: '+e.message,'error'); })
+      .withFailureHandler(function(e){ done(); toast('Ошибка: '+e.message,'error'); })
       [genFnName](id, service || '');
   });
 }
-function printOrderContract(service) { printDoc_('generateContractHtml',    service); }
-function printOrderNarad(service)    { printDoc_('generateOrderNaradHtml',  service); }
-function printWorkCard()             { printDoc_('generateWorkCardHtml'); }
-function printOrderAct(service)      { printDoc_('generateActHtml',         service); }
+function printOrderContract(service, btn) { printDoc_('generateContractHtml',    service, btn); }
+function printOrderNarad(service, btn)    { printDoc_('generateOrderNaradHtml',  service, btn); }
+function printWorkCard(btn)               { printDoc_('generateWorkCardHtml', '', btn); }
+function printOrderAct(service, btn)      { printDoc_('generateActHtml',         service, btn); }
 
 // Определение состава услуг заказа
 function orderHasTint_(o){ return /тонир|tint/i.test(String((o||{})['Услуга'] || '')); }
@@ -9437,21 +9459,21 @@ function orderMultiService_(o){ return orderHasTint_(o) && orderHasWrap_(o); }
 function renderDocButtons_(o) {
   var box = document.getElementById('order-card-docbtns');
   if (!box) return;
-  var b = function(label, fn){ return '<button class="btn btn-ghost" onclick="' + fn + '">' + label + '</button>'; };
+  var b = function(label, fn){ return '<button class="btn btn-ghost doc-btn" onclick="' + fn + '">' + label + '</button>'; };
   if (orderMultiService_(o)) {
     box.innerHTML =
-      b('📄 Договор · Оклейка',   "printOrderContract('wrap')") +
-      b('📄 Договор · Тонировка', "printOrderContract('tint')") +
-      b('📋 Наряд · Оклейка',     "printOrderNarad('wrap')") +
-      b('📋 Наряд · Тонировка',   "printOrderNarad('tint')") +
-      b('Акт',         "printOrderAct('')") +
-      b('Карта работ', "printWorkCard()");
+      b('📄 Договор · Оклейка',   "printOrderContract('wrap',this)") +
+      b('📄 Договор · Тонировка', "printOrderContract('tint',this)") +
+      b('📋 Наряд · Оклейка',     "printOrderNarad('wrap',this)") +
+      b('📋 Наряд · Тонировка',   "printOrderNarad('tint',this)") +
+      b('Акт',         "printOrderAct('',this)") +
+      b('Карта работ', "printWorkCard(this)");
   } else {
     box.innerHTML =
-      b('Договор',      "printOrderContract('')") +
-      b('Заказ-наряд',  "printOrderNarad('')") +
-      b('Акт',          "printOrderAct('')") +
-      b('Карта работ',  "printWorkCard()");
+      b('Договор',      "printOrderContract('',this)") +
+      b('Заказ-наряд',  "printOrderNarad('',this)") +
+      b('Акт',          "printOrderAct('',this)") +
+      b('Карта работ',  "printWorkCard(this)");
   }
 }
 
