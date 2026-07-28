@@ -649,9 +649,11 @@ function buildDocPlaceholders_(d, serviceMode) {
   // Дата договора = дата начала работ; дата акта = дата окончания работ
   var startDate = o['Дата начала работ'] || o['Дата'] || formatToday_();
   var endDate   = o['Дата окончания работ'] || o['Дата выполнения'] || '';
-  // Блок рассрочки (график платежей) — только для полного договора при условии оплаты «Рассрочка».
+  // Блок рассрочки (график платежей) — для полного договора, если выбрана «Рассрочка»
+  // ИЛИ у заказа уже есть график платежей (устойчиво к сбою поля «Тип оплаты»).
   var payTypeCond = String(o['Тип оплаты'] || '').trim();
-  var rassrochkaBlock = (payTypeCond === 'Рассрочка' && serviceMode !== 'wrap' && serviceMode !== 'tint')
+  var hasSchedule = !!(d.schedule && d.schedule.length);
+  var rassrochkaBlock = ((payTypeCond === 'Рассрочка' || hasSchedule) && serviceMode !== 'wrap' && serviceMode !== 'tint')
     ? buildRassrochkaSection_(d, Number(o['Стоимость заказа']) || price)
     : '';
   return {

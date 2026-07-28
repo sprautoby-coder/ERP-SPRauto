@@ -5585,6 +5585,8 @@ function submitNewOrderProceed() {
     bankDetails:  clientType === 'юр' ? ((document.getElementById('ord-cl-bank')     || {}).value || '').trim() : '',
     car:         (document.getElementById('ord-car')          || {}).value || '',
     vin:         (document.getElementById('ord-vin')          || {}).value || '',
+    orderDate:   (function(){ var v=(document.getElementById('ord-date')     || {}).value; return v ? isoToDdmmyyyy_(v) : ''; })(),
+    dueDate:     (function(){ var v=(document.getElementById('ord-due-date') || {}).value; return v ? isoToDdmmyyyy_(v) : ''; })(),
     price:       price,
     payType:     payType,
     duePayDate:  duePay,
@@ -8270,26 +8272,34 @@ function renderOrderCard(order) {
 
         renderCardPersonnel() +
 
-        // Оплата
+        // Оплата — сначала УСЛОВИЯ (тип оплаты + график), затем ФАКТ (приём оплаты)
         '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:14px">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
-            '<div style="font-weight:600">Оплата</div>' +
-            (!isPaid ? '<button class="btn btn-primary" onclick="openPayOrderModal(\'' + oid + '\',\'' + String(order['Клиент']||'').replace(/'/g,"\\'") + '\',' + price + ',\'' + String(order['Срок оплаты']||'') + '\')" style="padding:6px 14px;font-weight:600">✓ Принять оплату</button>' : '<span style="color:var(--success);font-weight:700">✓ Оплачен</span>') +
-          '</div>' +
-          '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px">' +
-            finBox_('Сумма', fmt(price), '') +
-            finBox_('Оплачено', fmt(paid), 'var(--success)') +
-            finBox_('Остаток', fmt(remaining), remaining>0?'var(--danger)':'var(--success)') +
-          '</div>' +
+          '<div style="font-weight:600;margin-bottom:10px">Оплата</div>' +
+
+          // 1) Условия оплаты
           '<label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Условия оплаты (−15% ЗП с безнала и нала с чеком)</label>' +
           '<select onchange="updateOrderCardField(\'' + oid + '\',{payType:this.value})" style="width:100%;font-size:13px;padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:var(--inp);color:var(--text);margin-bottom:8px">' + payTypeOpts + '</select>' +
           (showPaySchedule
             ? '<label style="font-size:11px;color:var(--text3);display:block;margin-bottom:4px">Срок оплаты / следующий взнос</label>' +
               '<input type="date" value="' + dueIso + '" onchange="setOrderCardDueDate(\'' + oid + '\', this.value)" style="width:100%;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:var(--inp);color:var(--text);margin-bottom:10px">' +
-              '<div style="font-size:11px;color:var(--text3);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">История платежей</div>' +
-              payHistory +
               scheduleBlock
             : '') +
+
+          // 2) Приём оплаты (факт)
+          '<div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">' +
+              '<div style="font-weight:600">Приём оплаты</div>' +
+              (!isPaid ? '<button class="btn btn-primary" onclick="openPayOrderModal(\'' + oid + '\',\'' + String(order['Клиент']||'').replace(/'/g,"\\'") + '\',' + price + ',\'' + String(order['Срок оплаты']||'') + '\')" style="padding:6px 14px;font-weight:600">✓ Принять оплату</button>' : '<span style="color:var(--success);font-weight:700">✓ Оплачен</span>') +
+            '</div>' +
+            '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px' + (showPaySchedule ? ';margin-bottom:12px' : '') + '">' +
+              finBox_('Сумма', fmt(price), '') +
+              finBox_('Оплачено', fmt(paid), 'var(--success)') +
+              finBox_('Остаток', fmt(remaining), remaining>0?'var(--danger)':'var(--success)') +
+            '</div>' +
+            (showPaySchedule
+              ? '<div style="font-size:11px;color:var(--text3);margin:4px 0;font-weight:600;text-transform:uppercase;letter-spacing:.05em">История платежей</div>' + payHistory
+              : '') +
+          '</div>' +
         '</div>' +
 
         // Финансовый итог
@@ -9341,8 +9351,10 @@ function cvCollect_() {
   var addr = val('cv-address'); if (addr !== undefined) p.address = addr;
   var ec = val('cv-elements-count'); if (ec !== undefined) p.elementsCount = ec;
   var cx = document.getElementById('cv-complex'); if (cx) p.complex = cx.value;
-  var ws = document.getElementById('cv-work-start'); if (ws) p.workStart = isoToDdmmyyyy_(ws.value);
-  var we = document.getElementById('cv-work-end');   if (we) p.workEnd   = isoToDdmmyyyy_(we.value);
+  // Даты сохраняем ТОЛЬКО если заполнены — иначе автосохранение других полей
+  // затирало бы уже проставленную дату пустым значением (дата «пропадала»).
+  var ws = document.getElementById('cv-work-start'); if (ws && ws.value) p.workStart = isoToDdmmyyyy_(ws.value);
+  var we = document.getElementById('cv-work-end');   if (we && we.value) p.workEnd   = isoToDdmmyyyy_(we.value);
   return p;
 }
 
