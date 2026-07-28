@@ -8147,13 +8147,14 @@ function renderOrderCard(order) {
   }).join('');
   var splitControl = (!isPaid)
     ? '<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px">' +
-        '<input id="sched-months" type="number" min="1" max="36" value="' + (sched.length || 3) + '" style="' + inpS + ';width:58px">' +
+        '<input id="sched-months" type="number" min="1" max="36" value="' + (sched.length || 3) + '" onchange="rebuildSchedRows_()" title="Число взносов — строки добавятся автоматически" style="' + inpS + ';width:58px">' +
         '<span style="font-size:12px;color:var(--text3)">мес. с</span>' +
-        '<input id="sched-start" type="date" value="' + dueIso + '" style="' + inpS + '">' +
-        '<button class="btn" onclick="createInstallmentPlanCard(\'' + oid + '\')" style="padding:5px 11px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:7px">Разбить поровну</button>' +
+        '<input id="sched-start" type="date" value="' + dueIso + '" onchange="rebuildSchedRows_()" style="' + inpS + '">' +
+        '<button class="btn" onclick="splitEqualCard_()" title="Раскидать остаток равными взносами" style="padding:5px 11px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:7px">Разбить поровну</button>' +
+        '<button class="btn btn-ghost" onclick="addSchedRow_()" title="Добавить строку взноса вручную" style="padding:5px 11px;font-size:12px">+ Взнос</button>' +
       '</div>'
     : '';
-  var schedFooter = (sched.length && !isPaid)
+  var schedFooter = (!isPaid)
     ? '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px">' +
         '<span id="sched-sum-hint" style="font-size:11px;color:var(--text3)"></span>' +
         '<span id="sched-save-status" style="font-size:11px;color:var(--text3)"></span>' +
@@ -8305,6 +8306,11 @@ function renderOrderCard(order) {
 
   loadOrderPhotos(oid);
   updateSchedSum_();      // показать итог по графику рассрочки при открытии
+  // Рассрочка без сохранённого графика → сразу показать пустые строки по числу месяцев (для заполнения)
+  if (payType === 'Рассрочка' && !isPaid && !(order.schedule && order.schedule.length)) {
+    var _sbox = document.getElementById('card-schedule');
+    if (_sbox && !_sbox.querySelector('.sched-row')) rebuildSchedRows_();
+  }
   renderDocButtons_(order); // кнопки документов (для мультиуслуги — по каждой услуге)
 
   // Самопересчёт финансов при открытии: актуализирует −15% с фактически официальных
@@ -9098,19 +9104,81 @@ function saveScheduleCard(orderId, silent) {
     .saveInstallmentSchedule(orderId, rows);
 }
 
-function createInstallmentPlanCard(orderId) {
-  var months = Number((document.getElementById('sched-months') || {}).value) || 0;
-  var start  = (document.getElementById('sched-start') || {}).value || '';
-  if (months < 1) { toast('Укажите число месяцев', 'error'); return; }
-  if (!start)     { toast('Укажите дату первого взноса', 'error'); return; }
-  google.script.run
-    .withSuccessHandler(function(resp) {
-      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
-      toast('График: ' + resp.data.months + ' взносов по ~' + resp.data.perPayment + ' ' + CUR, 'success');
-      reopenCard(orderId);
-    })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
-    .createInstallmentPlan(orderId, { months: months, startDate: start });
+// Прибавить n месяцев к ISO-дате (yyyy-MM-dd) → ISO
+function addMonthsIso_(iso, n) {
+  var m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return '';
+  var d = new Date(+m[1], +m[2] - 1, +m[3]);
+  d.setMonth(d.getMonth() + Number(n || 0));
+  return d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+}
+
+// Разметка одной строки взноса (для клиентской генерации графика)
+var SCHED_INP_ = 'font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:7px;background:var(--inp);color:var(--text)';
+function schedRowHtml_(num, dISO, amount) {
+  return '<div class="sched-row" data-paid="0" style="display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px solid var(--border)">' +
+    '<span style="width:18px;text-align:center;color:var(--text3)" title="не оплачен">○</span>' +
+    '<span style="width:22px;font-size:12px;color:var(--text3)">№' + num + '</span>' +
+    '<input type="date" class="sched-date" value="' + (dISO || '') + '" style="' + SCHED_INP_ + ';flex:1;min-width:0" onchange="schedEdit_()">' +
+    '<input type="number" class="sched-amt" min="0" step="0.01" value="' + (amount !== '' && amount != null ? amount : '') + '" placeholder="сумма" style="' + SCHED_INP_ + ';width:92px;text-align:right" oninput="schedEdit_()">' +
+    '<button class="btn btn-ghost" onclick="this.closest(\'.sched-row\').remove();schedEdit_()" title="Удалить взнос" style="padding:2px 7px;font-size:12px;color:var(--danger)">✕</button>' +
+  '</div>';
+}
+
+// Перестроить строки графика по числу месяцев и дате первого взноса (даты — по месяцам,
+// уже введённые суммы/даты сохраняются по позициям). Суммы не заполняются автоматически —
+// их можно вписать вручную или нажать «Разбить поровну».
+function rebuildSchedRows_() {
+  var box = document.getElementById('card-schedule'); if (!box) return;
+  var months = Math.max(1, Math.min(36, Number((document.getElementById('sched-months')||{}).value) || 1));
+  var start  = (document.getElementById('sched-start')||{}).value || '';
+  var prev = [];
+  box.querySelectorAll('.sched-row').forEach(function(r){
+    var d = r.querySelector('.sched-date'), a = r.querySelector('.sched-amt');
+    prev.push({ date: d ? d.value : '', amount: a ? a.value : '' });
+  });
+  var html = '';
+  for (var i = 0; i < months; i++) {
+    var dISO = start ? addMonthsIso_(start, i) : (prev[i] ? prev[i].date : '');
+    var amt  = prev[i] ? prev[i].amount : '';
+    html += schedRowHtml_(i + 1, dISO, amt);
+  }
+  box.innerHTML = html;
+  updateSchedSum_();
+  var st = document.getElementById('sched-save-status'); if (st) { st.textContent = '● не сохранено — заполните суммы'; st.style.color = 'var(--warning)'; }
+}
+
+// Добавить одну пустую строку взноса вручную
+function addSchedRow_() {
+  var box = document.getElementById('card-schedule'); if (!box) return;
+  var n = box.querySelectorAll('.sched-row').length + 1;
+  var last = box.querySelector('.sched-row:last-child .sched-date');
+  var dISO = last && last.value ? addMonthsIso_(last.value, 1) : '';
+  box.insertAdjacentHTML('beforeend', schedRowHtml_(n, dISO, ''));
+  updateSchedSum_();
+}
+
+// «Разбить поровну»: раскидать ОСТАТОК (стоимость − уже оплачено) равными взносами
+// по строкам графика (по числу месяцев), проставить помесячные даты и сохранить.
+function splitEqualCard_() {
+  var box = document.getElementById('card-schedule'); if (!box) return;
+  var start = (document.getElementById('sched-start')||{}).value || '';
+  if (!start) { toast('Укажите дату первого взноса', 'error'); return; }
+  rebuildSchedRows_();   // гарантируем нужное число строк с датами
+  var rows = box.querySelectorAll('.sched-row');
+  var n = rows.length; if (!n) return;
+  var remaining = Number(box.getAttribute('data-remaining'));
+  if (!(remaining > 0)) remaining = Number((App._currentOrder || {})['Стоимость заказа']) || 0;
+  var per = Math.floor((remaining / n) * 100) / 100;
+  var acc = 0;
+  rows.forEach(function(r, i){
+    var a = r.querySelector('.sched-amt');
+    var val = (i === n - 1) ? Math.round((remaining - acc) * 100) / 100 : per;
+    acc += per;
+    if (a) a.value = val;
+  });
+  updateSchedSum_();
+  saveScheduleCard(App._currentOrderId, false);   // сохранить и перерисовать (подтянет статусы/срок)
 }
 
 function deleteScheduleCard(orderId) {
