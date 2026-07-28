@@ -32,9 +32,10 @@ function createMaterial(payload) {
     bumpDataVersion_();
     if (!payload || !payload.name) throw new Error('Укажите название материала');
     if (!payload.unit)            throw new Error('Укажите единицу измерения');
-    if (!payload.price)           throw new Error('Укажите цену');
+    // Себестоимость может быть 0/пустой (перепродажа, неизвестна) — не блокируем создание
 
     const sheet   = getTab('DATABASE', 'MATERIALS');
+    ensureColumns_(sheet, ['Цена безнал', 'Цена постоянным']);   // тарифы продажи (авто-миграция)
     const lastRow = sheet.getLastRow();
     const id      = 'МАТ-' + String(lastRow).padStart(4, '0');
     const tz      = Session.getScriptTimeZone();
@@ -51,6 +52,8 @@ function createMaterial(payload) {
       'Ширина рулона': (payload.rollWidth !== undefined && payload.rollWidth !== '' && payload.rollWidth !== null) ? Number(payload.rollWidth) : '',
       'Длина рулона':  (payload.rollLength   !== undefined && payload.rollLength   !== '' && payload.rollLength   !== null) ? Number(payload.rollLength)   : '',
       'Цена за пог.м': (payload.sellPerMeter !== undefined && payload.sellPerMeter !== '' && payload.sellPerMeter !== null) ? Number(payload.sellPerMeter) : '',
+      'Цена безнал':   (payload.sellBeznal   !== undefined && payload.sellBeznal   !== '' && payload.sellBeznal   !== null) ? Number(payload.sellBeznal)   : '',
+      'Цена постоянным': (payload.sellRegular !== undefined && payload.sellRegular !== '' && payload.sellRegular !== null) ? Number(payload.sellRegular) : '',
       'Цена за рулон': (payload.sellPerRoll  !== undefined && payload.sellPerRoll  !== '' && payload.sellPerRoll  !== null) ? Number(payload.sellPerRoll)  : '',
       'Активен':       'Да',
       'Создан':        now,
@@ -70,6 +73,7 @@ function updateMaterial(id, payload) {
   return safeCall(function() {
     bumpDataVersion_();
     const sheet   = getTab('DATABASE', 'MATERIALS');
+    ensureColumns_(sheet, ['Цена безнал', 'Цена постоянным']);   // тарифы продажи (авто-миграция)
     const data    = sheet.getDataRange().getValues();
     const headers = data[0];
     const idIdx   = headers.indexOf('ID');
@@ -88,6 +92,8 @@ function updateMaterial(id, payload) {
         'Ширина рулона': payload.rollWidth   !== undefined ? (payload.rollWidth   === '' ? '' : Number(payload.rollWidth))   : undefined,
         'Длина рулона':  payload.rollLength  !== undefined ? (payload.rollLength  === '' ? '' : Number(payload.rollLength))  : undefined,
         'Цена за пог.м': payload.sellPerMeter!== undefined ? (payload.sellPerMeter=== '' ? '' : Number(payload.sellPerMeter)): undefined,
+        'Цена безнал':   payload.sellBeznal  !== undefined ? (payload.sellBeznal  === '' ? '' : Number(payload.sellBeznal))  : undefined,
+        'Цена постоянным': payload.sellRegular!== undefined ? (payload.sellRegular === '' ? '' : Number(payload.sellRegular)): undefined,
         'Цена за рулон': payload.sellPerRoll !== undefined ? (payload.sellPerRoll === '' ? '' : Number(payload.sellPerRoll)) : undefined,
         'Активен':       payload.active,
         'Обновлён':      now,

@@ -934,7 +934,7 @@
       <table class="data-table" style="table-layout:fixed;width:100%">
         <colgroup>
           <col style="width:200px"><col style="width:150px"><col style="width:130px"><col style="width:70px">
-          <col style="width:80px"><col style="width:80px"><col style="width:95px"><col style="width:120px"><col style="width:120px"><col style="width:90px"><col style="width:170px">
+          <col style="width:80px"><col style="width:80px"><col style="width:95px"><col style="width:110px"><col style="width:110px"><col style="width:120px"><col style="width:120px"><col style="width:90px"><col style="width:170px">
         </colgroup>
         <thead>
           <tr>
@@ -945,13 +945,15 @@
             <th style="text-align:right">Ширина</th>
             <th style="text-align:right">Длина</th>
             <th style="text-align:right" title="Себестоимость за единицу">Себест.</th>
-            <th style="text-align:right" title="Цена продажи за погонный метр">Продажа пог.м</th>
+            <th style="text-align:right" title="Цена продажи за пог.м (розница, за нал)">Продажа нал</th>
+            <th style="text-align:right" title="Цена продажи за пог.м по безналу">Продажа безнал</th>
+            <th style="text-align:right" title="Цена продажи за пог.м постоянным клиентам">Продажа пост.</th>
             <th style="text-align:right" title="Цена продажи за целый рулон">Продажа рулон</th>
             <th style="text-align:center">Статус</th>
             <th style="text-align:right">Действия</th>
           </tr>
         </thead>
-        <tbody id="materials-tbody"><tr><td colspan="11" style="text-align:center;color:var(--text3);padding:32px">Загрузка...</td></tr></tbody>
+        <tbody id="materials-tbody"><tr><td colspan="13" style="text-align:center;color:var(--text3);padding:32px">Загрузка...</td></tr></tbody>
       </table>
     </div>
   </div>
@@ -1374,16 +1376,25 @@
       </div>
       <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:10px">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:8px">Продажа (перепродажа материалов)</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
           <div class="form-row" style="margin:0">
-            <label class="form-label">Цена за пог. метр, <span class="cur">Br</span></label>
+            <label class="form-label">Цена нал (розница), <span class="cur">Br</span></label>
             <input class="form-input" id="edit-mat-sell-meter" type="number" step="0.01" placeholder="0.00">
           </div>
           <div class="form-row" style="margin:0">
-            <label class="form-label">Цена за рулон, <span class="cur">Br</span></label>
-            <input class="form-input" id="edit-mat-sell-roll" type="number" step="0.01" placeholder="0.00">
+            <label class="form-label">Цена безнал, <span class="cur">Br</span></label>
+            <input class="form-input" id="edit-mat-sell-beznal" type="number" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-row" style="margin:0">
+            <label class="form-label">Цена постоянным, <span class="cur">Br</span></label>
+            <input class="form-input" id="edit-mat-sell-regular" type="number" step="0.01" placeholder="0.00">
           </div>
         </div>
+        <div class="form-row" style="margin:8px 0 0">
+          <label class="form-label">Цена за рулон, <span class="cur">Br</span></label>
+          <input class="form-input" id="edit-mat-sell-roll" type="number" step="0.01" placeholder="0.00">
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px">При продаже цена подставится автоматически: постоянный клиент → «постоянным», безнал → «безнал», иначе → «нал». Всегда можно поправить вручную.</div>
       </div>
     </div>
     <div class="modal-footer">
@@ -1821,17 +1832,26 @@
         </div>
       </div>
       <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:10px">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:8px">Продажа (перепродажа материалов)</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text3);margin-bottom:8px">Цены продажи (перепродажа клиентам)</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
           <div class="form-row" style="margin:0">
-            <label class="form-label">Цена за пог. метр, <span class="cur">Br</span></label>
+            <label class="form-label">Цена нал (розница), <span class="cur">Br</span></label>
             <input class="form-input" id="mat-sell-meter" type="number" step="0.01" placeholder="0.00">
           </div>
           <div class="form-row" style="margin:0">
-            <label class="form-label">Цена за рулон, <span class="cur">Br</span></label>
-            <input class="form-input" id="mat-sell-roll" type="number" step="0.01" placeholder="0.00">
+            <label class="form-label">Цена безнал, <span class="cur">Br</span></label>
+            <input class="form-input" id="mat-sell-beznal" type="number" step="0.01" placeholder="0.00">
+          </div>
+          <div class="form-row" style="margin:0">
+            <label class="form-label">Цена постоянным, <span class="cur">Br</span></label>
+            <input class="form-input" id="mat-sell-regular" type="number" step="0.01" placeholder="0.00">
           </div>
         </div>
+        <div class="form-row" style="margin:8px 0 0">
+          <label class="form-label">Цена за рулон, <span class="cur">Br</span> <span style="color:var(--text3)">(если продаётся рулонами)</span></label>
+          <input class="form-input" id="mat-sell-roll" type="number" step="0.01" placeholder="0.00" style="max-width:200px">
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:6px;line-height:1.5">При продаже цена подставится автоматически: постоянному клиенту → «постоянным», безнал → «безнал», иначе → «нал». Пустые тарифы берут цену «нал». Можно переопределить вручную.</div>
       </div>
     </div>
     <div class="modal-footer">

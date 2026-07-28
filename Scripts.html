@@ -5711,8 +5711,10 @@ function renderMaterialsTable(list) {
       '<td>' + inp(id, 'rollWidth',   matNum_(m['Ширина рулона']), ' mat-num') + '</td>' +
       '<td>' + inp(id, 'rollLength',  matNum_(m['Длина рулона']),  ' mat-num') + '</td>' +
       '<td>' + inp(id, 'price',       matNum_(m['Цена']),          ' mat-num mat-cost') + '</td>' +
-      '<td>' + inp(id, 'sellPerMeter',matNum_(m['Цена за пог.м']), ' mat-num') + '</td>' +
-      '<td>' + inp(id, 'sellPerRoll', matNum_(m['Цена за рулон']), ' mat-num') + '</td>' +
+      '<td>' + inp(id, 'sellPerMeter',matNum_(m['Цена за пог.м']),   ' mat-num') + '</td>' +
+      '<td>' + inp(id, 'sellBeznal',  matNum_(m['Цена безнал']),     ' mat-num') + '</td>' +
+      '<td>' + inp(id, 'sellRegular', matNum_(m['Цена постоянным']), ' mat-num') + '</td>' +
+      '<td>' + inp(id, 'sellPerRoll', matNum_(m['Цена за рулон']),   ' mat-num') + '</td>' +
       '<td style="text-align:center"><span style="font-size:11px;padding:2px 8px;border-radius:20px;background:' +
         (active ? 'rgba(40,167,69,.15)' : 'var(--bg-hover)') + ';color:' +
         (active ? 'var(--success)' : 'var(--text3)') + '">' +
@@ -5730,9 +5732,10 @@ function renderMaterialsTable(list) {
 // Названия колонок листа для локального обновления кэша
 var MAT_FIELD_COL = {
   name:'Название', category:'Категория', service:'Услуга', unit:'Единица', price:'Цена',
-  rollWidth:'Ширина рулона', rollLength:'Длина рулона', sellPerMeter:'Цена за пог.м', sellPerRoll:'Цена за рулон'
+  rollWidth:'Ширина рулона', rollLength:'Длина рулона', sellPerMeter:'Цена за пог.м', sellPerRoll:'Цена за рулон',
+  sellBeznal:'Цена безнал', sellRegular:'Цена постоянным'
 };
-var MAT_NUM_FIELDS = { rollWidth:1, rollLength:1, price:1, sellPerMeter:1, sellPerRoll:1 };
+var MAT_NUM_FIELDS = { rollWidth:1, rollLength:1, price:1, sellPerMeter:1, sellPerRoll:1, sellBeznal:1, sellRegular:1 };
 
 // Сохранить одно поле материала прямо из таблицы (без перезагрузки всей таблицы)
 function inlineMatSave(id, field, value, el) {
@@ -5857,6 +5860,7 @@ function onSaleClientInput(){
   var chosen=document.getElementById('sale-client-chosen');
   if(c){ document.getElementById('sale-client-id').value=c['ID']||''; if(chosen){ chosen.textContent='✓ '+(c['Имя']||'')+(String(c['Оптовик'])==='Да'?' · оптовик':''); chosen.style.color='var(--success)'; } }
   else { document.getElementById('sale-client-id').value=''; if(chosen){ chosen.textContent=v?'Новый клиент «'+v+'» будет создан (оптовик)':''; chosen.style.color='var(--text3)'; } }
+  repriceSaleItems_();   // постоянный клиент → тариф «постоянным»
 }
 // Упрощённая форма нового ОПТОВОГО клиента (без авто) — из модуля продаж
 App._wholesaleType = 'физ';
@@ -5915,6 +5919,7 @@ function onSalePayTypeChange(){
   var pt=(document.getElementById('sale-paytype')||{}).value;
   var wrap=document.getElementById('sale-prepay-wrap');
   if(wrap) wrap.style.display=(pt==='Отсрочка'||pt==='Рассрочка')?'':'none';
+  repriceSaleItems_();   // нал/безнал влияет на тариф материалов
 }
 function addSaleItem(){ App._saleItems.push(blankSaleItem_()); renderSaleItems(); }
 function removeSaleItem(i){ App._saleItems.splice(i,1); if(!App._saleItems.length) App._saleItems.push(blankSaleItem_()); renderSaleItems(); }
@@ -5936,22 +5941,47 @@ function renderSaleItems(){
   }).join('');
   recalcSaleTotal();
 }
+// Постоянный (оптовый) ли клиент выбран в форме продажи
+function saleIsRegular_(){
+  var v=(document.getElementById('sale-client-search')||{}).value||'';
+  var c=App._saleClientByLabel[v];
+  return !!(c && String(c['Оптовик'])==='Да');
+}
+// Цена за пог.м по нужному тарифу: постоянный → «постоянным», безнал → «безнал», иначе → «нал».
+// Если у тарифа цена не задана — откатываемся к рознице (нал).
+function saleTierMeterPrice_(m){
+  var retail=Number(m['Цена за пог.м'])||0;
+  var payType=(document.getElementById('sale-paytype')||{}).value||'Нал';
+  if(saleIsRegular_()){ var r=Number(m['Цена постоянным'])||0; return r||retail; }
+  if(payType==='Безнал'){ var b=Number(m['Цена безнал'])||0; return b||retail; }
+  return retail;
+}
 function autoSalePrice_(it,m){
   var p=0;
-  if(it.unit==='пог.м')      p=Number(m['Цена за пог.м'])||0;
+  if(it.unit==='пог.м')      p=saleTierMeterPrice_(m);
   else if(it.unit==='рулон') p=Number(m['Цена за рулон'])||0;
   else if(it.unit==='м²')    p=Number(m['Цена'])||0;
   if(p) it.price=p;
 }
+// Пересчитать авто-цены всех позиций (кроме тех, где цену правили вручную) — при смене оплаты/клиента.
+function repriceSaleItems_(){
+  (App._saleItems||[]).forEach(function(it){
+    if(it._manual) return;
+    var m=(App._materials||[]).find(function(x){return (x['Название']||'')===it.name;});
+    if(m) autoSalePrice_(it,m);
+  });
+  renderSaleItems();
+}
 function saleItemPick(i,field,val){
   var it=App._saleItems[i]; if(!it) return;
-  if(field==='name'){ it.name=val; var m=(App._materials||[]).find(function(x){return (x['Название']||'')===val;}); if(m){ it.materialId=m['ID']||''; autoSalePrice_(it,m); } }
-  else if(field==='unit'){ it.unit=val; var m2=(App._materials||[]).find(function(x){return (x['Название']||'')===it.name;}); if(m2) autoSalePrice_(it,m2); }
+  if(field==='name'){ it.name=val; it._manual=false; var m=(App._materials||[]).find(function(x){return (x['Название']||'')===val;}); if(m){ it.materialId=m['ID']||''; autoSalePrice_(it,m); } }
+  else if(field==='unit'){ it.unit=val; var m2=(App._materials||[]).find(function(x){return (x['Название']||'')===it.name;}); if(m2 && !it._manual) autoSalePrice_(it,m2); }
   renderSaleItems();
 }
 function saleItemNum(i,field,val){
   var it=App._saleItems[i]; if(!it) return;
   it[field]=Number(val)||0;
+  if(field==='price') it._manual=true;   // цену задали вручную — авто-тариф её больше не трогает
   var cell=document.getElementById('sale-sum-'+i);
   if(cell) cell.textContent=salesFmt_((Number(it.qty)||0)*(Number(it.price)||0));
   recalcSaleTotal();
@@ -6081,6 +6111,8 @@ function openEditMaterial(m) {
   document.getElementById('edit-mat-roll-width').value  = m['Ширина рулона']  || '';
   document.getElementById('edit-mat-roll-length').value = m['Длина рулона']   || '';
   document.getElementById('edit-mat-sell-meter').value  = m['Цена за пог.м']  || '';
+  var _eb = document.getElementById('edit-mat-sell-beznal');   if (_eb) _eb.value = m['Цена безнал']     || '';
+  var _er = document.getElementById('edit-mat-sell-regular');  if (_er) _er.value = m['Цена постоянным'] || '';
   document.getElementById('edit-mat-sell-roll').value   = m['Цена за рулон']  || '';
   openModal('modal-edit-material');
 }
@@ -6103,6 +6135,8 @@ function submitEditMaterial() {
     rollWidth:   numOrEmpty('edit-mat-roll-width'),
     rollLength:  numOrEmpty('edit-mat-roll-length'),
     sellPerMeter:numOrEmpty('edit-mat-sell-meter'),
+    sellBeznal:  numOrEmpty('edit-mat-sell-beznal'),
+    sellRegular: numOrEmpty('edit-mat-sell-regular'),
     sellPerRoll: numOrEmpty('edit-mat-sell-roll'),
     active:      'Да',
   };
@@ -6208,6 +6242,8 @@ function submitNewMaterial() {
     rollWidth:   numOrEmpty('mat-roll-width'),
     rollLength:  numOrEmpty('mat-roll-length'),
     sellPerMeter:numOrEmpty('mat-sell-meter'),
+    sellBeznal:  numOrEmpty('mat-sell-beznal'),
+    sellRegular: numOrEmpty('mat-sell-regular'),
     sellPerRoll: numOrEmpty('mat-sell-roll'),
   };
 
