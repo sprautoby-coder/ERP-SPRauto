@@ -587,6 +587,10 @@ function buildDocPlaceholders_(d, serviceMode) {
     (d.materials || []).forEach(function(m){ var w = tintWarrantyMonths_(m['Название']); if (w > mx) mx = w; });
     if (!mx) mx = tintWarrantyMonths_(film);
     if (mx) warrantyMonths = String(mx);
+  } else {
+    // Гарантия на РАБОТУ по оклейке (PPF) — 36 месяцев (плёночное покрытие — отдельно, 10 лет).
+    var isWrap_ = (serviceMode === 'wrap') || /оклейк|ppf|бронир|wrap/i.test(o['Услуга'] || '');
+    if (isWrap_) warrantyMonths = '36';
   }
   // Дата договора = дата начала работ; дата акта = дата окончания работ
   var startDate = o['Дата начала работ'] || o['Дата'] || formatToday_();
