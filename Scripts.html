@@ -2497,11 +2497,8 @@ function renderClientCard(c, vehicles) {
       '</div>' +
     '</div>' +
     '<div class="info-card" style="margin-top:16px;">' +
-      '<div class="info-card-title" style="display:flex;justify-content:space-between;align-items:center;">' +
-        'Заказы клиента' +
-        '<button class="btn btn-ghost btn-sm" id="client-orders-btn" onclick="toggleClientOrders_(\'' + String(c['ID']||'').replace(/'/g,"\\'") + '\')">Показать заказы</button>' +
-      '</div>' +
-      '<div id="client-orders-list" style="display:none;margin-top:8px"></div>' +
+      '<div class="info-card-title">Заказы клиента</div>' +
+      '<div id="client-orders-list" style="margin-top:8px"><div class="kpi-skeleton" style="min-height:48px"></div></div>' +
     '</div>' +
     '<div class="info-card" style="margin-top:16px;">' +
       '<div class="info-card-title" style="display:flex;justify-content:space-between;align-items:center;">' +
@@ -2515,6 +2512,8 @@ function renderClientCard(c, vehicles) {
       '<div class="info-card-title">Заметки</div>' +
       '<div style="color:var(--text2);font-size:13px;line-height:1.6;">' + c['Заметки'] + '</div>' +
     '</div>' : '');
+
+  if (c['ID']) loadClientOrders_(c['ID']);   // сразу подгрузить заказы клиента в раздел
 }
 
 function infoRow(label, value) {
@@ -2522,14 +2521,9 @@ function infoRow(label, value) {
   return '<div class="info-row"><span class="info-label">' + label + '</span><span class="info-value">' + value + '</span></div>';
 }
 
-// Показать/скрыть заказы клиента (в карточке клиента), с переходом в карточку заказа по клику
-function toggleClientOrders_(clientId) {
-  var box = document.getElementById('client-orders-list');
-  var btn = document.getElementById('client-orders-btn');
-  if (!box) return;
-  if (box.style.display !== 'none') { box.style.display = 'none'; if (btn) btn.textContent = 'Показать заказы'; return; }
-  box.style.display = 'block'; if (btn) btn.textContent = 'Скрыть заказы';
-  box.innerHTML = '<div class="kpi-skeleton" style="min-height:60px"></div>';
+// Подгрузить заказы клиента в раздел карточки (с переходом в карточку заказа по клику)
+function loadClientOrders_(clientId) {
+  var box = document.getElementById('client-orders-list'); if (!box) return;
   google.script.run
     .withSuccessHandler(function(resp){ renderClientOrders_((resp && resp.ok) ? (resp.data || []) : []); })
     .withFailureHandler(function(e){ box.innerHTML = '<div style="color:var(--danger);font-size:12px">Ошибка: ' + e.message + '</div>'; })
