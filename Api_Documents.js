@@ -53,6 +53,80 @@ function generateContractHtml(orderId, service) {
   });
 }
 
+/** Единый заказ-наряд на НЕСКОЛЬКО авто (групповой договор юрлица): по блоку на каждую машину. */
+function generateGroupNaradHtml(orderId) {
+  return safeCall(function() {
+    var grp = getGroupMembers_(orderId);
+    var d   = getDocData_(orderId);
+    var map = buildDocPlaceholders_(d, '');
+    var isLegal = String(d.client['Тип'] || '') === 'юр' || String(d.order['_clientType'] || '') === 'юр';
+
+    // Материалы (расход) по каждому заказу группы
+    var byOrder = {};
+    readSheetAsObjects('DATABASE', 'ORDER_MATERIALS').forEach(function(m){
+      if (String(m['Тип'] || 'расход') !== 'расход') return;
+      var oid = String(m['Заказ ID']); (byOrder[oid] = byOrder[oid] || []).push(m);
+    });
+    var isTintRow_ = function(m){
+      return String(m['Зона'] || '').trim() || String(m['Светопропускаемость'] == null ? '' : m['Светопропускаемость']).trim();
+    };
+
+    var cars = grp.members.map(function(mem, idx){
+      var isTint = /тонир|tint/i.test(mem.service);
+      var mats = byOrder[String(mem.id)] || [];
+      // Плёнки для наряда: tint → тонировочные (или выбранная плёнка), wrap → плёнки оклейки
+      var films;
+      if (isTint) {
+        var tf = mats.filter(isTintRow_);
+        films = tf.length ? tf : [{ 'Название': String(mem.film || '').trim(), 'Светопропускаемость': mem.light, 'Кол-во': 0, 'Цена за м²': 0 }];
+      } else {
+        films = mats.filter(function(m){ return !isTintRow_(m); });
+        if (!films.length) films = [{ 'Название': String(mem.film || '').trim(), 'Кол-во': 0, 'Цена за м²': 0 }];
+      }
+      var filmRows = films.map(function(m){
+        var base = String(m['Название'] || '').trim() || String(mem.film || '').trim();
+        var lt   = String(m['Светопропускаемость'] == null ? '' : m['Светопропускаемость']).trim();
+        if (isTint && !lt) lt = String(mem.light == null ? '' : mem.light).trim();
+        var nm = base + (isTint && lt ? ' ' + lt + '%' : '');
+        var qty = Number(m['Кол-во']) || 0, pr = Number(m['Цена за м²']) || 0;
+        return '<tr><td>' + nm + '</td><td class="center">пог. м</td><td class="right">' + (qty || '') + '</td><td class="right">' + (pr || '') + '</td><td class="right">' + (qty && pr ? (Math.round(qty*pr*100)/100).toFixed(2) : '') + '</td></tr>';
+      }).join('');
+      var works = isTint
+        ? '<tr><td>1</td><td>Установка тонировочной плёнки</td><td class="center">да</td></tr>' +
+          '<tr><td>2</td><td>Разборка на элементы, сборка автомобиля</td><td class="center">да</td></tr>' +
+          '<tr><td>3</td><td>Мойка, сушка автомобиля</td><td class="center">да</td></tr>'
+        : '<tr><td>1</td><td>Оклейка антигравийной плёнкой</td><td class="center">да</td></tr>' +
+          '<tr><td>2</td><td>Разборка на элементы, сборка автомобиля</td><td class="center">да</td></tr>' +
+          '<tr><td>3</td><td>Мойка, сушка автомобиля</td><td class="center">да</td></tr>';
+      return (idx > 0 ? '<div style="height:10px"></div>' : '') +
+        '<h3>Автомобиль ' + (idx + 1) + ': ' + (mem.car || '—') + (mem.vin ? ' · VIN ' + mem.vin : '') + ' — ' + (/тонир|tint/i.test(mem.service) ? 'тонировка' : 'оклейка') + '</h3>' +
+        '<table><thead><tr><th style="width:34px">№</th><th>Наименование работ</th><th style="width:120px">Норматив, ДА/НЕТ</th></tr></thead><tbody>' + works + '</tbody></table>' +
+        '<table><thead><tr><th>Материалы</th><th style="width:60px">Ед.</th><th style="width:64px">Кол-во</th><th style="width:74px">Цена, руб.</th><th style="width:90px">Стоимость, руб.</th></tr></thead><tbody>' +
+          filmRows +
+          '<tr><td>Расходные материалы, инструменты</td><td class="center">—</td><td></td><td></td><td class="right"></td></tr>' +
+        '</tbody></table>' +
+        '<div class="bar" style="margin:2px 0 6px"><span></span><span><b>Стоимость по автомобилю: ' + (Number(mem.price)||0).toFixed(2) + ' руб.</b></span></div>';
+    }).join('');
+
+    var body =
+      '<div class="editbar noprint">✎ Поля можно поправить прямо здесь. Затем нажмите «Распечатать».</div>' +
+      '<div class="muted">' + map['Компания'] + '<br>УНП: ' + map['УНП'] + ' · ' + map['Юр.адрес'] + '<br>(наименование и местонахождение исполнителя)</div>' +
+      '<div class="bar" style="margin-top:6px"><span></span><span>' + (map['Дата ru'] || '') + '</span></div>' +
+      '<h2>ЗАКАЗ-НАРЯД ' + (map['Номер договора'] ? '№ ' + map['Номер договора'] : '') + '</h2>' +
+      '<p><b>Заказчик:</b> ' + map['ФИО'] + (isLegal ? ', УНП ' + (map['УНП заказчика'] || '____') : '') + '</p>' +
+      '<p><b>Автомобилей по договору:</b> ' + grp.count + '</p>' +
+      cars +
+      '<table style="margin-top:8px"><tr><th style="width:60%">ВСЕГО К ОПЛАТЕ по всем автомобилям</th><th>НДС</th></tr>' +
+      '<tr><td class="right"><b>' + grp.total.toFixed(2) + ' руб.</b></td><td class="center">Без НДС</td></tr></table>' +
+      '<p>Общая стоимость прописью: <b>' + numToWords_(grp.total) + '</b></p>' +
+      '<div class="sign" style="margin-top:12px"><span>Заказ оформил: _____________ / ' + map['Заказ оформил'] + '</span></div>' +
+      '<p style="margin-top:10px;font-size:9.5pt">С объёмом и стоимостью заказа согласен, претензий по качеству не имею, автомобили получил.</p>' +
+      '<div class="sign"><span>_____________ / ' + (isLegal ? (map['Директор заказчика'] || map['Компания заказчика']) : map['Фамилия И.О.']) + '<br><span class="muted">(подпись заказчика)</span></span><span>' + (map['Дата сдачи кратко'] || '') + '</span></div>';
+
+    return docWrap_('Заказ-наряд ' + (map['Номер договора'] || '') + ' — ' + grp.count + ' авто', body, map['Логотип'], true);
+  });
+}
+
 /** Единый договор/акт на НЕСКОЛЬКО авто (групповой договор юрлица). kind: 'contract'|'act'. */
 function generateGroupContractHtml(orderId, kind) {
   return safeCall(function() {

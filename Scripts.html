@@ -9756,6 +9756,7 @@ function renderOrderGroup_(orderId, data, isLegal) {
         '<div style="font-size:13px">Итого по договору: <b>' + fmt(data.total) + '</b></div>' +
         (grouped ? '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
           '<button class="btn btn-ghost" onclick="printGroupDoc(\'' + String(orderId).replace(/'/g,"\\'") + '\',\'contract\')" style="padding:4px 10px;font-size:12px">📄 Договор на все авто</button>' +
+          '<button class="btn btn-ghost" onclick="printGroupDoc(\'' + String(orderId).replace(/'/g,"\\'") + '\',\'narad\')" style="padding:4px 10px;font-size:12px">📋 Наряд на все авто</button>' +
           '<button class="btn btn-ghost" onclick="printGroupDoc(\'' + String(orderId).replace(/'/g,"\\'") + '\',\'act\')" style="padding:4px 10px;font-size:12px">Акт на все авто</button>' +
         '</div>' : '<span style="font-size:11px;color:var(--text3)">Добавьте второе авто, чтобы сформировать один договор на все</span>') +
       '</div>' +
@@ -9829,14 +9830,17 @@ function submitAddCar_() {
 
 function printGroupDoc(orderId, kind) {
   toast('Формируем документ…');
-  google.script.run
-    .withSuccessHandler(function(resp){
-      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
-      var w = window.open('', '_blank'); if (w) { w.document.write(resp.data); w.document.close(); makeDocEditable_(w); }
-      else toast('Разрешите всплывающие окна, чтобы открыть документ', 'error');
-    })
-    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
-    .generateGroupContractHtml(orderId, kind);
+  var onOk = function(resp){
+    if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+    var w = window.open('', '_blank'); if (w) { w.document.write(resp.data); w.document.close(); makeDocEditable_(w); }
+    else toast('Разрешите всплывающие окна, чтобы открыть документ', 'error');
+  };
+  var onErr = function(e){ toast('Ошибка: ' + e.message, 'error'); };
+  if (kind === 'narad') {
+    google.script.run.withSuccessHandler(onOk).withFailureHandler(onErr).generateGroupNaradHtml(orderId);
+  } else {
+    google.script.run.withSuccessHandler(onOk).withFailureHandler(onErr).generateGroupContractHtml(orderId, kind);
+  }
 }
 
 // Определение состава услуг заказа
