@@ -606,6 +606,7 @@ function buildDocPlaceholders_(d, serviceMode) {
   var marka = auto.split(/\s+/)[0] || '';
   var model = auto.split(/\s+/).slice(1).join(' ');
   var film  = (d.materials[0] || {})['Название'] || o['Пленка'] || '';
+  var tintFilm = String(o['Пленка'] || '').trim();   // выбранная ТОНИРОВОЧНАЯ плёнка заказа (для тонир-документов)
   var usedFilm = d.materials.reduce(function(s, m){ return s + (Number(m['Кол-во']) || 0); }, 0);
   var get = function(k, def){ return (co[k] != null && co[k] !== '') ? co[k] : def; };
 
@@ -622,7 +623,13 @@ function buildDocPlaceholders_(d, serviceMode) {
   var tintDesc = '';
   var warrantyMonths = get('warranty_months', '36');   // общий срок по умолчанию
   if (isTint_) {
-    var parts = (d.materials || []).map(function(m){
+    // Берём ТОЛЬКО тонировочные строки (с зоной/светопропусканием), чтобы не попал
+    // расходник оклейки (напр. «Spectroll Premium») в описание тонировки.
+    var tintRows = (d.materials || []).filter(function(m){
+      return String(m['Зона'] || '').trim() ||
+             String(m['Светопропускаемость'] == null ? '' : m['Светопропускаемость']).trim();
+    });
+    var parts = tintRows.map(function(m){
       var nm = String(m['Название'] || '').trim();
       var zn = String(m['Зона'] || '').trim();
       var lt = String(m['Светопропускаемость'] == null ? '' : m['Светопропускаемость']).trim();
@@ -630,16 +637,15 @@ function buildDocPlaceholders_(d, serviceMode) {
       return (zn ? zn + ' — ' : '') + nm + (lt ? ' ' + lt + '%' : '');
     }).filter(String);
     tintDesc = parts.join(', ');
-    // Бэкофилл для старых заказов: одна плёнка + общий процент по заказу.
+    // Фоллбэк: выбранная тонировочная плёнка заказа (o['Пленка']) + общий процент.
     if (!tintDesc) {
       var lt0 = String(o['Светопропускаемость'] == null ? '' : o['Светопропускаемость']).trim();
-      if (film || lt0) tintDesc = film + (lt0 ? ' ' + lt0 + '%' : '');
+      if (tintFilm || lt0) tintDesc = tintFilm + (lt0 ? ' ' + lt0 + '%' : '');
     }
-    // Гарантия зависит от типа плёнки: Nano Ceramic — 120 мес., Carbon — 60 мес.
-    // Если плёнок несколько — берём наибольший срок среди них.
+    // Гарантия по типу тонировочной плёнки (Nano Ceramic — 120, Carbon — 60).
     var mx = 0;
-    (d.materials || []).forEach(function(m){ var w = tintWarrantyMonths_(m['Название']); if (w > mx) mx = w; });
-    if (!mx) mx = tintWarrantyMonths_(film);
+    tintRows.forEach(function(m){ var w = tintWarrantyMonths_(m['Название']); if (w > mx) mx = w; });
+    if (!mx) mx = tintWarrantyMonths_(tintFilm);
     if (mx) warrantyMonths = String(mx);
   } else {
     // Гарантия на РАБОТУ по оклейке (PPF) — 36 месяцев (плёночное покрытие — отдельно, 10 лет).
@@ -686,7 +692,7 @@ function buildDocPlaceholders_(d, serviceMode) {
     'VIN':             o['VIN'] || '',
     'Год выпуска':     o['Год выпуска'] || c['Год выпуска'] || '',
     'Пробег':          o['Пробег'] || '',
-    'Пленка':          film,
+    'Пленка':          isTint_ ? (tintFilm || film) : film,   // для тонир-документов — выбранная тонировочная плёнка
     'Плёнки список':   tintDesc,
     'Светопр-ть':      tintDesc || o['Светопропускаемость'] || '',
     // Описание работ: тонировка — все плёнки с зоной и процентом; оклейка — без названия
@@ -717,13 +723,13 @@ function buildDocPlaceholders_(d, serviceMode) {
     'Предмет договора': (function(){
       var avto = (marka + ' ' + model).trim();
       if (isTint_)
-        return 'по тонировке а/м ' + avto + ', VIN номер ' + (o['VIN']||'') + (tintDesc ? ', плёнками: ' + tintDesc : (film ? ', плёнкой ' + film : ''));
+        return 'по тонировке а/м ' + avto + ', VIN номер ' + (o['VIN']||'') + (tintDesc ? ', плёнками: ' + tintDesc : (tintFilm ? ', плёнкой ' + tintFilm : ''));
       return 'по оклейке кузова а/м ' + avto + ', VIN номер ' + (o['VIN']||'') + ' защитной плёнкой ' + film;
     })(),
     'Акт работа': (function(){
       var avto = (marka + ' ' + model).trim();
       if (isTint_)
-        return '- тонировка а/м ' + avto + ', VIN номер ' + (o['VIN']||'') + (tintDesc ? ', плёнками: ' + tintDesc : (film ? ', плёнкой ' + film : '')) + ';';
+        return '- тонировка а/м ' + avto + ', VIN номер ' + (o['VIN']||'') + (tintDesc ? ', плёнками: ' + tintDesc : (tintFilm ? ', плёнкой ' + tintFilm : '')) + ';';
       return '- оклейка кузова а/м ' + avto + ', VIN номер ' + (o['VIN']||'') + ' защитной плёнкой ' + film + ';';
     })(),
     'Протокол услуга': (isTint_
