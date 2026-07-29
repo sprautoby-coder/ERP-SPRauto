@@ -355,7 +355,7 @@ function createOrder(payload) {
     // «Услуга» — все выбранные услуги через запятую (основная + доп.), номер договора — по основной
     const codes         = (payload.serviceCodes && payload.serviceCodes.length) ? payload.serviceCodes : [payload.service];
     const serviceName   = codes.map(function(c){ return getServiceName_(c); }).filter(String).join(', ') || getServiceName_(payload.service);
-    ensureColumns_(sheet, ['Паспорт']);   // для документов физлица
+    ensureColumns_(sheet, ['Паспорт', 'Групповой договор']);   // паспорт (физлицо) + связка авто в один договор
     const headers       = ensureColumns_(sheet, TINT_COLUMNS_);
 
     const defaultStatus = getDefaultStatusName_();
@@ -368,6 +368,7 @@ function createOrder(payload) {
       'Статус':                defaultStatus,
       'Клиент ID':             payload.clientId   || '',
       'Клиент':                payload.clientName  || '',
+      'Групповой договор':     payload.groupId    || '',   // общий номер для нескольких авто в одном договоре
       'Телефон':               payload.clientPhone || '',
       'Паспорт':               payload.passport || '',
       'Авто':                  payload.car   || '',
@@ -950,6 +951,84 @@ function parseDate_(val) {
  * Поиск: по телефону (цифры), затем по точному имени. Если нет — создаёт карточку (физ).
  * Полностью защищено try/catch — никогда не ломает создание заказа.
  */
+
+/* ══════════ ГРУППОВОЙ ДОГОВОР (несколько авто на одно юрлицо) ══════════ */
+
+/** Участники группового договора (raw). Группа = «Групповой договор» или ID заказа. */
+function getGroupMembers_(orderId) {
+  var all = readSheetAsObjects('DATABASE', 'ORDERS');
+  var order = null;
+  for (var i = 0; i < all.length; i++) if (String(all[i]['ID']) === String(orderId)) { order = all[i]; break; }
+  if (!order) throw new Error('Заказ не найден: ' + orderId);
+  var gid = String(order['Групповой договор'] || '').trim() || String(order['ID']);
+  var members = all.filter(function(o){
+    var g = String(o['Групповой договор'] || '').trim();
+    return g ? (g === gid) : (String(o['ID']) === gid);
+  }).map(function(o){
+    return {
+      id: o['ID'], contract: o['Номер договора'] || o['ID'],
+      car: o['Авто'] || '', vin: o['VIN'] || '', service: o['Услуга'] || '',
+      film: o['Пленка'] || '', light: (o['Светопропускаемость'] == null ? '' : o['Светопропускаемость']),
+      price: Number(o['Стоимость заказа']) || 0, tintPrice: Number(o['Стоимость тонировки']) || 0,
+      status: o['Статус'] || ''
+    };
+  });
+  var total = members.reduce(function(s, m){ return s + (m.price || 0); }, 0);
+  return { groupId: gid, count: members.length, total: round2(total), members: members };
+}
+function getGroupMembers(orderId) { return safeCall(function(){ return getGroupMembers_(orderId); }); }
+
+/** Добавить авто в групповой договор заказа-родителя. carPayload — как в новом заказе. */
+function addCarToGroup(parentOrderId, carPayload) {
+  return safeCall(function() {
+    bumpDataVersion_();
+    var sheet = getTab('DATABASE', 'ORDERS');
+    ensureColumns_(sheet, ['Групповой договор']);
+    var data = sheet.getDataRange().getValues();
+    var headers = data[0];
+    var idIdx = headers.indexOf('ID');
+    var grpIdx = headers.indexOf('Групповой договор');
+    var parent = null, parentRow = -1;
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][idIdx]) === String(parentOrderId)) {
+        parentRow = i + 1; parent = {}; headers.forEach(function(h, j){ parent[h] = data[i][j]; }); break;
+      }
+    }
+    if (!parent) throw new Error('Родительский заказ не найден: ' + parentOrderId);
+    var gid = String(parent['Групповой договор'] || '').trim() || String(parent['ID']);
+    if (grpIdx >= 0 && !String(parent['Групповой договор'] || '').trim()) {
+      sheet.getRange(parentRow, grpIdx + 1).setValue(gid);   // проставляем группу и родителю
+    }
+    carPayload = carPayload || {};
+    var payload = {
+      groupId:      gid,
+      service:      carPayload.service || parent['Услуга'] || '',
+      serviceCodes: carPayload.serviceCodes || null,
+      clientId:     parent['Клиент ID'] || '',
+      clientName:   parent['Клиент'] || '',
+      clientType:   'юр',
+      clientPhone:  parent['Телефон'] || '',
+      car:          carPayload.car || '',
+      vin:          carPayload.vin || '',
+      price:        Number(carPayload.price) || 0,
+      payType:      parent['Тип оплаты'] || '',
+      manager:      carPayload.manager || parent['Менеджер'] || '',
+      admin:        carPayload.admin || parent['Администратор'] || '',
+      masters:      carPayload.masters || '',
+      tintPrice:    Number(carPayload.tintPrice) || 0,
+      tintMasters:  carPayload.tintMasters || '',
+      film:         carPayload.film || '',
+      lightTransmission: carPayload.light || '',
+      orderDate:    parent['Дата'] || '',
+      dueDate:      parent['Дата выполнения'] || '',
+      materials: [], expenses: []
+    };
+    var res = createOrder(payload);
+    var newId = (res && res.ok && res.data) ? res.data.id : (res && res.id ? res.id : '');
+    return { groupId: gid, newOrderId: newId };
+  });
+}
+
 function ensureClientForOrder_(payload) {
   try {
     var name = String(payload.clientName || '').trim();

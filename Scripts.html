@@ -8268,6 +8268,9 @@ function renderOrderCard(order) {
       '</div>' +
     '</div>' +
 
+    // Групповой договор (несколько авто на одно юрлицо) — наполняется loadOrderGroup_
+    '<div id="order-group-box"></div>' +
+
     // Услуги заказа — чипы + «Добавить услугу»
     '<div id="card-services" style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:9px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
       cardServicesHtml_(order) +
@@ -8387,6 +8390,7 @@ function renderOrderCard(order) {
     photosSection_(oid);
 
   loadOrderPhotos(oid);
+  loadOrderGroup_(oid, isLegal);   // блок «Автомобили по договору» (групповой договор)
   updateSchedSum_();      // показать итог по графику рассрочки при открытии
   // Рассрочка без сохранённого графика → сразу показать пустые строки по числу месяцев (для заполнения)
   if (payType === 'Рассрочка' && !isPaid && !(order.schedule && order.schedule.length)) {
@@ -9648,6 +9652,130 @@ function printOrderContract(service, btn) { printDoc_('generateContractHtml',   
 function printOrderNarad(service, btn)    { printDoc_('generateOrderNaradHtml',  service, btn); }
 function printWorkCard(btn)               { printDoc_('generateWorkCardHtml', '', btn); }
 function printOrderAct(service, btn)      { printDoc_('generateActHtml',         service, btn); }
+
+/* ── Групповой договор: несколько авто на одно юрлицо ── */
+App._groupParentId = null;
+
+function loadOrderGroup_(orderId, isLegal) {
+  var box = document.getElementById('order-group-box'); if (!box) return;
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { box.innerHTML = ''; return; }
+      renderOrderGroup_(orderId, resp.data, isLegal);
+    })
+    .withFailureHandler(function(){ box.innerHTML = ''; })
+    .getGroupMembers(orderId);
+}
+
+function renderOrderGroup_(orderId, data, isLegal) {
+  var box = document.getElementById('order-group-box'); if (!box) return;
+  var members = data.members || [];
+  var grouped = members.length > 1;
+  if (!grouped && !isLegal) { box.innerHTML = ''; return; }   // физлицо без группы — не показываем
+  var fmt = function(n){ return (Number(n)||0).toLocaleString('ru') + ' ' + CUR; };
+  var rows = members.map(function(m){
+    var pl = String(m.film||'').trim() + (String(m.light||'').trim() ? ' ' + m.light + '%' : '');
+    var cur = String(m.id) === String(orderId);
+    return '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openOrderCard(\'' + String(m.id).replace(/'/g,"\\'") + '\')">' +
+      '<div style="min-width:0">' +
+        '<div style="font-weight:600;font-size:13px' + (cur?';color:var(--accent)':'') + '">' + (m.car||'—') + (cur?' · текущий':'') + '</div>' +
+        '<div style="font-size:11px;color:var(--text3)">' + (m.service||'') + (pl?' · '+pl:'') + (m.vin?' · '+m.vin:'') + '</div>' +
+      '</div>' +
+      '<div style="font-weight:600;white-space:nowrap">' + fmt(m.price) + '</div>' +
+    '</div>';
+  }).join('');
+  box.innerHTML =
+    '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">' +
+        '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2)">🚗 Автомобили по договору' + (grouped?(' · ' + members.length):'') + '</div>' +
+        '<button class="btn" onclick="openAddCarModal(\'' + String(orderId).replace(/'/g,"\\'") + '\')" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:7px">+ Добавить авто</button>' +
+      '</div>' +
+      rows +
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">' +
+        '<div style="font-size:13px">Итого по договору: <b>' + fmt(data.total) + '</b></div>' +
+        (grouped ? '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
+          '<button class="btn btn-ghost" onclick="printGroupDoc(\'' + String(orderId).replace(/'/g,"\\'") + '\',\'contract\')" style="padding:4px 10px;font-size:12px">📄 Договор на все авто</button>' +
+          '<button class="btn btn-ghost" onclick="printGroupDoc(\'' + String(orderId).replace(/'/g,"\\'") + '\',\'act\')" style="padding:4px 10px;font-size:12px">Акт на все авто</button>' +
+        '</div>' : '<span style="font-size:11px;color:var(--text3)">Добавьте второе авто, чтобы сформировать один договор на все</span>') +
+      '</div>' +
+    '</div>';
+}
+
+function openAddCarModal(parentId) {
+  App._groupParentId = parentId;
+  closeAddCarModal_();
+  var films = tintFilmNames_().map(function(n){ return '<option value="' + String(n).replace(/"/g,'&quot;') + '">'; }).join('');
+  var html =
+    '<div class="modal-dialog-bg" id="addcar-modal" style="display:flex">' +
+      '<div class="modal" style="max-width:460px">' +
+        '<div class="modal-header"><div class="modal-title">Добавить авто в договор</div>' +
+          '<button class="modal-close" onclick="closeAddCarModal_()">&#10005;</button></div>' +
+        '<div class="modal-body">' +
+          '<div class="form-row"><label class="form-label">Услуга</label>' +
+            '<select class="form-select" id="ac-service"><option value="TINT">Тонировка</option><option value="PPF">Оклейка PPF</option></select></div>' +
+          '<div class="form-row"><label class="form-label">Авто (марка, модель) *</label><input class="form-input" id="ac-car" placeholder="Volkswagen Caravelle"></div>' +
+          '<div class="form-row"><label class="form-label">VIN</label><input class="form-input" id="ac-vin"></div>' +
+          '<div style="display:grid;grid-template-columns:1fr 90px;gap:10px">' +
+            '<div class="form-row" style="margin:0"><label class="form-label">Плёнка</label><input class="form-input" id="ac-film" list="ac-film-list" placeholder="напр. Luxfil Carbon"><datalist id="ac-film-list">' + films + '</datalist></div>' +
+            '<div class="form-row" style="margin:0"><label class="form-label">Светопр., %</label><input class="form-input" id="ac-light" type="number" min="0" max="100"></div>' +
+          '</div>' +
+          '<div class="form-row"><label class="form-label">Стоимость, ' + CUR + ' *</label><input class="form-input" id="ac-price" type="number" min="0" placeholder="0"></div>' +
+          '<div style="font-size:11px;color:var(--text3)">Плёнки/расход и мастеров можно указать потом в карточке этого авто.</div>' +
+        '</div>' +
+        '<div class="modal-footer">' +
+          '<button class="btn btn-ghost" onclick="closeAddCarModal_()">Отмена</button>' +
+          '<button class="btn btn-primary" id="ac-submit" onclick="submitAddCar_()">Добавить авто</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  ensureMaterialsLoaded_(function(){
+    var dl = document.getElementById('ac-film-list');
+    if (dl) dl.innerHTML = tintFilmNames_().map(function(n){ return '<option value="' + String(n).replace(/"/g,'&quot;') + '">'; }).join('');
+  });
+}
+function closeAddCarModal_(){ var w = document.getElementById('addcar-modal'); if (w) w.remove(); }
+
+function submitAddCar_() {
+  var parentId = App._groupParentId; if (!parentId) return;
+  var svc  = (document.getElementById('ac-service') || {}).value || 'TINT';
+  var car  = ((document.getElementById('ac-car')   || {}).value || '').trim();
+  var price = Number((document.getElementById('ac-price') || {}).value) || 0;
+  if (!car)   { toast('Укажите авто', 'error'); return; }
+  if (!price) { toast('Укажите стоимость', 'error'); return; }
+  var payload = {
+    service: svc, car: car,
+    vin:   ((document.getElementById('ac-vin')   || {}).value || '').trim(),
+    price: price,
+    film:  ((document.getElementById('ac-film')  || {}).value || '').trim(),
+    light: ((document.getElementById('ac-light') || {}).value || '').trim(),
+    tintPrice: 0   // отдельная машина = один заказ одной услуги (не смешанный)
+  };
+  var btn = document.getElementById('ac-submit');
+  if (btn) { btn.disabled = true; btn.textContent = 'Добавляем...'; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { if (btn) { btn.disabled=false; btn.textContent='Добавить авто'; } toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast('Авто добавлено в договор', 'success');
+      closeAddCarModal_();
+      App.orders = []; App._cardCache = {}; App._dashCache = null;
+      reopenCard(parentId);
+    })
+    .withFailureHandler(function(e){ if (btn) { btn.disabled=false; btn.textContent='Добавить авто'; } toast('Ошибка: ' + e.message, 'error'); })
+    .addCarToGroup(parentId, payload);
+}
+
+function printGroupDoc(orderId, kind) {
+  toast('Формируем документ…');
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      var w = window.open('', '_blank'); if (w) { w.document.write(resp.data); w.document.close(); makeDocEditable_(w); }
+      else toast('Разрешите всплывающие окна, чтобы открыть документ', 'error');
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .generateGroupContractHtml(orderId, kind);
+}
 
 // Определение состава услуг заказа
 function orderHasTint_(o){ return /тонир|tint/i.test(String((o||{})['Услуга'] || '')); }
