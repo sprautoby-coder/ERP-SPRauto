@@ -483,6 +483,7 @@ function renderStock() {
     '</tr>';
   }).join('');
   if (footer) footer.textContent = 'Показано: ' + list.length + ' из ' + App._stock.length;
+  makeColumnsResizable(document.getElementById('stock-table'));   // регулируемые + сохраняемые колонки
 }
 
 var STOCK_OP_META = {
@@ -2408,6 +2409,7 @@ function renderClientsTable(clients) {
   if (footer) {
     footer.textContent = 'Показано ' + clients.length + ' из ' + App.clients.length;
   }
+  makeColumnsResizable(document.getElementById('clients-table'));   // регулируемые + сохраняемые колонки
 }
 
 /* ===== КАРТОЧКА КЛИЕНТА ===== */
@@ -4223,7 +4225,13 @@ function applyColWidths_(table) {
     fitted = true;
   }
   // Снимаем инлайновый min-width из разметки, иначе он не даст столбцу ужаться.
-  ths.forEach(function(th, i){ th.style.width = widths[i] + 'px'; th.style.minWidth = '0'; });
+  // Если у таблицы есть <colgroup> (fixed-layout), синхронизируем и ширины <col> —
+  // иначе они перебьют ширину th и перетаскивание не будет видно.
+  var cols = table.querySelectorAll('colgroup col');
+  ths.forEach(function(th, i){
+    th.style.width = widths[i] + 'px'; th.style.minWidth = '0';
+    if (cols[i]) cols[i].style.width = widths[i] + 'px';
+  });
   // Пользователь задал ширины вручную (saved) → уважаем их ТОЧНО, в пикселях, без растягивания
   // на 100% (иначе колонки, влезающие в экран, распираются и «плывут» при возврате в раздел).
   // Первый показ (без saved): влезло — тянем на всю ширину; шире экрана — по сумме (бегунок).
@@ -4352,6 +4360,8 @@ function makeColumnsResizable(table) {
       function move(ev){
         var w = Math.max(40, startW + (ev.pageX - startX));
         th.style.width = w + 'px';
+        var col = table.querySelectorAll('colgroup col')[i];   // синхронизируем colgroup (fixed-layout)
+        if (col) col.style.width = w + 'px';
         table.style.width = (startTableW + (w - startW)) + 'px';  // двигается только правая граница
       }
       function up(){
@@ -5793,6 +5803,7 @@ function renderMaterialsTable(list) {
       '</td>' +
       '</tr>';
   }).join('');
+  makeColumnsResizable(document.getElementById('materials-table'));   // регулируемые + сохраняемые колонки
 }
 
 // Названия колонок листа для локального обновления кэша
@@ -5889,6 +5900,7 @@ function renderSalesTable(){
       '</td>'+
     '</tr>';
   }).join('');
+  makeColumnsResizable(document.getElementById('sales-table'));   // регулируемые + сохраняемые колонки
 }
 
 /* ── Форма новой продажи ── */
@@ -7277,6 +7289,7 @@ function renderDebtTable(rows) {
   }).join('');
 
   if (footer) footer.textContent = 'Итого к получению: ' + fmt(totalRemaining) + ' · ' + rows.length + ' заказов';
+  makeColumnsResizable(document.getElementById('debt-table'));   // регулируемые + сохраняемые колонки
 }
 
 function parseClientDate(str) {

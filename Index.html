@@ -183,7 +183,7 @@
 
     <!-- ВИД: ТАБЛИЦА -->
     <div class="clients-table-wrap" id="clients-table-wrap">
-      <table class="clients-table" id="clients-table">
+      <table class="clients-table resizable-table" id="clients-table">
         <thead>
           <tr>
             <th class="ct-col-name" onclick="sortClients('name')">
@@ -653,7 +653,7 @@
       <div class="clients-kpi-card" style="border-color:rgba(245,158,11,.3)"><div class="clients-kpi-label" style="color:#f59e0b">Рассрочка</div><div class="clients-kpi-val" id="debt-partial" style="color:#f59e0b">—</div></div>
     </div>
     <div class="table-wrap">
-      <table class="data-table">
+      <table class="data-table resizable-table" id="debt-table">
         <thead><tr>
           <th>Договор</th>
           <th>Клиент</th>
@@ -743,7 +743,7 @@
     </div>
 
     <div class="clients-table-wrap">
-      <table class="clients-table" id="stock-table">
+      <table class="clients-table resizable-table" id="stock-table">
         <thead><tr>
           <th style="min-width:180px">Материал</th>
           <th style="min-width:120px">Категория</th>
@@ -932,7 +932,7 @@
       </select>
     </div>
     <div class="table-wrap">
-      <table class="data-table" style="table-layout:fixed;width:100%">
+      <table class="data-table resizable-table" id="materials-table" style="table-layout:fixed;width:100%">
         <colgroup>
           <col style="width:200px"><col style="width:150px"><col style="width:130px"><col style="width:70px">
           <col style="width:80px"><col style="width:80px"><col style="width:95px"><col style="width:110px"><col style="width:110px"><col style="width:120px"><col style="width:120px"><col style="width:90px"><col style="width:170px">
@@ -980,7 +980,7 @@
       </div>
     </div>
     <div class="table-wrap" id="sales-table-wrap" style="max-width:1400px">
-      <table class="data-table" style="table-layout:fixed;width:100%">
+      <table class="data-table resizable-table" id="sales-table" style="table-layout:fixed;width:100%">
         <colgroup><col style="width:90px"><col style="width:110px"><col><col style="width:70px"><col style="width:100px"><col style="width:100px"><col style="width:100px"><col style="width:120px"><col style="width:140px"></colgroup>
         <thead><tr>
           <th>Дата</th><th>Договор</th><th>Клиент</th><th style="text-align:center">Поз.</th>
