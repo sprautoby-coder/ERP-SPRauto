@@ -189,8 +189,20 @@ function generateOrderNaradHtml(orderId, service) {
     else                         { isTint = /тонир|tint/i.test(d.order['Услуга'] || ''); price = fullPrice; }
     var esc = function(s){ return String(s == null ? '' : s).replace(/"/g, '&quot;'); };
 
-    // Плёнка (расход) — редактируемые строки
+    // Плёнка (расход) — редактируемые строки. Для наряда по услуге подбираем нужные плёнки:
+    //  tint → только тонировочные (с зоной/светопропусканием) либо выбранная тонировочная плёнка;
+    //  wrap → только НЕтонировочные (плёнки оклейки).
+    var isTintRow_ = function(m){
+      return String(m['Зона'] || '').trim() ||
+             String(m['Светопропускаемость'] == null ? '' : m['Светопропускаемость']).trim();
+    };
     var films = d.materials.filter(function(m){ return String(m['Тип']||'расход') === 'расход'; });
+    if (service === 'tint') {
+      var tf = films.filter(isTintRow_);
+      films = tf.length ? tf : [{ 'Название': String(d.order['Пленка'] || '').trim(), 'Кол-во':0, 'Цена за м²':0 }];
+    } else if (service === 'wrap') {
+      films = films.filter(function(m){ return !isTintRow_(m); });
+    }
     if (!films.length) films = [{ 'Название':'', 'Кол-во':0, 'Цена за м²':0 }];
     var filmRows = films.map(function(m){
       var qty = Number(m['Кол-во'])||0, pr = Number(m['Цена за м²'])||0;
