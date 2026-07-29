@@ -199,14 +199,16 @@ function generateOrderNaradHtml(orderId, service) {
     var films = d.materials.filter(function(m){ return String(m['Тип']||'расход') === 'расход'; });
     if (service === 'tint') {
       var tf = films.filter(isTintRow_);
-      films = tf.length ? tf : [{ 'Название': String(d.order['Пленка'] || '').trim(), 'Кол-во':0, 'Цена за м²':0 }];
+      films = tf.length ? tf : [{ 'Название': String(d.order['Пленка'] || '').trim(), 'Светопропускаемость': d.order['Светопропускаемость'], 'Кол-во':0, 'Цена за м²':0 }];
     } else if (service === 'wrap') {
       films = films.filter(function(m){ return !isTintRow_(m); });
     }
     if (!films.length) films = [{ 'Название':'', 'Кол-во':0, 'Цена за м²':0 }];
     var filmRows = films.map(function(m){
       var qty = Number(m['Кол-во'])||0, pr = Number(m['Цена за м²'])||0;
-      return '<tr class="nf-film"><td>' + (m['Название']||'') + '</td><td class="center">пог. м</td>' +
+      var lt  = String(m['Светопропускаемость'] == null ? '' : m['Светопропускаемость']).trim();
+      var nm  = String(m['Название']||'') + (isTint && lt ? ' ' + lt + '%' : '');   // тонировка — с % светопропускания
+      return '<tr class="nf-film"><td>' + nm + '</td><td class="center">пог. м</td>' +
         '<td class="right"><input class="de nf-q" value="' + qty + '"></td>' +
         '<td class="right"><input class="de nf-p" value="' + pr + '"></td>' +
         '<td class="right nf-c">' + (Math.round(qty*pr*100)/100).toFixed(2) + '</td></tr>';
