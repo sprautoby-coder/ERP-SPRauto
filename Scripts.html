@@ -9730,7 +9730,7 @@ function loadOrderGroup_(orderId, isLegal) {
 
 // Заметная кнопка группового документа
 function gBtn_(orderId, kind, label) {
-  return '<button type="button" onclick="printGroupDoc(\'' + String(orderId).replace(/'/g,"\\'") + '\',\'' + kind + '\')" ' +
+  return '<button type="button" onclick="printGroupDoc(\'' + String(orderId).replace(/'/g,"\\'") + '\',\'' + kind + '\',this)" ' +
     'style="padding:8px 14px;font-size:13px;font-weight:600;background:var(--accent-soft);color:var(--accent);' +
     'border:1px solid var(--border-h);border-radius:8px;cursor:pointer">' + label + '</button>';
 }
@@ -9836,14 +9836,22 @@ function submitAddCar_() {
     .addCarToGroup(parentId, payload);
 }
 
-function printGroupDoc(orderId, kind) {
-  toast('Формируем документ…');
+function printGroupDoc(orderId, kind, btn) {
+  if (App._docBusy) return;                    // защита от повторных кликов
+  App._docBusy = true;
+  var orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; btn.style.cursor = 'wait'; btn.innerHTML = '⏳ Формируется…'; }
+  var finished = false;
+  var done = function(){ if (finished) return; finished = true; App._docBusy = false; clearTimeout(guard);
+    if (btn) { btn.disabled = false; btn.style.opacity = ''; btn.style.cursor = ''; btn.innerHTML = orig; } };
+  var guard = setTimeout(function(){ if (!finished) { done(); toast('Документ формируется дольше обычного — попробуйте ещё раз', 'error'); } }, 30000);
   var onOk = function(resp){
+    done();
     if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
     var w = window.open('', '_blank'); if (w) { w.document.write(resp.data); w.document.close(); makeDocEditable_(w); }
     else toast('Разрешите всплывающие окна, чтобы открыть документ', 'error');
   };
-  var onErr = function(e){ toast('Ошибка: ' + e.message, 'error'); };
+  var onErr = function(e){ done(); toast('Ошибка: ' + e.message, 'error'); };
   if (kind === 'narad') {
     google.script.run.withSuccessHandler(onOk).withFailureHandler(onErr).generateGroupNaradHtml(orderId);
   } else {
