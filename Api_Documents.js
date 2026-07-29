@@ -271,6 +271,7 @@ function generateOrderNaradHtml(orderId, service) {
     if (service === 'tint')      { isTint = true;  price = tintPrice > 0 ? tintPrice : fullPrice; }
     else if (service === 'wrap') { isTint = false; price = tintPrice > 0 ? Math.max(0, fullPrice - tintPrice) : fullPrice; }
     else                         { isTint = /тонир|tint/i.test(d.order['Услуга'] || ''); price = fullPrice; }
+    var isLegal = String(d.client['Тип'] || '') === 'юр' || String(d.order['_clientType'] || '') === 'юр';
     var esc = function(s){ return String(s == null ? '' : s).replace(/"/g, '&quot;'); };
 
     // Плёнка (расход) — редактируемые строки. Для наряда по услуге подбираем нужные плёнки:
@@ -291,7 +292,10 @@ function generateOrderNaradHtml(orderId, service) {
     var filmRows = films.map(function(m){
       var qty = Number(m['Кол-во'])||0, pr = Number(m['Цена за м²'])||0;
       var lt  = String(m['Светопропускаемость'] == null ? '' : m['Светопропускаемость']).trim();
-      var nm  = String(m['Название']||'') + (isTint && lt ? ' ' + lt + '%' : '');   // тонировка — с % светопропускания
+      var base = String(m['Название']||'').trim();
+      if (isTint && !base) base = String(d.order['Пленка'] || '').trim();   // пустое имя строки → выбранная тонир. плёнка
+      if (isTint && !lt)   lt   = String(d.order['Светопропускаемость'] == null ? '' : d.order['Светопропускаемость']).trim();
+      var nm  = base + (isTint && lt ? ' ' + lt + '%' : '');
       return '<tr class="nf-film"><td>' + nm + '</td><td class="center">пог. м</td>' +
         '<td class="right"><input class="de nf-q" value="' + qty + '"></td>' +
         '<td class="right"><input class="de nf-p" value="' + pr + '"></td>' +
@@ -314,7 +318,7 @@ function generateOrderNaradHtml(orderId, service) {
       '<div class="muted">' + map['Компания'] + '<br>УНП: ' + map['УНП'] + ' · ' + map['Юр.адрес'] + '<br>(наименование и местонахождение исполнителя)</div>' +
       '<div class="bar" style="margin-top:6px"><span></span><span>' + (map['Дата ru']||'') + '</span></div>' +
       '<h2>ЗАКАЗ-НАРЯД ' + (map['Номер договора']? '№ '+map['Номер договора'] : '') + '</h2>' +
-      '<p><b>Заказчик:</b> ' + map['ФИО'] + ', паспорт ' + (map['Паспорт']||'____') + '</p>' +
+      '<p><b>Заказчик:</b> ' + map['ФИО'] + (isLegal ? ', УНП ' + (map['УНП заказчика']||'____') : ', паспорт ' + (map['Паспорт']||'____')) + '</p>' +
       '<h3>1. Общие сведения</h3>' +
       '<table>' +
         '<tr><th style="width:38%">Владелец автомобиля</th><td>' + map['ФИО'] + '</td></tr>' +
@@ -728,7 +732,7 @@ function buildDocPlaceholders_(d, serviceMode) {
              String(m['Светопропускаемость'] == null ? '' : m['Светопропускаемость']).trim();
     });
     var parts = tintRows.map(function(m){
-      var nm = String(m['Название'] || '').trim();
+      var nm = String(m['Название'] || '').trim() || tintFilm;   // пустое имя строки → выбранная плёнка
       var zn = String(m['Зона'] || '').trim();
       var lt = String(m['Светопропускаемость'] == null ? '' : m['Светопропускаемость']).trim();
       if (!nm && !zn && !lt) return '';
