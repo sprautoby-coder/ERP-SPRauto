@@ -9740,7 +9740,7 @@ function openAddCarModal(parentId) {
   closeAddCarModal_();
   var films = tintFilmNames_().map(function(n){ return '<option value="' + String(n).replace(/"/g,'&quot;') + '">'; }).join('');
   var html =
-    '<div class="modal-dialog-bg" id="addcar-modal" style="display:flex">' +
+    '<div class="modal-dialog-bg" id="addcar-modal">' +
       '<div class="modal" style="max-width:460px">' +
         '<div class="modal-header"><div class="modal-title">Добавить авто в договор</div>' +
           '<button class="modal-close" onclick="closeAddCarModal_()">&#10005;</button></div>' +
@@ -9763,6 +9763,7 @@ function openAddCarModal(parentId) {
       '</div>' +
     '</div>';
   document.body.insertAdjacentHTML('beforeend', html);
+  openModal('addcar-modal');   // применяет оверлей-стили (position:fixed, z-index, фон)
   ensureMaterialsLoaded_(function(){
     var dl = document.getElementById('ac-film-list');
     if (dl) dl.innerHTML = tintFilmNames_().map(function(n){ return '<option value="' + String(n).replace(/"/g,'&quot;') + '">'; }).join('');
