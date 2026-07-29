@@ -2498,6 +2498,13 @@ function renderClientCard(c, vehicles) {
     '</div>' +
     '<div class="info-card" style="margin-top:16px;">' +
       '<div class="info-card-title" style="display:flex;justify-content:space-between;align-items:center;">' +
+        'Заказы клиента' +
+        '<button class="btn btn-ghost btn-sm" id="client-orders-btn" onclick="toggleClientOrders_(\'' + String(c['ID']||'').replace(/'/g,"\\'") + '\')">Показать заказы</button>' +
+      '</div>' +
+      '<div id="client-orders-list" style="display:none;margin-top:8px"></div>' +
+    '</div>' +
+    '<div class="info-card" style="margin-top:16px;">' +
+      '<div class="info-card-title" style="display:flex;justify-content:space-between;align-items:center;">' +
         'Автомобили' +
         '<button class="btn btn-ghost btn-sm" onclick="openAddVehicleModal()">+ Добавить авто</button>' +
       '</div>' +
@@ -2513,6 +2520,39 @@ function renderClientCard(c, vehicles) {
 function infoRow(label, value) {
   if (!value) return '';
   return '<div class="info-row"><span class="info-label">' + label + '</span><span class="info-value">' + value + '</span></div>';
+}
+
+// Показать/скрыть заказы клиента (в карточке клиента), с переходом в карточку заказа по клику
+function toggleClientOrders_(clientId) {
+  var box = document.getElementById('client-orders-list');
+  var btn = document.getElementById('client-orders-btn');
+  if (!box) return;
+  if (box.style.display !== 'none') { box.style.display = 'none'; if (btn) btn.textContent = 'Показать заказы'; return; }
+  box.style.display = 'block'; if (btn) btn.textContent = 'Скрыть заказы';
+  box.innerHTML = '<div class="kpi-skeleton" style="min-height:60px"></div>';
+  google.script.run
+    .withSuccessHandler(function(resp){ renderClientOrders_((resp && resp.ok) ? (resp.data || []) : []); })
+    .withFailureHandler(function(e){ box.innerHTML = '<div style="color:var(--danger);font-size:12px">Ошибка: ' + e.message + '</div>'; })
+    .getOrders({ clientId: clientId });
+}
+
+function renderClientOrders_(list) {
+  var box = document.getElementById('client-orders-list'); if (!box) return;
+  if (!list.length) { box.innerHTML = '<div style="color:var(--text3);font-size:13px">Заказов нет</div>'; return; }
+  var fmt = function(n){ return (Number(n)||0).toLocaleString('ru') + ' ' + CUR; };
+  box.innerHTML = list.map(function(o){
+    return '<div style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="openOrderCard(\'' + String(o['ID']).replace(/'/g,"\\'") + '\')">' +
+      '<div style="min-width:0">' +
+        '<div style="font-weight:600;font-size:13px">' + (o['Номер договора'] || o['ID']) + ' · ' + (o['Услуга'] || '') + '</div>' +
+        '<div style="font-size:11px;color:var(--text3)">' + (o['Дата'] || '') + (o['Авто'] ? ' · ' + o['Авто'] : '') + (o['Госномер'] ? ' · ' + o['Госномер'] : '') + '</div>' +
+      '</div>' +
+      '<div style="text-align:right;white-space:nowrap">' +
+        '<div style="font-weight:600">' + fmt(o['Стоимость заказа']) + '</div>' +
+        '<div style="font-size:11px;color:var(--text3)">' + (o['Статус'] || '') + '</div>' +
+      '</div>' +
+      '<span style="color:var(--text3);font-size:18px">›</span>' +
+    '</div>';
+  }).join('');
 }
 
 function openEditClientModal() {
