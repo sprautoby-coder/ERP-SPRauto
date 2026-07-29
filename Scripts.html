@@ -5502,7 +5502,16 @@ function updateOrderTintBlock_() {
   }
   autoPickMastersByService_();   // подтянуть основного мастера по роли под услугу
   updateMastersRoleLabel_();     // подпись поля мастеров под контекст (оклейщики / тонировщик)
+  if (tint) fillOrdTintFilms_(); // подсказки плёнок (тонировочная) в поле «Плёнка»
   if (typeof recalcOrderPreview === 'function') recalcOrderPreview();
+}
+
+// Наполнить <datalist> плёнок в форме нового заказа материалами категории «Тонировочная плёнка»
+function fillOrdTintFilms_() {
+  var dl = document.getElementById('ord-tint-film-list'); if (!dl) return;
+  var put = function(){ dl.innerHTML = tintFilmNames_().map(function(n){ return '<option value="' + String(n).replace(/"/g,'&quot;') + '">'; }).join(''); };
+  put();
+  ensureMaterialsLoaded_(function(){ put(); });   // если справочник ещё не загружен — догрузим и обновим
 }
 
 // Выбор комплекса в форме — авто-заполнить элементы и их количество
@@ -8081,8 +8090,10 @@ function openOrderCard(orderId) {
     google.script.run
       .withSuccessHandler(function(resp) {
         App._materials = (resp && resp.ok) ? (resp.data || []) : [];
-        if (App.currentPage === 'order-card' && App._currentOrderId === orderId &&
-            App._currentOrder && document.getElementById('card-mat-tbody')) refreshCardMats();
+        if (App.currentPage === 'order-card' && App._currentOrderId === orderId && App._currentOrder) {
+          if (document.getElementById('card-mat-tbody')) refreshCardMats();
+          refreshTintFilmLists_();   // наполнить подсказки плёнок из справочника (тонировочные)
+        }
       })
       .withFailureHandler(function(){})
       .getMaterials(null);
@@ -8562,9 +8573,21 @@ function blankTintRow_() {
 }
 
 // Список названий тонировочных плёнок для подсказки (datalist).
+// Обновить <datalist> подсказок плёнок (в карточке) значениями из справочника
+function refreshTintFilmLists_() {
+  var opts = tintFilmNames_().map(function(n){ return '<option value="' + String(n).replace(/"/g,'&quot;') + '">'; }).join('');
+  ['tint-film-list', 'card-tint-film-list'].forEach(function(id){
+    var dl = document.getElementById(id); if (dl) dl.innerHTML = opts;
+  });
+}
+
 function tintFilmNames_() {
   var set = {};
-  (App._materials || []).forEach(function(m){ var n = (m['Название']||'').trim(); if (n) set[n] = true; });
+  // Предлагаем только материалы категории «Тонировочная плёнка» из справочника.
+  (App._materials || []).forEach(function(m){
+    if (!/тонир/i.test(String(m['Категория'] || ''))) return;
+    var n = (m['Название'] || '').trim(); if (n) set[n] = true;
+  });
   ['Nano Ceramic', 'Carbon', 'Dipal', 'Спектрол'].forEach(function(n){ if (!set[n]) set[n] = true; });
   return Object.keys(set);
 }
@@ -8865,7 +8888,8 @@ function renderCardPersonnel() {
         '<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:' + TINT_ACCENT + ';margin-bottom:6px">🎨 Тонировка</div>' +
         '<div style="display:grid;grid-template-columns:1fr 88px;gap:8px">' +
           '<div><label style="font-size:10px;color:var(--text3)">Плёнка (для документов)</label>' +
-            '<input id="card-tint-film" value="' + filmVal + '" placeholder="напр. Nano Ceramic" style="' + inp + ';margin:2px 0 8px" oninput="persAutoSave()"></div>' +
+            '<input id="card-tint-film" list="card-tint-film-list" value="' + filmVal + '" placeholder="напр. Nano Ceramic" style="' + inp + ';margin:2px 0 8px" oninput="persAutoSave()">' +
+            '<datalist id="card-tint-film-list">' + tintFilmNames_().map(function(n){ return '<option value="' + String(n).replace(/"/g,'&quot;') + '">'; }).join('') + '</datalist></div>' +
           '<div><label style="font-size:10px;color:var(--text3)">Светопр., %</label>' +
             '<input id="card-tint-light" type="number" min="0" max="100" value="' + lightVal + '" style="' + inp + ';margin:2px 0 8px" oninput="persAutoSave()"></div>' +
         '</div>' + mixedPart +
