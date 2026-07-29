@@ -217,13 +217,13 @@ function generateOrderNaradHtml(orderId, service) {
 
     var works = isTint
       ? '<tr><td>1</td><td>Установка тонировочной плёнки</td><td class="center">да</td><td></td></tr>' +
-        '<tr><td>2</td><td>Разборка на элементы, сборка автомобиля</td><td></td><td></td></tr>' +
-        '<tr><td>3</td><td>Мойка, сушка автомобиля</td><td></td><td></td></tr>'
+        '<tr><td>2</td><td>Разборка на элементы, сборка автомобиля</td><td class="center">да</td><td></td></tr>' +
+        '<tr><td>3</td><td>Мойка, сушка автомобиля</td><td class="center">да</td><td></td></tr>'
       : '<tr><td>1</td><td>Оклейка антигравийной плёнкой: ' + (map['Элементы для оклейки']||'') + '</td><td class="center">да</td><td></td></tr>' +
-        '<tr><td>2</td><td>Разборка на элементы оклейки</td><td></td><td></td></tr>' +
-        '<tr><td>3</td><td>Сборка автомобиля</td><td></td><td></td></tr>' +
-        '<tr><td>4</td><td>Мойка, сушка автомобиля</td><td></td><td></td></tr>' +
-        '<tr><td>5</td><td>Полировка элементов кузова</td><td></td><td></td></tr>';
+        '<tr><td>2</td><td>Разборка на элементы оклейки</td><td class="center">да</td><td></td></tr>' +
+        '<tr><td>3</td><td>Сборка автомобиля</td><td class="center">да</td><td></td></tr>' +
+        '<tr><td>4</td><td>Мойка, сушка автомобиля</td><td class="center">да</td><td></td></tr>' +
+        '<tr><td>5</td><td>Полировка элементов кузова</td><td class="center">да</td><td></td></tr>';
 
     var body =
       '<div class="editbar noprint">✎ Поля можно поправить прямо здесь — «Работ», «Материалов» и «Всего» пересчитаются сами. Затем нажмите «Распечатать».</div>' +
