@@ -9728,6 +9728,13 @@ function loadOrderGroup_(orderId, isLegal) {
     .getGroupMembers(orderId);
 }
 
+// Заметная кнопка группового документа
+function gBtn_(orderId, kind, label) {
+  return '<button type="button" onclick="printGroupDoc(\'' + String(orderId).replace(/'/g,"\\'") + '\',\'' + kind + '\')" ' +
+    'style="padding:8px 14px;font-size:13px;font-weight:600;background:var(--accent-soft);color:var(--accent);' +
+    'border:1px solid var(--border-h);border-radius:8px;cursor:pointer">' + label + '</button>';
+}
+
 function renderOrderGroup_(orderId, data, isLegal) {
   var box = document.getElementById('order-group-box'); if (!box) return;
   var members = data.members || [];
@@ -9752,14 +9759,15 @@ function renderOrderGroup_(orderId, data, isLegal) {
         '<button class="btn" onclick="openAddCarModal(\'' + String(orderId).replace(/'/g,"\\'") + '\')" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--accent-soft);color:var(--accent);border:1px solid var(--border-h);border-radius:7px">+ Добавить авто</button>' +
       '</div>' +
       rows +
-      '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;flex-wrap:wrap">' +
-        '<div style="font-size:13px">Итого по договору: <b>' + fmt(data.total) + '</b></div>' +
-        (grouped ? '<div style="display:flex;gap:6px;flex-wrap:wrap">' +
-          '<button class="btn btn-ghost" onclick="printGroupDoc(\'' + String(orderId).replace(/'/g,"\\'") + '\',\'contract\')" style="padding:4px 10px;font-size:12px">📄 Договор на все авто</button>' +
-          '<button class="btn btn-ghost" onclick="printGroupDoc(\'' + String(orderId).replace(/'/g,"\\'") + '\',\'narad\')" style="padding:4px 10px;font-size:12px">📋 Наряд на все авто</button>' +
-          '<button class="btn btn-ghost" onclick="printGroupDoc(\'' + String(orderId).replace(/'/g,"\\'") + '\',\'act\')" style="padding:4px 10px;font-size:12px">Акт на все авто</button>' +
-        '</div>' : '<span style="font-size:11px;color:var(--text3)">Добавьте второе авто, чтобы сформировать один договор на все</span>') +
-      '</div>' +
+      '<div style="font-size:13px;margin-top:8px">Итого по договору: <b>' + fmt(data.total) + '</b></div>' +
+      (grouped
+        ? '<div style="font-size:11px;color:var(--text3);margin:8px 0 4px">Документы на все авто сразу:</div>' +
+          '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
+            gBtn_(orderId, 'contract', '📄 Договор на все авто') +
+            gBtn_(orderId, 'narad',    '📋 Наряд на все авто') +
+            gBtn_(orderId, 'act',      '🧾 Акт на все авто') +
+          '</div>'
+        : '<div style="font-size:12px;color:var(--text3);margin-top:8px">Добавьте второе авто — появятся кнопки «Договор / Наряд / Акт на все авто».</div>') +
     '</div>';
 }
 
