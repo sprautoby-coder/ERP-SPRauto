@@ -7908,11 +7908,22 @@ function confirmPayOrder() {
         o['Статус оплаты']=(o._paid>=price-0.01)?'Оплачен':'Частично';
         break;
       }
-      App._dashCache = null; App._debtCache = null;   // оплата меняет дашборд/дебиторку
+      App._dashCache = null; App._debtCache = null; App._kassaCache = null;   // оплата меняет дашборд/дебиторку/кассу
       if (App.currentPage==='orders')     { filterOrders(); loadOrdersKpi(); refreshOrdersSilent_(); }
       if (App.currentPage==='dds')        loadDDS();
       if (App.currentPage==='debt')       loadDebt();
-      if (App.currentPage==='order-card') reopenCard(id);
+      // Карточка: обновляем МГНОВЕННО из локального объекта, синхронизация с сервером — в фоне
+      if (App.currentPage==='order-card' && App._currentOrder && String(App._currentOrder['ID'])===String(id)) {
+        var oc = App._currentOrder;
+        oc.payments = oc.payments || [];
+        oc.payments.push({ 'ID':'', 'Дата': (new Date()).toLocaleDateString('ru'), 'Сумма': amount, 'Способ оплаты': payType });
+        var pr = Number(oc['Стоимость заказа'])||0;
+        var pd = oc.payments.reduce(function(s,p){ return s + (Number(p['Сумма'])||0); }, 0);
+        oc._paid = Math.round(pd*100)/100; oc._remaining = Math.max(0, pr - oc._paid);
+        oc['Статус оплаты'] = oc._paid<=0 ? 'Не оплачен' : (oc._paid>=pr-0.01 ? 'Оплачен' : 'Частично');
+        renderOrderCard(oc);   // мгновенная перерисовка без ожидания
+      }
+      if (App.currentPage==='order-card') reopenCard(id);   // фоновая синхронизация (реальные ID, финитог, авто-статус «Выдан»)
     })
     .withFailureHandler(function(e){ if(btn){btn.disabled=false;btn.textContent='Принять платёж';} toast('Ошибка: '+e.message,'error'); })
     .addOrderPayment(id, { amount: amount, payType: payType, comment: comment });
