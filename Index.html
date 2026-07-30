@@ -973,11 +973,12 @@
       <div class="clients-kpi-card"><div class="clients-kpi-label">Сумма продаж</div><div class="clients-kpi-val" id="sales-kpi-total">—</div></div>
       <div class="clients-kpi-card"><div class="clients-kpi-label">Долг по продажам</div><div class="clients-kpi-val" id="sales-kpi-debt" style="color:var(--danger)">—</div></div>
     </div>
-    <div class="clients-toolbar" style="margin-bottom:12px;max-width:1400px">
+    <div class="clients-toolbar" style="margin-bottom:12px;max-width:1400px;display:flex;gap:8px;align-items:center">
       <div class="search-wrap" style="flex:1;min-width:200px">
         <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
         <input class="search-input" id="sales-search" type="text" placeholder="Поиск по клиенту..." oninput="renderSalesTable()">
       </div>
+      <button class="btn btn-ghost" onclick="openCertificatesModal()" style="white-space:nowrap">🎁 Сертификаты</button>
     </div>
     <div class="table-wrap" id="sales-table-wrap" style="max-width:1400px">
       <table class="data-table resizable-table" id="sales-table" style="table-layout:fixed;width:100%">
@@ -1889,7 +1890,7 @@
 
       <!-- Куда поступает -->
       <div class="form-label" style="margin-bottom:8px">Куда поступает?</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <button class="ctype-btn" id="pay-type-nal" onclick="selectPayType('Нал',this)" style="padding:12px 6px;flex-direction:column;display:flex;align-items:center;gap:3px">
           <span style="font-size:20px">💵</span>
           <span style="font-weight:700;font-size:13px">Наличные</span>
@@ -1905,8 +1906,20 @@
           <span style="font-weight:700;font-size:13px">Безнал</span>
           <span style="font-size:10px;color:var(--text3)">на р/счёт, −15% ЗП</span>
         </button>
+        <button class="ctype-btn" id="pay-type-cert" onclick="selectPayType('Сертификат',this)" style="padding:12px 6px;flex-direction:column;display:flex;align-items:center;gap:3px">
+          <span style="font-size:20px">🎁</span>
+          <span style="font-weight:700;font-size:13px">Сертификат</span>
+          <span style="font-size:10px;color:var(--text3)">не в кассу</span>
+        </button>
       </div>
       <input type="hidden" id="pay-type-selected" value="Нал">
+
+      <!-- Выбор сертификата (виден только при способе «Сертификат») -->
+      <div class="form-row" id="pay-cert-row" style="margin-top:10px;display:none">
+        <label class="form-label">Сертификат (остаток)</label>
+        <select class="form-select" id="pay-cert-select" onchange="onPayCertChange_()"><option value="">— загрузка… —</option></select>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px" id="pay-cert-hint">Списывается с остатка сертификата. В кассу не поступает.</div>
+      </div>
 
       <!-- Комментарий -->
       <div class="form-row" style="margin-top:12px">

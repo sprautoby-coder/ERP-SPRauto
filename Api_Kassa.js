@@ -92,6 +92,7 @@ function getKassa(dateStr) {
     // ПРИХОД и БЕЗНАЛ из платежей
     payments.forEach(function(p) {
       if (!p['ID']) return;
+      if (String(p['Способ оплаты']) === 'Сертификат') return;   // погашение сертификата — деньги в кассу НЕ идут (пришли при продаже)
       var d = parseKassaDay_(p['Дата']);
       if (!inScope(d)) return;
       var amount = Number(p['Сумма']) || 0;
@@ -182,6 +183,7 @@ function getKassaRange(fromStr, toStr) {
 
     payments.forEach(function(p) {
       if (!p['ID']) return;
+      if (String(p['Способ оплаты']) === 'Сертификат') return;   // погашение сертификата — не касса
       var d = parseKassaDay_(p['Дата']); if (!inScope(d)) return;
       var amount = Number(p['Сумма']) || 0;
       var isBez  = String(p['Способ оплаты']) === 'Безнал';
@@ -241,6 +243,7 @@ function getKassaBalance_() {
   var inSum = 0, outSum = 0;
   readSheetAsObjects('DATABASE', 'PAYMENTS').forEach(function(p) {
     if (!p['ID'] || String(p['Способ оплаты']) === 'Безнал') return;
+    if (String(p['Способ оплаты']) === 'Сертификат') return;   // погашение сертификата — не касса
     if (inScope(parseKassaDay_(p['Дата']))) inSum += Number(p['Сумма']) || 0;
   });
   readSheetAsObjects('DATABASE', 'EXPENSES').forEach(function(e) {
@@ -262,6 +265,7 @@ function getBalancesBreakdown_() {
   var nalIn = 0, nalOut = 0, bezIn = 0, bezOut = 0;
   readSheetAsObjects('DATABASE', 'PAYMENTS').forEach(function(p) {
     if (!p['ID']) return;
+    if (String(p['Способ оплаты']) === 'Сертификат') return;   // погашение сертификата — не касса
     var amt = Number(p['Сумма']) || 0;
     if (String(p['Способ оплаты']) === 'Безнал') { bezIn += amt; }
     else if (inScope(parseKassaDay_(p['Дата']))) { nalIn += amt; }

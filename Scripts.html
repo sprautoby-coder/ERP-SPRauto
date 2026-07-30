@@ -7673,6 +7673,120 @@ function selectPayType(type, btn) {
   document.getElementById('pay-type-selected').value = type;
   document.querySelectorAll('#modal-pay-order .ctype-btn').forEach(function(b){ b.classList.remove('active'); });
   if (btn) btn.classList.add('active');
+  // Способ «Сертификат» → показать выбор сертификата и подгрузить активные
+  var certRow = document.getElementById('pay-cert-row');
+  if (certRow) {
+    certRow.style.display = (type === 'Сертификат') ? 'block' : 'none';
+    if (type === 'Сертификат') loadPayCerts_();
+  }
+}
+
+/* ── Подарочные сертификаты: продажа + список ── */
+function openCertificatesModal() {
+  closeCertificatesModal_();
+  var html =
+    '<div class="modal-dialog-bg" id="modal-certs">' +
+      '<div class="modal" style="max-width:560px">' +
+        '<div class="modal-header"><div class="modal-title">🎁 Подарочные сертификаты</div>' +
+          '<button class="modal-close" onclick="closeCertificatesModal_()">&#10005;</button></div>' +
+        '<div class="modal-body">' +
+          '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:12px">' +
+            '<div style="font-weight:600;margin-bottom:8px">Продать сертификат</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+              '<div class="form-row" style="margin:0"><label class="form-label">Номинал, ' + CUR + ' *</label><input class="form-input" id="cert-nominal" type="number" min="0" placeholder="0"></div>' +
+              '<div class="form-row" style="margin:0"><label class="form-label">Оплата</label><select class="form-select" id="cert-method"><option>Нал</option><option>Нал с чеком</option><option>Безнал</option></select></div>' +
+            '</div>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">' +
+              '<div class="form-row" style="margin:0"><label class="form-label">Покупатель</label><input class="form-input" id="cert-buyer" placeholder="ФИО (необязательно)"></div>' +
+              '<div class="form-row" style="margin:0"><label class="form-label">Телефон</label><input class="form-input" id="cert-phone" placeholder="+375…"></div>' +
+            '</div>' +
+            '<div style="font-size:11px;color:var(--text3);margin-top:6px">Деньги поступят в кассу как продажа сертификата. Погашение услуг — способом «Сертификат».</div>' +
+            '<button class="btn btn-primary" id="cert-sell-btn" onclick="submitSellCert_()" style="margin-top:10px;padding:8px 16px;font-weight:600">Продать сертификат</button>' +
+          '</div>' +
+          '<div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Сертификаты</div>' +
+          '<div id="cert-list"><div class="kpi-skeleton" style="min-height:60px"></div></div>' +
+        '</div>' +
+        '<div class="modal-footer"><button class="btn btn-ghost" onclick="closeCertificatesModal_()">Закрыть</button></div>' +
+      '</div>' +
+    '</div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  openModal('modal-certs');
+  loadCertList_();
+}
+function closeCertificatesModal_(){ var w = document.getElementById('modal-certs'); if (w) w.remove(); }
+
+function loadCertList_() {
+  var box = document.getElementById('cert-list'); if (!box) return;
+  google.script.run
+    .withSuccessHandler(function(resp){
+      var list = (resp && resp.ok) ? (resp.data || []) : [];
+      if (!list.length) { box.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:6px 0">Сертификатов пока нет.</div>'; return; }
+      var fmt = function(n){ return (Number(n)||0).toLocaleString('ru') + ' ' + CUR; };
+      box.innerHTML = list.map(function(c){
+        var used = c.status === 'Погашен' || c.remaining <= 0.001;
+        return '<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)' + (used?';opacity:.55':'') + '">' +
+          '<div style="min-width:0"><div style="font-weight:600;font-size:13px">' + c.id + (c.buyer ? ' · ' + c.buyer : '') + '</div>' +
+            '<div style="font-size:11px;color:var(--text3)">' + (c.date||'') + ' · номинал ' + fmt(c.nominal) + ' · ' + (c.method||'') + (c.status?' · '+c.status:'') + '</div></div>' +
+          '<div style="text-align:right;white-space:nowrap"><div style="font-weight:700;color:' + (used?'var(--text3)':'var(--success)') + '">' + fmt(c.remaining) + '</div><div style="font-size:10px;color:var(--text3)">остаток</div></div>' +
+        '</div>';
+      }).join('');
+    })
+    .withFailureHandler(function(e){ box.innerHTML = '<div style="color:var(--danger);font-size:12px">Ошибка: ' + e.message + '</div>'; })
+    .getCertificates(false);
+}
+
+function submitSellCert_() {
+  var nominal = Number((document.getElementById('cert-nominal')||{}).value) || 0;
+  if (nominal <= 0) { toast('Укажите номинал', 'error'); return; }
+  var payload = {
+    nominal: nominal,
+    method: (document.getElementById('cert-method')||{}).value || 'Нал',
+    buyer:  ((document.getElementById('cert-buyer')||{}).value || '').trim(),
+    phone:  ((document.getElementById('cert-phone')||{}).value || '').trim()
+  };
+  var btn = document.getElementById('cert-sell-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Продаём...'; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Продать сертификат'; }
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast('Сертификат ' + resp.data.id + ' продан на ' + nominal + ' ' + CUR, 'success');
+      ['cert-nominal','cert-buyer','cert-phone'].forEach(function(id){ var e=document.getElementById(id); if(e) e.value=''; });
+      App._kassaCache = null; App._dashCache = null;
+      loadCertList_();
+    })
+    .withFailureHandler(function(e){ if (btn) { btn.disabled = false; btn.textContent = 'Продать сертификат'; } toast('Ошибка: ' + e.message, 'error'); })
+    .sellCertificate(payload);
+}
+
+// Подгрузить активные сертификаты в выпадающий список модалки оплаты
+function loadPayCerts_() {
+  var sel = document.getElementById('pay-cert-select'); if (!sel) return;
+  sel.innerHTML = '<option value="">— загрузка… —</option>';
+  google.script.run
+    .withSuccessHandler(function(resp){
+      var list = (resp && resp.ok) ? (resp.data || []) : [];
+      if (!list.length) { sel.innerHTML = '<option value="">Нет активных сертификатов</option>'; return; }
+      sel.innerHTML = list.map(function(c){
+        return '<option value="' + c.id + '" data-rem="' + c.remaining + '">' + c.id +
+          ' · остаток ' + (Number(c.remaining)||0).toLocaleString('ru') + ' ' + CUR +
+          (c.buyer ? ' · ' + c.buyer : '') + '</option>';
+      }).join('');
+      onPayCertChange_();
+    })
+    .withFailureHandler(function(){ sel.innerHTML = '<option value="">Ошибка загрузки</option>'; })
+    .getCertificates(true);
+}
+function onPayCertChange_() {
+  var sel = document.getElementById('pay-cert-select'); if (!sel) return;
+  var opt = sel.options[sel.selectedIndex];
+  var rem = opt ? Number(opt.getAttribute('data-rem')) || 0 : 0;
+  var remaining = Math.max(0, (App._payOrderPrice||0) - (App._payOrderPaid||0));
+  var suggest = Math.min(rem, remaining);
+  var amtEl = document.getElementById('pay-amount');
+  if (amtEl && suggest > 0) amtEl.value = suggest;      // предложить списать минимум из (остаток сертификата, долг)
+  var hint = document.getElementById('pay-cert-hint');
+  if (hint) hint.textContent = 'Остаток сертификата: ' + rem.toLocaleString('ru') + ' ' + CUR + '. Списывается с него, в кассу не идёт.';
 }
 
 function openPayOrderModal(orderId, clientName, price, currentDueDate) {
@@ -7694,6 +7808,7 @@ function openPayOrderModal(orderId, clientName, price, currentDueDate) {
   document.querySelectorAll('#modal-pay-order .ctype-btn').forEach(function(b){ b.classList.remove('active'); });
   var nalBtn = document.getElementById('pay-type-nal');
   if (nalBtn) nalBtn.classList.add('active');
+  var certRow = document.getElementById('pay-cert-row'); if (certRow) certRow.style.display = 'none';   // сброс выбора сертификата
 
   // Загружаем историю платежей и остаток
   google.script.run
@@ -7748,6 +7863,28 @@ function confirmPayOrder() {
   if (!amount) { toast('Укажите сумму','error'); return; }
 
   var btn = document.getElementById('pay-submit-btn');
+
+  // Оплата СЕРТИФИКАТОМ — списываем с остатка сертификата, в кассу не идёт
+  if (payType === 'Сертификат') {
+    var certId = (document.getElementById('pay-cert-select')||{}).value || '';
+    if (!certId) { toast('Выберите сертификат', 'error'); return; }
+    if (btn) { btn.disabled = true; btn.textContent = 'Списываем...'; }
+    google.script.run
+      .withSuccessHandler(function(resp){
+        if (btn) { btn.disabled = false; btn.textContent = 'Принять платёж'; }
+        if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
+        if (nextDate) google.script.run.setOrderDueDate(id, nextDate);
+        toast('Оплачено сертификатом (в кассу не идёт)', 'success');
+        closeModal('modal-pay-order');
+        App.orders = []; App._cardCache = {}; App._dashCache = null; App._kassaCache = null;
+        if (App.currentPage === 'orders') loadOrders(true);
+        if (App.currentPage === 'order-card' && App._currentOrderId === id) reopenCard(id);
+      })
+      .withFailureHandler(function(e){ if (btn) { btn.disabled = false; btn.textContent = 'Принять платёж'; } toast('Ошибка: '+e.message,'error'); })
+      .redeemCertificateForOrder(id, certId, amount, comment);
+    return;
+  }
+
   if (btn) { btn.disabled = true; btn.textContent = 'Сохраняем...'; }
 
   google.script.run
