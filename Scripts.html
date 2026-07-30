@@ -4274,12 +4274,16 @@ function applyColWidths_(table) {
   var wrap = table.parentElement;
   var containerW = wrap ? wrap.clientWidth : 0;
   var fitted = false;
-  // Не трогали вручную и таблица шире контейнера → ужать пропорционально
+  // Не трогали вручную и таблица шире контейнера → ужать пропорционально, но НЕ уже минимума.
+  // Если даже при минимуме всё не влезает (маленький экран) — оставляем шире контейнера,
+  // чтобы появился горизонтальный скролл (иначе колонки нечитаемо сжимаются).
   if (!saved && containerW && sum > containerW) {
+    var minColW = 64;
     var k = containerW / sum;
-    widths = widths.map(function(w){ return Math.max(30, Math.floor(w * k)); });
+    // Узкие колонки (чекбокс/действия) не раздуваем — минимум = min(64, естественная ширина)
+    widths = widths.map(function(w){ return Math.max(Math.min(minColW, w), Math.floor(w * k)); });
     sum = widths.reduce(function(a, b){ return a + b; }, 0);
-    fitted = true;
+    fitted = (sum <= containerW);   // влезло после минимумов — тянем на 100%; иначе — скролл
   }
   // Снимаем инлайновый min-width из разметки, иначе он не даст столбцу ужаться.
   // Если у таблицы есть <colgroup> (fixed-layout), синхронизируем и ширины <col> —
