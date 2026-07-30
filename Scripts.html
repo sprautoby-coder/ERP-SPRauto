@@ -7766,26 +7766,31 @@ function loadPayCerts_() {
   google.script.run
     .withSuccessHandler(function(resp){
       var list = (resp && resp.ok) ? (resp.data || []) : [];
-      if (!list.length) { sel.innerHTML = '<option value="">Нет активных сертификатов</option>'; return; }
+      var unreg = '<option value="__unreg__">🎁 Сертификат не зарегистрирован (списать без реестра)</option>';
       sel.innerHTML = list.map(function(c){
         return '<option value="' + c.id + '" data-rem="' + c.remaining + '">' + c.id +
           ' · остаток ' + (Number(c.remaining)||0).toLocaleString('ru') + ' ' + CUR +
           (c.buyer ? ' · ' + c.buyer : '') + '</option>';
-      }).join('');
+      }).join('') + unreg;
       onPayCertChange_();
     })
-    .withFailureHandler(function(){ sel.innerHTML = '<option value="">Ошибка загрузки</option>'; })
+    .withFailureHandler(function(){ sel.innerHTML = '<option value="__unreg__">🎁 Сертификат не зарегистрирован (списать без реестра)</option>'; onPayCertChange_(); })
     .getCertificates(true);
 }
 function onPayCertChange_() {
   var sel = document.getElementById('pay-cert-select'); if (!sel) return;
+  var remaining = Math.max(0, (App._payOrderPrice||0) - (App._payOrderPaid||0));
+  var amtEl = document.getElementById('pay-amount');
+  var hint = document.getElementById('pay-cert-hint');
+  if (sel.value === '__unreg__') {
+    if (amtEl && remaining > 0) amtEl.value = remaining;
+    if (hint) hint.textContent = 'Сертификат не в реестре — спишется без контроля остатка. В кассу не идёт.';
+    return;
+  }
   var opt = sel.options[sel.selectedIndex];
   var rem = opt ? Number(opt.getAttribute('data-rem')) || 0 : 0;
-  var remaining = Math.max(0, (App._payOrderPrice||0) - (App._payOrderPaid||0));
   var suggest = Math.min(rem, remaining);
-  var amtEl = document.getElementById('pay-amount');
   if (amtEl && suggest > 0) amtEl.value = suggest;      // предложить списать минимум из (остаток сертификата, долг)
-  var hint = document.getElementById('pay-cert-hint');
   if (hint) hint.textContent = 'Остаток сертификата: ' + rem.toLocaleString('ru') + ' ' + CUR + '. Списывается с него, в кассу не идёт.';
 }
 
@@ -7869,19 +7874,25 @@ function confirmPayOrder() {
     var certId = (document.getElementById('pay-cert-select')||{}).value || '';
     if (!certId) { toast('Выберите сертификат', 'error'); return; }
     if (btn) { btn.disabled = true; btn.textContent = 'Списываем...'; }
-    google.script.run
-      .withSuccessHandler(function(resp){
-        if (btn) { btn.disabled = false; btn.textContent = 'Принять платёж'; }
-        if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
-        if (nextDate) google.script.run.setOrderDueDate(id, nextDate);
-        toast('Оплачено сертификатом (в кассу не идёт)', 'success');
-        closeModal('modal-pay-order');
-        App.orders = []; App._cardCache = {}; App._dashCache = null; App._kassaCache = null;
-        if (App.currentPage === 'orders') loadOrders(true);
-        if (App.currentPage === 'order-card' && App._currentOrderId === id) reopenCard(id);
-      })
-      .withFailureHandler(function(e){ if (btn) { btn.disabled = false; btn.textContent = 'Принять платёж'; } toast('Ошибка: '+e.message,'error'); })
-      .redeemCertificateForOrder(id, certId, amount, comment);
+    var onOk = function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Принять платёж'; }
+      if (!resp||!resp.ok) { toast('Ошибка: '+(resp?resp.error:''),'error'); return; }
+      if (nextDate) google.script.run.setOrderDueDate(id, nextDate);
+      toast('Оплачено сертификатом (в кассу не идёт)', 'success');
+      closeModal('modal-pay-order');
+      App.orders = []; App._cardCache = {}; App._dashCache = null; App._kassaCache = null;
+      if (App.currentPage === 'orders') loadOrders(true);
+      if (App.currentPage === 'order-card' && App._currentOrderId === id) reopenCard(id);
+    };
+    var onErr = function(e){ if (btn) { btn.disabled = false; btn.textContent = 'Принять платёж'; } toast('Ошибка: '+e.message,'error'); };
+    if (certId === '__unreg__') {
+      // Незарегистрированный сертификат — просто платёж способом «Сертификат» (не касса), без реестра
+      google.script.run.withSuccessHandler(onOk).withFailureHandler(onErr)
+        .addOrderPayment(id, { amount: amount, payType: 'Сертификат', comment: comment || 'Сертификат (не зарегистрирован)' });
+    } else {
+      google.script.run.withSuccessHandler(onOk).withFailureHandler(onErr)
+        .redeemCertificateForOrder(id, certId, amount, comment);
+    }
     return;
   }
 
