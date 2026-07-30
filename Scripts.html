@@ -8312,14 +8312,35 @@ function openOrderCard(orderId) {
 function deletePaymentFromCard(paymentId) {
   if (!paymentId) return;
   uiConfirm('Удалить этот платёж? Сумма оплаты и статус заказа пересчитаются автоматически.', function(){
+    var o = App._currentOrder;
+    var deleted = null;
+    // ── Оптимистично: убираем платёж локально и пересчитываем — мгновенно, без запроса ──
+    if (o && o.payments && o.payments.length) {
+      for (var i = 0; i < o.payments.length; i++) {
+        if (String(o.payments[i]['ID']) === String(paymentId)) { deleted = o.payments[i]; o.payments.splice(i, 1); break; }
+      }
+      if (deleted) {
+        var price = Number(o['Стоимость заказа']) || 0;
+        var paid  = o.payments.reduce(function(s, p){ return s + (Number(p['Сумма']) || 0); }, 0);
+        o._paid = Math.round(paid * 100) / 100;
+        o._remaining = Math.max(0, price - o._paid);
+        o['Статус оплаты'] = paid <= 0 ? 'Не оплачен' : (paid >= price ? 'Оплачен' : 'Частично');
+        if (App._cardCache && App._currentOrderId) App._cardCache[App._currentOrderId] = o;
+        renderOrderCard(o);   // перерисовка из локального объекта — без обращения к серверу
+      }
+    }
+    // Списки/дашборд/дебиторка/касса пересоберутся при следующем заходе
+    App.orders = []; App._dashCache = null; App._debtCache = null; App._kassaCache = null;
+    // ── Удаление на сервере — в фоне (UI уже обновлён) ──
+    var official = deleted && (deleted['Способ оплаты'] === 'Безнал' || deleted['Способ оплаты'] === 'Нал с чеком');
     google.script.run
       .withSuccessHandler(function(resp){
-        if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); return; }
+        if (!resp || !resp.ok) { toast('Ошибка: ' + (resp ? resp.error : ''), 'error'); if (App._currentOrderId) reopenCard(App._currentOrderId); return; }
         toast('Платёж удалён', 'success');
-        App.orders = []; App._cardCache = {}; App._dashCache = null; App._debtCache = null; // пересчитать списки/дашборд/дебиторку
-        if (App._currentOrderId) reopenCard(App._currentOrderId);   // перерисовать карточку
+        // Официальный платёж влияет на −15%/бонусы → тихо подтянуть свежий финитог
+        if (official && App._currentOrderId) reopenCard(App._currentOrderId);
       })
-      .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+      .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); if (App._currentOrderId) reopenCard(App._currentOrderId); })
       .deleteOrderPayment(paymentId);
   }, { okText: 'Удалить платёж' });
 }
