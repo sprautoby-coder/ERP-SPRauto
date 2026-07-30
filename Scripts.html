@@ -51,7 +51,7 @@ function toggleTheme() {
 
 /* ===== НАВИГАЦИЯ ===== */
 var PAGE_TITLES = {
-  dashboard:'Дашборд', orders:'Заказы', clients:'Клиенты',
+  dashboard:'Дашборд', orders:'Заказы', 'my-orders':'Мои заказы', clients:'Клиенты',
   'client-card':'Карточка клиента', 'order-card':'Карточка заказа',
   kassa:'Касса', finance:'Финансы', dds:'ДДС — Движение денег', expenses:'Расходы',
   debt:'Дебиторка', salary:'Расчёт заработной платы',
@@ -1764,6 +1764,111 @@ function fillLeadSources(sources) {
   });
 }
 
+/* ===== МОИ ЗАКАЗЫ (мастер: вход по PIN + личные наряды) ===== */
+function staffGet_() { try { return JSON.parse(localStorage.getItem('spr_staff') || 'null'); } catch (e) { return null; } }
+function staffSet_(s) { try { s ? localStorage.setItem('spr_staff', JSON.stringify(s)) : localStorage.removeItem('spr_staff'); } catch (e) {} }
+
+function loadMyOrders() {
+  var box = document.getElementById('my-orders-content'); if (!box) return;
+  var staff = staffGet_();
+  if (!staff || !staff.name) { renderStaffLogin_(); return; }
+  box.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:8px">' +
+      '<div><div style="font-size:20px;font-weight:700">Мои заказы</div>' +
+        '<div style="font-size:13px;color:var(--text3)">' + staff.name + '</div></div>' +
+      '<button class="btn btn-ghost" onclick="staffLogout_()" style="font-size:12px">Выйти</button>' +
+    '</div>' +
+    '<div id="my-orders-list"><div class="kpi-skeleton" style="min-height:120px"></div></div>';
+  google.script.run
+    .withSuccessHandler(function(resp){ renderMyOrders_((resp && resp.ok) ? (resp.data || []) : []); })
+    .withFailureHandler(function(e){ var l=document.getElementById('my-orders-list'); if(l) l.innerHTML='<div style="color:var(--danger)">Ошибка: '+e.message+'</div>'; })
+    .getMyStaffOrders(staff.name);
+}
+
+function renderStaffLogin_() {
+  var box = document.getElementById('my-orders-content'); if (!box) return;
+  box.innerHTML =
+    '<div style="max-width:360px;margin:40px auto;background:var(--bg-card);border:1px solid var(--border);border-radius:14px;padding:22px">' +
+      '<div style="font-size:20px;font-weight:700;margin-bottom:4px">Вход для мастера</div>' +
+      '<div style="font-size:12px;color:var(--text3);margin-bottom:16px">Выберите себя и введите PIN. При первом входе PIN задаётся автоматически.</div>' +
+      '<label class="form-label">Сотрудник</label>' +
+      '<select class="form-select" id="staff-name" style="margin-bottom:10px"><option value="">— загрузка… —</option></select>' +
+      '<label class="form-label">PIN</label>' +
+      '<input class="form-input" id="staff-pin" type="password" inputmode="numeric" placeholder="4 цифры" style="margin-bottom:14px" onkeydown="if(event.key===\'Enter\')staffLoginSubmit_()">' +
+      '<button class="btn btn-primary" id="staff-login-btn" onclick="staffLoginSubmit_()" style="width:100%;padding:10px;font-weight:600">Войти</button>' +
+    '</div>';
+  google.script.run
+    .withSuccessHandler(function(resp){
+      var names = (resp && resp.ok) ? (resp.data || []) : [];
+      var sel = document.getElementById('staff-name'); if (!sel) return;
+      sel.innerHTML = '<option value="">— выберите —</option>' + names.map(function(n){ return '<option>' + n + '</option>'; }).join('');
+    })
+    .withFailureHandler(function(){})
+    .getStaffNames();
+}
+
+function staffLoginSubmit_() {
+  var name = (document.getElementById('staff-name') || {}).value || '';
+  var pin  = (document.getElementById('staff-pin') || {}).value || '';
+  if (!name) { toast('Выберите себя', 'error'); return; }
+  if (!pin)  { toast('Введите PIN', 'error'); return; }
+  var btn = document.getElementById('staff-login-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Входим...'; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Войти'; }
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      staffSet_({ id: resp.data.id, name: resp.data.name });
+      if (resp.data.firstTime) toast('PIN установлен. Запомните его.', 'success');
+      loadMyOrders();
+    })
+    .withFailureHandler(function(e){ if (btn) { btn.disabled = false; btn.textContent = 'Войти'; } toast('Ошибка: ' + e.message, 'error'); })
+    .staffLogin(name, pin);
+}
+
+function staffLogout_() { staffSet_(null); loadMyOrders(); }
+
+function renderMyOrders_(list) {
+  var box = document.getElementById('my-orders-list'); if (!box) return;
+  if (!list.length) { box.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3)">Активных заказов на вас нет.</div>'; return; }
+  var statusNames = orderStatusNames();
+  box.innerHTML = list.map(function(o){
+    var els = String(o.elements || '').split(/\r?\n/).map(function(s){ return s.trim(); }).filter(Boolean);
+    var elsHtml = els.length
+      ? '<div style="margin-top:8px"><div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Элементы</div>' +
+        els.map(function(e){ return '<div style="font-size:13px;padding:1px 0">☐ ' + e + '</div>'; }).join('') + '</div>'
+      : '';
+    var isTint = /тонир|tint/i.test(o.service);
+    var filmLine = (isTint && (o.film || o.light)) ? '<div style="font-size:12px;color:var(--text2);margin-top:2px">Плёнка: ' + (o.film||'') + (String(o.light).trim()?(' · '+o.light+'%'):'') + '</div>' : '';
+    var stColor = orderStatusColor(o.status) || 'var(--border-h)';
+    var stOpts = statusNames.map(function(s){ return '<option value="' + s + '"' + (s===o.status?' selected':'') + '>' + s + '</option>'; }).join('');
+    return '<div style="background:var(--bg-card);border:1px solid var(--border);border-left:4px solid ' + stColor + ';border-radius:12px;padding:14px 16px;margin-bottom:12px">' +
+      '<div style="display:flex;justify-content:space-between;gap:8px;align-items:flex-start;flex-wrap:wrap">' +
+        '<div><div style="font-weight:700;font-size:15px">' + (o.car || '—') + (o.plate?' · '+o.plate:'') + '</div>' +
+          '<div style="font-size:12px;color:var(--text3)">' + (o.contract||'') + ' · ' + (o.service||'') + ' · ' + (o.roles||'') + '</div>' + filmLine + '</div>' +
+        '<div style="text-align:right"><div style="font-size:12px;color:var(--text3)">Сдать до</div><div style="font-weight:600">' + (o.due || '—') + '</div></div>' +
+      '</div>' +
+      elsHtml +
+      '<div style="display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap">' +
+        '<span style="font-size:11px;color:var(--text3)">Статус:</span>' +
+        '<select onchange="staffChangeStatus_(\'' + String(o.id).replace(/'/g,"\\'") + '\', this.value)" style="font-size:12px;font-weight:600;padding:5px 8px;border-radius:8px;border:2px solid ' + stColor + ';background:var(--inp);color:var(--text)">' + stOpts + '</select>' +
+      '</div>' +
+    '</div>';
+  }).join('');
+}
+
+function staffChangeStatus_(orderId, status) {
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+      toast('Статус: ' + status, 'success');
+      App.orders = []; App._dashCache = null;
+      loadMyOrders();
+    })
+    .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+    .staffSetOrderStatus(orderId, status);
+}
+
 /* ===== ЗАГРУЗКА СТРАНИЦ ===== */
 function loadCurrentPage() {
   refreshSync();
@@ -1775,6 +1880,7 @@ function loadCurrentPage() {
   if (App.currentPage === 'team')      loadTeam(force);
   if (App.currentPage === 'clients')   loadClients(force);
   if (App.currentPage === 'orders')    { restorePeriod_('ord'); loadOrders(force); }
+  if (App.currentPage === 'my-orders') loadMyOrders();
   if (App.currentPage === 'materials') loadMaterials(force);
   if (App.currentPage === 'sales')     loadSales(force);
   if (App.currentPage === 'inventory') loadInventory(force);
