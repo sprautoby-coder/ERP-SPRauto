@@ -228,6 +228,17 @@ function getDefaultStatusName_() {
   return (list[0] && list[0].name) ? list[0].name : 'Новый';
 }
 
+/** Имя статуса «в работе» (явное «В работе» или вторая незавершённая стадия). */
+function getInWorkStatusName_() {
+  try {
+    var list = getOrderStatuses();
+    for (var i = 0; i < list.length; i++) { if (list[i] && String(list[i].name) === 'В работе') return 'В работе'; }
+    var flow = list.filter(function(s){ return s && !s.done && !s.cancelled; });
+    if (flow.length >= 2) return String(flow[1].name);   // 1-я обычно «Новый», 2-я — «в работе»
+  } catch (e) {}
+  return 'В работе';
+}
+
 /** Имя «завершённого» статуса (первый с done:true, обычно «Выдан»). */
 function getCompletedStatusName_() {
   try {

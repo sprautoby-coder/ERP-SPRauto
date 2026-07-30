@@ -545,6 +545,12 @@ function updateOrder(id, payload) {
       if (payload.notes       !== undefined) setCell('Заметки',         payload.notes);
       if (payload.manager     !== undefined) setCell('Менеджер',        payload.manager);
       if (payload.masters     !== undefined) setCell('Оклейщики',       payload.masters);
+      // Назначили оклейщиков из статуса «Новый» → авто-перевод в «В работе»
+      if (payload.masters !== undefined && String(payload.masters).trim() &&
+          String(row['Статус'] || '') === getDefaultStatusName_()) {
+        var inWorkName_ = getInWorkStatusName_();
+        if (inWorkName_ && inWorkName_ !== String(row['Статус'] || '')) setCell('Статус', inWorkName_);
+      }
       if (payload.tintMasters !== undefined) setCell('Тонировщики',     payload.tintMasters);
       // Стоимость тонировки — аддитивная (добавляется к общей сумме). Обрабатывается в блоке пересчёта ниже.
       if (payload.tintManager !== undefined) setCell('Менеджер тонировки',      payload.tintManager);

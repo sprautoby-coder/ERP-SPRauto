@@ -8503,7 +8503,7 @@ function renderOrderCard(order) {
           '<div style="font-size:20px;font-weight:700;white-space:nowrap"><input type="number" min="0" step="0.01" value="' + price + '" onchange="updateOrderPrice_(\'' + oid + '\', this.value)" title="Цена заказа — можно изменить (например, скидка)" style="width:100px;text-align:right;font-size:20px;font-weight:700;color:var(--text);background:transparent;border:none;border-bottom:1px dashed var(--text3);padding:0;outline:none"> ' + CUR + '</div>' +
           '<span style="font-size:11px;padding:2px 9px;border-radius:20px;background:' + payStatusColor + '22;color:' + payStatusColor + '">' + payStatus + '</span>' +
         '</div>' +
-        '<select style="font-size:12px;font-weight:700;padding:5px 8px;border-radius:8px;border:2px solid ' + statusColor + ';background:var(--inp);color:var(--text)" onchange="changeOrderStatus(\'' + oid + '\', this)">' +
+        '<select id="card-hdr-status" style="font-size:12px;font-weight:700;padding:5px 8px;border-radius:8px;border:2px solid ' + statusColor + ';background:var(--inp);color:var(--text)" onchange="changeOrderStatus(\'' + oid + '\', this)">' +
           orderStatusNames().map(function(s){ return '<option value="' + s + '"' + (s===order['Статус']?' selected':'') + ' style="color:var(--text);background:var(--bg-card)">' + s + '</option>'; }).join('') +
         '</select>' +
       '</div>' +
@@ -9227,6 +9227,17 @@ function persFlush_(cb) {
         if (f.tintAdminBonus   !== undefined) o['Бонус администратора тонировки']=f.tintAdminBonus;
         var box=document.getElementById('card-fin-box'); if(box) box.innerHTML=renderCardFinance_(o);
       }
+      // Назначили оклейщиков из «Нового» → заказ ушёл в «В работе» (обновим статус в шапке сразу)
+      try {
+        if (masters.length && orderStatusNames()[0] && String(o['Статус']||'') === orderStatusNames()[0]) {
+          var names = orderStatusNames();
+          var inWork = names.indexOf('В работе') >= 0 ? 'В работе' : (names[1] || '');
+          if (inWork) {
+            o['Статус'] = inWork;
+            var selHdr = document.getElementById('card-hdr-status'); if (selHdr) selHdr.value = inWork;
+          }
+        }
+      } catch (e) {}
       App.orders = []; App._dashCache = null; if (App._cardCache) delete App._cardCache[id];
       st('✓ сохранено', 'var(--success)'); if (cb) cb();
     })
