@@ -83,6 +83,35 @@ function deleteExpense(id) {
   });
 }
 
+/** Редактировать одно поле/несколько полей расхода. */
+function updateExpense(id, payload) {
+  return safeCall(function() {
+    bumpDataVersion_();
+    if (!id) throw new Error('Не указан расход');
+    payload = payload || {};
+    const sheet   = getTab('DATABASE', 'EXPENSES');
+    const data    = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idIdx   = headers.indexOf('ID');
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][idIdx]) !== String(id)) continue;
+      const setCell = function(col, val) {
+        if (val === undefined) return;
+        const idx = headers.indexOf(col);
+        if (idx >= 0) sheet.getRange(i + 1, idx + 1).setValue(val);
+      };
+      if (payload.date        !== undefined) setCell('Дата', payload.date);
+      if (payload.category    !== undefined) setCell('Категория', payload.category);
+      if (payload.description !== undefined) setCell('Описание', payload.description);
+      if (payload.amount      !== undefined) setCell('Сумма', Number(payload.amount) || 0);
+      if (payload.payMethod   !== undefined) setCell('Способ оплаты', payload.payMethod);
+      logActivity('Обновил', 'Расход', id, '', '');
+      return { id: id };
+    }
+    throw new Error('Расход не найден: ' + id);
+  });
+}
+
 function getExpensesStats() {
   return safeCall(function() {
     const all = readSheetAsObjects('DATABASE', 'EXPENSES');
