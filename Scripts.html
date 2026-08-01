@@ -6623,11 +6623,25 @@ function onDashPeriodChange() {
   if (f) f.value = r.from ? r.from.slice(0, 10) : '';
   if (t) t.value = r.to   ? r.to.slice(0, 10)   : '';
   savePeriod_('dash');
+  broadcastDashPeriod_();
   renderDashboard();
 }
 
 // Ручная правка даты в календаре → сохраняем период и пересчитываем
-function onDashDateEdit() { savePeriod_('dash'); renderDashboard(); }
+function onDashDateEdit() { savePeriod_('dash'); broadcastDashPeriod_(); renderDashboard(); }
+
+// Период с дашборда — мастер для всех разделов. Раскидываем его выбор в хранилище
+// каждого раздела, чтобы при следующем заходе они подхватили тот же период.
+// Локальное изменение периода внутри раздела никуда не распространяется (savePeriod_ пишет только свой ключ).
+function broadcastDashPeriod_() {
+  try {
+    var g = function(id){ var e = document.getElementById(id); return e ? e.value : ''; };
+    var cfg = JSON.stringify({ period: g('dash-period'), from: g('dash-from'), to: g('dash-to') });
+    ['ord', 'kassa', 'exp', 'fin', 'dds', 'sal'].forEach(function(pre){
+      try { localStorage.setItem('sprauto-period-' + pre, cfg); } catch (e) {}
+    });
+  } catch (e) {}
+}
 
 function renderDashData_(d) {
   var kpi = document.getElementById('dash-kpi');
