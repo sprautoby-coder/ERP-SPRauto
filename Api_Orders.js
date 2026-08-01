@@ -213,14 +213,13 @@ function getOrders(filter) {
       });
     } catch (e) { /* лист платежей может отсутствовать */ }
 
-    // Карта графика рассрочки — дата окончательного взноса по заказу
-    var finalPayByOrder = {};
+    // Карта графика рассрочки — все взносы по заказу (для даты финала И следующего НЕоплаченного)
+    var schedByOrder = {};
     try {
       readSheetAsObjects('DATABASE', 'SCHEDULE').forEach(function(s) {
         if (!s['ID']) return;
         var oid = String(s['Заказ ID']);
-        var prev = finalPayByOrder[oid];
-        if (!prev || (Number(s['№'])||0) >= prev.num) finalPayByOrder[oid] = { num: Number(s['№'])||0, date: s['Дата'] };
+        (schedByOrder[oid] = schedByOrder[oid] || []).push({ num: Number(s['№'])||0, date: s['Дата'], sum: Number(s['Сумма'])||0 });
       });
     } catch (e) { /* лист графика может отсутствовать */ }
 
@@ -265,8 +264,22 @@ function getOrders(filter) {
       if (o['Статус оплаты'] === 'Оплачен' && paid < price) paid = price;
       o._paid       = paid;
       o._remaining  = round2(Math.max(0, price - paid));
-      o._nextPay    = o['Срок оплаты'] || '';
-      o._finalPay   = (finalPayByOrder[String(o['ID'])] || {}).date || '';
+      // Срок следующего платежа берём из ГРАФИКА (первый неоплаченный взнос по факту оплат),
+      // а не только из поля «Срок оплаты» — так рассрочка «по графику» не помечается просрочкой.
+      var sched = schedByOrder[String(o['ID'])];
+      if (sched && sched.length) {
+        sched.sort(function(a, b){ return a.num - b.num; });
+        o._finalPay = sched[sched.length - 1].date || '';
+        var acc = 0, nextUnpaid = '';
+        for (var k = 0; k < sched.length; k++) {
+          acc += sched[k].sum;
+          if (paid < acc - 0.01) { nextUnpaid = sched[k].date; break; }
+        }
+        o._nextPay = nextUnpaid || '';   // '' — все взносы по графику покрыты
+      } else {
+        o._nextPay  = o['Срок оплаты'] || '';
+        o._finalPay = '';
+      }
       // Способ оплаты (появляется после оплаты): фактические способы из платежей;
       // несколько разных → «Смешанная»; нет платежей, но отсрочка/рассрочка → условие.
       var methods = Object.keys(methodsByOrder[String(o['ID'])] || {});
