@@ -592,7 +592,10 @@
           <input type="date" class="form-input" id="exp-cmp-to"   onchange="loadExpenses()" style="height:36px;font-size:13px;width:138px">
         </div>
       </div>
-      <button class="btn btn-primary" onclick="openExpenseModal()" style="white-space:nowrap">+ Добавить расход</button>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-ghost" onclick="printExpensesReport_()" title="Отчёт по расходам за период (печать с водяным знаком)" style="white-space:nowrap">🖨 Отчёт</button>
+        <button class="btn btn-primary" onclick="openExpenseModal()" style="white-space:nowrap">+ Добавить расход</button>
+      </div>
     </div>
 
     <!-- KPI с дельтой при сравнении -->

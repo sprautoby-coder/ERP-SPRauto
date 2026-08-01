@@ -7302,6 +7302,55 @@ function saveExpField_(id, field, value) {
     .updateExpense(id, payload);
 }
 
+// Печатный отчёт по расходам за период (с водяным знаком логотипа)
+function printExpensesReport_() {
+  var list = App._expenses || [];
+  var brand = App.brand || {};
+  var logo = brand.logoDataUrl || '';
+  var f = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+  var fmtD = function(v){ var m = String(v||'').match(/(\d{4})-(\d{2})-(\d{2})/); return m ? (m[3]+'.'+m[2]+'.'+m[1]) : String(v||''); };
+  var range = (typeof getPeriodRangeFromUI === 'function') ? (getPeriodRangeFromUI('exp') || {}) : {};
+  var periodLabel = (range.from || range.to)
+    ? ('за период' + (range.from ? ' с ' + fmtD(range.from) : '') + (range.to ? ' по ' + fmtD(range.to) : ''))
+    : 'за всё время';
+  var sorted = list.slice().sort(function(a, b){ return expSortKey_(b) - expSortKey_(a); });
+  var total = 0, byCat = {};
+  var rows = sorted.map(function(e){
+    var s = Number(e['Сумма']) || 0; total += s;
+    var c = e['Категория'] || 'Прочее'; byCat[c] = (byCat[c] || 0) + s;
+    return '<tr><td>' + (e['Дата']||'') + '</td><td>' + escapeHtml_(e['Категория']||'') + '</td><td>' + escapeHtml_(e['Описание']||'') +
+      '</td><td style="text-align:right">' + f(s) + '</td><td>' + escapeHtml_(e['Способ оплаты']||'') + '</td></tr>';
+  }).join('') || '<tr><td colspan="5" style="text-align:center;color:#777">Нет расходов за период</td></tr>';
+  var catRows = Object.keys(byCat).sort(function(a, b){ return byCat[b] - byCat[a]; })
+    .map(function(c){ return '<tr><td>' + escapeHtml_(c) + '</td><td style="text-align:right">' + f(byCat[c]) + '</td></tr>'; }).join('');
+  var wm = logo ? '<img src="' + logo + '" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:55%;max-width:150mm;opacity:.07;z-index:0;pointer-events:none">' : '';
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Отчёт по расходам</title><style>' +
+    '@page{size:A4;margin:14mm}*{box-sizing:border-box}' +
+    'body{font-family:"Times New Roman",serif;font-size:11pt;color:#000;margin:0}' +
+    '.doc{max-width:180mm;margin:0 auto;position:relative;z-index:1}' +
+    'h2{text-align:center;margin:3px 0;font-size:13pt}h3{font-size:11pt;margin:10px 0 4px}' +
+    'table{width:100%;border-collapse:collapse;margin:6px 0}' +
+    'td,th{border:1px solid #000;padding:3px 6px;font-size:10pt}th{background:#eee}' +
+    '@media print{.noprint{display:none}}' +
+    '</style></head><body>' +
+    '<div class="noprint" style="text-align:right;margin:8px 14px"><button onclick="window.print()" style="padding:8px 20px;font-size:13px;cursor:pointer">🖨 Распечатать</button></div>' +
+    wm + '<div class="doc">' +
+      (logo ? '<img src="' + logo + '" style="height:56px;display:block;margin:0 auto 6px">' : '') +
+      '<h2>' + (brand.companyName || 'Расходы') + '</h2>' +
+      '<h2>Отчёт по расходам ' + periodLabel + '</h2>' +
+      '<p style="text-align:center;font-size:9.5pt;color:#333">Сформировано: ' + new Date().toLocaleString('ru') + '</p>' +
+      '<h3>По категориям</h3>' +
+      '<table><thead><tr><th>Категория</th><th style="width:130px;text-align:right">Сумма</th></tr></thead><tbody>' + catRows +
+        '<tr><td style="text-align:right"><b>ИТОГО</b></td><td style="text-align:right"><b>' + f(total) + '</b></td></tr></tbody></table>' +
+      '<h3>Все операции</h3>' +
+      '<table><thead><tr><th style="width:80px">Дата</th><th>Категория</th><th>Описание</th><th style="width:100px;text-align:right">Сумма</th><th style="width:70px">Оплата</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<div style="margin-top:26px;display:flex;justify-content:space-between;font-size:10pt"><span>Составил: _________________</span><span>Утвердил: _________________</span></div>' +
+    '</div></body></html>';
+  var w = window.open('', '_blank');
+  if (w) { w.document.write(html); w.document.close(); }
+  else toast('Разрешите всплывающие окна, чтобы открыть отчёт', 'error');
+}
+
 function updateExpensesKpi(list, compare) {
   var sum = function(arr, cats) {
     return arr.reduce(function(acc, e) {
