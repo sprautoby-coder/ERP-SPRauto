@@ -527,8 +527,11 @@
 
     <div class="kassa-grid">
       <div class="kassa-panel">
-        <div class="kassa-panel-title" id="kassa-ops-title">Операции за день</div>
-        <div id="kassa-ops"><div style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</div></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+          <div class="kassa-panel-title" id="kassa-ops-title" style="margin:0">Операции за день</div>
+          <button class="btn btn-ghost" onclick="printKassaReport_()" title="Отчёт по кассе для печати (перед изъятием владельцем)" style="white-space:nowrap;font-size:12px">🖨 Сформировать отчёт</button>
+        </div>
+        <div id="kassa-ops" style="margin-top:8px"><div style="text-align:center;padding:24px;color:var(--text3)">Загрузка...</div></div>
       </div>
       <div class="kassa-panel">
         <div class="kassa-panel-title">Отчёт для Telegram</div>

@@ -1974,6 +1974,7 @@ function loadKassa(force) {
 }
 
 function renderKassa(k) {
+  App._kassaLastK = k;   // для отчёта на печать
   var set = function(id, v){ var e = document.getElementById(id); if (e) e.textContent = v; };
   var isR = !!k.isRange;
   set('kassa-balance', money(k.balanceNow));
@@ -2036,6 +2037,57 @@ function kassaOpsTotal_(k, isR) {
     '<div style="border-top:1px solid var(--border);margin:4px 0"></div>' +
     row('Итого наличными за ' + (isR ? 'период' : 'день'), (net>=0?'+':'') + f(net), net>=0?'var(--success)':'var(--danger)') +
   '</div>';
+}
+
+// Печатный отчёт по кассе (с водяным знаком логотипа) — перед изъятием наличных владельцем
+function printKassaReport_() {
+  var k = App._kassaLastK;
+  if (!k) { toast('Сначала откройте кассу', 'error'); return; }
+  var brand = App.brand || {};
+  var logo = brand.logoDataUrl || '';
+  var f = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
+  var ops = k.operations || [];
+  var rows = ops.map(function(op){
+    var when = (op.date ? op.date + ' ' : '') + (op.time || '');
+    var isOut = op.type === 'расход', isBn = op.type === 'безнал';
+    var amt = (isOut ? '−' : (isBn ? '' : '+')) + f(op.amount);
+    var color = isOut ? '#c0392b' : (isBn ? '#4f46e5' : '#1e7e34');
+    return '<tr><td>' + when + '</td><td>' + (isBn ? 'Безнал · ' : '') + escapeHtml_(op.desc || '') + '</td>' +
+      '<td style="text-align:right;color:' + color + '">' + amt + '</td></tr>';
+  }).join('') || '<tr><td colspan="3" style="text-align:center;color:#777">Операций нет</td></tr>';
+  var periodLabel = k.isRange ? 'за период' + (k.startDate ? ' (с ' + k.startDate + ')' : '') : 'за день';
+  var wm = logo ? '<img src="' + logo + '" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:55%;max-width:150mm;opacity:.07;z-index:0;pointer-events:none">' : '';
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Отчёт по кассе</title><style>' +
+    '@page{size:A4;margin:14mm}*{box-sizing:border-box}' +
+    'body{font-family:"Times New Roman",serif;font-size:11pt;color:#000;margin:0}' +
+    '.doc{max-width:180mm;margin:0 auto;position:relative;z-index:1}' +
+    'h2{text-align:center;margin:3px 0;font-size:13pt}' +
+    'table{width:100%;border-collapse:collapse;margin:8px 0}' +
+    'td,th{border:1px solid #000;padding:3px 6px;font-size:10pt}th{background:#eee}' +
+    '.tot div{display:flex;justify-content:space-between;padding:2px 0}' +
+    '@media print{.noprint{display:none}}' +
+    '</style></head><body>' +
+    '<div class="noprint" style="text-align:right;margin:8px 14px"><button onclick="window.print()" style="padding:8px 20px;font-size:13px;cursor:pointer">🖨 Распечатать</button></div>' +
+    wm + '<div class="doc">' +
+      (logo ? '<img src="' + logo + '" style="height:56px;display:block;margin:0 auto 6px">' : '') +
+      '<h2>' + (brand.companyName || 'Касса') + '</h2>' +
+      '<h2>Отчёт по кассе ' + periodLabel + '</h2>' +
+      '<p style="text-align:center;font-size:9.5pt;color:#333">Сформировано: ' + new Date().toLocaleString('ru') + '</p>' +
+      '<table><thead><tr><th style="width:120px">Дата/время</th><th>Операция</th><th style="width:110px;text-align:right">Сумма</th></tr></thead><tbody>' + rows + '</tbody></table>' +
+      '<div class="tot" style="margin-top:10px">' +
+        '<div><span>Было на начало:</span><b>' + f(k.opening) + '</b></div>' +
+        '<div><span>Приход наличными:</span><b>+' + f(k.dayIn) + '</b></div>' +
+        '<div><span>Расход наличными:</span><b>−' + f(k.dayOut) + '</b></div>' +
+        (Number(k.dayBeznal) > 0 ? '<div><span>Безнал (справочно):</span><b>' + f(k.dayBeznal) + '</b></div>' : '') +
+        '<div style="border-top:1px solid #000;margin-top:4px;padding-top:4px"><span><b>Итого наличными в кассе:</b></span><b>' + f(k.closing != null ? k.closing : k.balanceNow) + '</b></div>' +
+      '</div>' +
+      '<div style="margin-top:30px;display:flex;justify-content:space-between;font-size:10pt">' +
+        '<span>Сдал: _________________ / _______________</span><span>Принял: _________________ / _______________</span>' +
+      '</div>' +
+    '</div></body></html>';
+  var w = window.open('', '_blank');
+  if (w) { w.document.write(html); w.document.close(); }
+  else toast('Разрешите всплывающие окна, чтобы открыть отчёт', 'error');
 }
 
 // Сверка наличных за период: поступило = осело в кассе + изъято + прочие расходы
@@ -9090,8 +9142,14 @@ function renderCardMatRows() {
   var inp = 'padding:3px 6px;border:1px solid var(--border);border-radius:5px;background:var(--inp);color:var(--text);font-size:12px';
   return mats.map(function(m, i) {
     var isOst = m['Тип'] === 'остаток';
-    var sqm   = Number(m['Кол-во м²']) || 0;
-    var cost  = Number(m['Стоимость']) || 0;
+    // Считаем на лету по актуальной формуле (цена — за пог.м): стоимость = м² × (цена_погон / ширина)
+    var unitM = m['Единица'] || 'пм';
+    var rollM = Number(m['Ширина рулона']) || 1.52;
+    var priceM = Number(m['Цена за м²']) || 0;
+    var qtyM = Number(m['Кол-во']) || 0;
+    var sqm   = (unitM === 'пм') ? Math.round(qtyM * rollM * 100) / 100 : qtyM;
+    var cost  = Math.round(sqm * (rollM ? priceM / rollM : 0) * 100) / 100 * (isOst ? -1 : 1);
+    m['Кол-во м²'] = sqm; m['Стоимость'] = cost;   // держим модель в синхроне для сохранения
     var hasRef = (App._materials || []).length > 0;
     var matCell = hasRef
       ? '<select class="cardmat-mat" data-i="' + i + '" onchange="onCardMatSelect(' + i + ')" style="' + inp + ';min-width:150px">' + cardMatOptions_(m['Материал ID']) + '</select>'
