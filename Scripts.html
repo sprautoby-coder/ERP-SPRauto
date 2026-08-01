@@ -4549,7 +4549,8 @@ App._inline = {};   // состояние редакторов по orderId
 var _inlEsc = function(s){ return String(s == null ? '' : s).replace(/"/g, '&quot;'); };
 var _inlFmt = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru') + ' ' + CUR; };
 function _matSqm(m){ return (m.unit === 'пм') ? Math.round((Number(m.qty)||0)*(Number(m.roll)||1.52)*100)/100 : (Number(m.qty)||0); }
-function _matCost(m){ return Math.round(_matSqm(m)*(Number(m.price)||0)*100)/100 * (m.type === 'остаток' ? -1 : 1); }
+// Цена — за ПОГОННЫЙ метр: стоимость = м² × (цена_погон / ширина) = пог.м × цена_погон.
+function _matCost(m){ var roll=Number(m.roll)||1.52; var areaPrice=roll?(Number(m.price)||0)/roll:0; return Math.round(_matSqm(m)*areaPrice*100)/100 * (m.type === 'остаток' ? -1 : 1); }
 
 function _inlineEnsureMaterials(cb) {
   if (App._materials && App._materials.length) { cb(); return; }
@@ -4632,7 +4633,7 @@ function buildInlineEditor(id) {
   return '<div class="film-detail-title">🎞 Расход плёнки и расходы — сверьте с данными мастеров (остаток вычитается)</div>' +
     '<div class="inline-cols">' +
       '<div>' +
-        '<table class="film-table"><thead><tr><th>Плёнка</th><th>Кол-во</th><th style="text-align:right">Площадь</th><th style="text-align:right">Цена/м²</th><th>Тип</th><th style="text-align:right">Сумма</th><th></th></tr></thead>' +
+        '<table class="film-table"><thead><tr><th>Плёнка</th><th>Кол-во</th><th style="text-align:right">Площадь</th><th style="text-align:right">Цена/пог.м</th><th>Тип</th><th style="text-align:right">Сумма</th><th></th></tr></thead>' +
         '<tbody>' + matRows + '</tbody></table>' +
         '<button class="btn btn-ghost" style="margin-top:4px;padding:3px 10px;font-size:11px" onclick="inlineAddMat(\'' + id + '\')">+ Плёнка</button>' +
       '</div>' +
@@ -8716,7 +8717,7 @@ function renderOrderCard(order) {
                 '</div>' +
               '</div>' +
               '<table class="data-table" style="border:none">' +
-                '<thead><tr><th>Материал</th><th style="text-align:center">Кол-во</th><th style="text-align:center">м²</th><th style="text-align:center">Цена/м²</th><th>Тип</th><th style="text-align:right">Стоимость</th></tr></thead>' +
+                '<thead><tr><th>Материал</th><th style="text-align:center">Кол-во</th><th style="text-align:center">м²</th><th style="text-align:center">Цена/пог.м</th><th>Тип</th><th style="text-align:right">Стоимость</th></tr></thead>' +
                 '<tbody id="card-mat-tbody">' + matRows + '</tbody>' +
               '</table>' +
             '</div>') +
@@ -9106,7 +9107,7 @@ function renderCardMatRows() {
       '</td>' +
       '<td style="text-align:center">' + sqm.toFixed(2) + ' м²</td>' +
       '<td style="text-align:center;white-space:nowrap">' +
-        '<input class="cardmat-price" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(m['Цена за м²'])||0) + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:72px;text-align:left"> ' + CUR + '/м²' +
+        '<input class="cardmat-price" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(m['Цена за м²'])||0) + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:72px;text-align:left"> ' + CUR + '/пог.м' +
       '</td>' +
       '<td><select class="cardmat-type" data-i="' + i + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + '">' +
           '<option value="расход"' + (!isOst?' selected':'') + '>расход</option>' +
@@ -9127,8 +9128,9 @@ function refreshCardMats() {
     var qty   = Number(m['Кол-во']) || 0;
     var sqm   = (unit === 'пм') ? Math.round(qty * roll * 100) / 100 : qty;
     m['Кол-во м²']  = sqm;
-    // остаток вычитается из расхода → отрицательная стоимость
-    m['Стоимость']  = Math.round(sqm * price * 100) / 100 * (m['Тип'] === 'остаток' ? -1 : 1);
+    // Цена — за ПОГОННЫЙ метр. Стоимость = м² × (цена_погон / ширина) = пог.м × цена_погон.
+    var areaPrice = roll ? (price / roll) : 0;
+    m['Стоимость']  = Math.round(sqm * areaPrice * 100) / 100 * (m['Тип'] === 'остаток' ? -1 : 1);
   });
   var tb = document.getElementById('card-mat-tbody');
   if (tb) tb.innerHTML = renderCardMatRows();

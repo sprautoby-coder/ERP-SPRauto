@@ -208,11 +208,12 @@ function saveOrderMaterials(orderId, lines) {
       const unit       = line.unit || 'пм';
       const type       = line.type === 'остаток' ? 'остаток' : 'расход';
 
-      // Перевод в м²
+      // Перевод в м²: расход в пог.м → пог.м × ширина; остаток задаётся сразу в м².
       const qtySqm = (unit === 'пм') ? round2_(qty * rollWidth) : round2_(qty);
-      // Стоимость: расход — со знаком «+», остаток — со знаком «−» (вычитается из расхода).
-      // Кусок, оставшийся пригодным после оклейки, не считается израсходованным.
-      const cost   = round2_(qtySqm * price) * (type === 'остаток' ? -1 : 1);
+      // Цена хранится ЗА ПОГОННЫЙ МЕТР. Стоимость = м² × (цена_погон / ширина) = пог.м × цена_погон.
+      // Остаток (пригодный кусок) вычитается из расхода: цена м² та же, знак «−».
+      const areaPrice = rollWidth ? (price / rollWidth) : 0;   // цена за м²
+      const cost   = round2_(qtySqm * areaPrice) * (type === 'остаток' ? -1 : 1);
 
       totalMaterialCost += cost;
 
