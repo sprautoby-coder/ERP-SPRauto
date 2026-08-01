@@ -2055,7 +2055,22 @@ function printKassaReport_() {
     return '<tr><td>' + when + '</td><td>' + (isBn ? 'Безнал · ' : '') + escapeHtml_(op.desc || '') + '</td>' +
       '<td style="text-align:right;color:' + color + '">' + amt + '</td></tr>';
   }).join('') || '<tr><td colspan="3" style="text-align:center;color:#777">Операций нет</td></tr>';
-  var periodLabel = k.isRange ? 'за период' + (k.startDate ? ' (с ' + k.startDate + ')' : '') : 'за день';
+  // Период — по выбранным датам, формат ДД.ММ.ГГГГ (без объектов даты и таймзон)
+  var fmtD = function(v){
+    if (!v) return '';
+    var m = String(v).match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return m[3] + '.' + m[2] + '.' + m[1];
+    var d = (v instanceof Date) ? v : new Date(v);
+    if (isNaN(d)) return String(v);
+    var p = function(x){ return String(x).padStart(2,'0'); };
+    return p(d.getDate()) + '.' + p(d.getMonth()+1) + '.' + d.getFullYear();
+  };
+  var range = (typeof getPeriodRangeFromUI === 'function') ? (getPeriodRangeFromUI('kassa') || {}) : {};
+  var fromRu = fmtD(range.from), toRu = fmtD(range.to);
+  var periodLabel;
+  if (fromRu || toRu) periodLabel = 'за период' + (fromRu ? ' с ' + fromRu : '') + (toRu ? ' по ' + toRu : '');
+  else if (!k.isRange && typeof kassaIsoToRu_ === 'function' && App._kassaDate) periodLabel = 'за ' + kassaIsoToRu_(App._kassaDate);
+  else periodLabel = k.isRange ? 'за период' : 'за день';
   var wm = logo ? '<img src="' + logo + '" style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:55%;max-width:150mm;opacity:.07;z-index:0;pointer-events:none">' : '';
   var html = '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Отчёт по кассе</title><style>' +
     '@page{size:A4;margin:14mm}*{box-sizing:border-box}' +
