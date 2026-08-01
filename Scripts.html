@@ -6060,7 +6060,11 @@ var MAT_NUM_FIELDS = { rollWidth:1, rollLength:1, price:1, sellPerMeter:1, sellP
 
 // Сохранить одно поле материала прямо из таблицы (без перезагрузки всей таблицы)
 function inlineMatSave(id, field, value, el) {
-  if (!id) return;
+  if (!id) {
+    if (el) el.classList.add('mat-err');
+    toast('Не удалось сохранить: у материала нет ID. Обновите справочник (кнопка «Обновить») — он присвоится автоматически.', 'error');
+    return;
+  }
   var isNum = MAT_NUM_FIELDS[field];
   var val   = isNum ? (String(value).trim() === '' ? '' : Number(value)) : value;
   var m = (App._materials || []).find(function(x){ return String(x['ID']) === String(id); });

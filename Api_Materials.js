@@ -14,6 +14,7 @@
  */
 function getMaterials(serviceCode) {
   return safeCall(function() {
+    ensureMaterialIds_();   // самоисцеление: строкам без ID выдаём ID, иначе их нельзя редактировать
     const all = readSheetAsObjects('DATABASE', 'MATERIALS');
     return all.filter(function(m) {
       if (!m['ID']) return false;
@@ -21,6 +22,43 @@ function getMaterials(serviceCode) {
       if (serviceCode && m['Услуга'] !== 'Универсальная' && m['Услуга'] !== serviceCode) return false;
       return true;
     });
+  });
+}
+
+/**
+ * Выдать ID всем строкам справочника материалов, у которых его нет.
+ * Без ID inline-редактирование (updateMaterial по ID) молча не срабатывает —
+ * такие строки чаще всего появляются при ручном вводе прямо в таблицу или старом импорте.
+ * Пишет в лист только если реально есть строки без ID (иначе — ничего не делает).
+ */
+function ensureMaterialIds_() {
+  const sheet = getTab('DATABASE', 'MATERIALS');
+  ensureColumns_(sheet, ['ID']);
+  const lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  const data    = sheet.getDataRange().getValues();
+  const headers = data[0];
+  const idIdx   = headers.indexOf('ID');
+  const nameIdx = headers.indexOf('Название');
+  if (idIdx < 0) return;
+
+  let maxN = 0;
+  const missing = [];
+  for (let i = 1; i < data.length; i++) {
+    const id = String(data[i][idIdx] || '').trim();
+    if (id) {
+      const m = id.match(/(\d+)\s*$/);
+      if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
+    } else if (nameIdx < 0 || String(data[i][nameIdx] || '').trim()) {
+      missing.push(i);   // без ID, но с названием (не пустая строка)
+    }
+  }
+  if (!missing.length) return;
+
+  bumpDataVersion_();
+  missing.forEach(function(rowIdx) {
+    maxN += 1;
+    sheet.getRange(rowIdx + 1, idIdx + 1).setValue('МАТ-' + String(maxN).padStart(4, '0'));
   });
 }
 
