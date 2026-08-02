@@ -4201,7 +4201,8 @@ function openCheckModal(orderId, cat){
 
   if (cat === 'arm'){                          // арматура — данные лежат в самом заказе
     App._chk.rows = (orderChecksObj_(o).armItems || []).map(function(r){ return { work:r.work||'', who:r.who||'', sum:Number(r.sum)||0 }; });
-    renderCheckBody_();
+    if (typeof ensureEmployeesLoaded_ === 'function') ensureEmployeesLoaded_(function(){ renderCheckBody_(); });  // список мастеров для «Кто»
+    else renderCheckBody_();
     return;
   }
   var fetchRows = function(){
@@ -4340,7 +4341,7 @@ function chkArmRows_(rows, inp){
   return rows.map(function(r, i){
     return '<tr>' +
       '<td><input class="chk-arm-work" data-i="' + i + '" value="' + escapeHtml_(r.work||'') + '" placeholder="напр. снятие бампера" style="' + inp + ';width:100%"></td>' +
-      '<td><input class="chk-arm-who" data-i="' + i + '" value="' + escapeHtml_(r.who||'') + '" placeholder="кто" style="' + inp + ';width:120px"></td>' +
+      '<td><select class="chk-arm-who" data-i="' + i + '" style="' + inp + ';width:150px">' + armWhoOptions_(r.who) + '</select></td>' +
       '<td style="text-align:right"><input class="chk-arm-sum" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(r.sum)||0) + '" style="' + inp + ';width:80px;text-align:right"></td>' +
       '<td style="text-align:right"><button onclick="chkArmDel_(' + i + ')" title="Удалить" style="border:none;background:transparent;color:var(--text3);cursor:pointer">✕</button></td>' +
     '</tr>';
@@ -4392,7 +4393,7 @@ function chkArmSync_(){
     if (s) r.sum  = Number(s.value)||0;
   });
 }
-function chkArmAdd_(){ chkArmSync_(); App._chk.rows.push({ work:'', who:'', sum:0 }); document.getElementById('chk-arm-tbody').innerHTML = chkArmRows_(App._chk.rows, 'padding:4px 7px;border:1px solid var(--border);border-radius:6px;background:var(--inp);color:var(--text);font-size:12px'); }
+function chkArmAdd_(){ chkArmSync_(); App._chk.rows.push({ work:'', who:defaultArmWho_(), sum:0 }); document.getElementById('chk-arm-tbody').innerHTML = chkArmRows_(App._chk.rows, CHK_INP_); }
 function chkArmDel_(i){ chkArmSync_(); App._chk.rows.splice(i,1); document.getElementById('chk-arm-tbody').innerHTML = chkArmRows_(App._chk.rows, 'padding:4px 7px;border:1px solid var(--border);border-radius:6px;background:var(--inp);color:var(--text);font-size:12px'); }
 
 // Сохранить проверку: при необходимости — правки строк → пересчёт финансов → статус категории
@@ -9587,9 +9588,9 @@ function renderCardMatRows() {
       // Мастера подают расход/остаток куском: длина × ширина → итого м² (можно ввести итого напрямую)
       var Lp = Number(m['Длина куска']) || 0, Wp = Number(m['Ширина куска']) || 0;
       qtyInner =
-        '<input class="cardmat-len" data-i="' + i + '" type="number" step="0.01" min="0" placeholder="длина" value="' + (Lp||'') + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:50px;text-align:left"> × ' +
-        '<input class="cardmat-wid" data-i="' + i + '" type="number" step="0.01" min="0" placeholder="ширина" value="' + (Wp||'') + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:50px;text-align:left"> = ' +
-        '<input class="cardmat-total" data-i="' + i + '" type="number" step="0.01" min="0" title="итого м²" value="' + qtyM + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:58px;text-align:left"> ' + unitSel;
+        '<input class="cardmat-len" data-i="' + i + '" type="number" step="0.01" min="0" placeholder="длина" value="' + (Lp||'') + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:82px;text-align:left"> × ' +
+        '<input class="cardmat-wid" data-i="' + i + '" type="number" step="0.01" min="0" placeholder="ширина" value="' + (Wp||'') + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:82px;text-align:left"> = ' +
+        '<input class="cardmat-total" data-i="' + i + '" type="number" step="0.01" min="0" title="итого м²" value="' + qtyM + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:96px;text-align:left"> ' + unitSel;
     } else {
       qtyInner =
         '<input class="cardmat-qty" data-i="' + i + '" type="number" step="0.01" min="0" value="' + qtyM + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:70px;text-align:left"> ' + unitSel;
@@ -9958,6 +9959,26 @@ function removeCardExpLine(i) {
   matAutoSave();
 }
 
+/* --- Арматура: список мастеров + штатный арматурщик по умолчанию --- */
+function empAllNames_(){ return (App.employees || []).map(function(e){ return e['ФИО'] || e['Имя'] || ''; }).filter(Boolean); }
+// Штатный арматурщик: сначала по должности/специализации «арматур…», иначе по имени «Никит…»
+function defaultArmWho_(){
+  var emps = App.employees || [];
+  var byRole = emps.find(function(e){ return /арматур/i.test(String(e['Должность']||'') + ' ' + String(e['Специализация']||'') + ' ' + String(e['Роль']||'')); });
+  if (byRole) return byRole['ФИО'] || byRole['Имя'] || '';
+  var byName = emps.find(function(e){ return /никит/i.test(String(e['ФИО']||e['Имя']||'')); });
+  return byName ? (byName['ФИО'] || byName['Имя'] || '') : '';
+}
+// <option>-ы мастеров для поля «Кто» (сохранённое имя, которого нет в списке, тоже показываем)
+function armWhoOptions_(selected){
+  var sel = selected || '';
+  var opts = '<option value="">— выбрать —</option>';
+  var found = false;
+  empAllNames_().forEach(function(n){ if (n === sel) found = true; opts += '<option value="' + escapeHtml_(n) + '"' + (n === sel ? ' selected' : '') + '>' + escapeHtml_(n) + '</option>'; });
+  if (sel && !found) opts += '<option value="' + escapeHtml_(sel) + '" selected>' + escapeHtml_(sel) + '</option>';
+  return opts;
+}
+
 /* --- Карточка заказа: редактор арматурных работ (хранится в JSON «Проверки» заказа) --- */
 function cardArmInit_(){
   var o = App._currentOrder; if (!o) return;
@@ -9971,7 +9992,7 @@ function renderCardArmRows() {
   return o.arm.map(function(r, i) {
     return '<tr>' +
       '<td><input class="cardarm-work" data-i="' + i + '" value="' + escapeHtml_(r.work||'') + '" placeholder="напр. снятие бампера" oninput="onCardArmEdit(' + i + ')" style="' + inp + ';width:100%"></td>' +
-      '<td><input class="cardarm-who" data-i="' + i + '" value="' + escapeHtml_(r.who||'') + '" placeholder="кто" oninput="onCardArmEdit(' + i + ')" style="' + inp + ';width:130px"></td>' +
+      '<td><select class="cardarm-who" data-i="' + i + '" onchange="onCardArmEdit(' + i + ')" style="' + inp + ';width:150px">' + armWhoOptions_(r.who) + '</select></td>' +
       '<td style="text-align:right;white-space:nowrap"><input class="cardarm-sum" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(r.sum)||0) + '" oninput="onCardArmEdit(' + i + ')" style="' + inp + ';width:88px;text-align:left"> ' + CUR + '</td>' +
       '<td style="text-align:right"><button onclick="removeCardArmLine(' + i + ')" title="Удалить" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px">✕</button></td>' +
     '</tr>';
@@ -9990,9 +10011,10 @@ function onCardArmEdit(i) {
 function addCardArmLine() {
   var o = App._currentOrder; if (!o) return;
   cardArmInit_();
-  o.arm.push({ work:'', who:'', sum:0 });
+  o.arm.push({ work:'', who:defaultArmWho_(), sum:0 });   // штатный арматурщик по умолчанию
   var tb = document.getElementById('card-arm-tbody');
   if (tb) tb.innerHTML = renderCardArmRows();
+  armAutoSave();
 }
 function removeCardArmLine(i) {
   var o = App._currentOrder; if (!o || !o.arm) return;
