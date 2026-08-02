@@ -9892,7 +9892,7 @@ function renderCardPersonnel() {
     '<select id="card-mgr" style="' + inp + ';margin:2px 0 8px" onchange="persAutoSave()">' + mgrOpts + '</select>' +
     '<label style="' + lbl + '">Администратор</label>' +
     '<select id="card-admin" style="' + inp + ';margin:2px 0 8px" onchange="persAutoSave()">' + adminOpts + '</select>' +
-    '<div style="' + lbl + '">' + (isMixedOrder ? 'Оклейщики (бонус — с части оклейки)' : 'Мастера') + '</div>' +
+    '<div style="' + lbl + '">' + (isMixedOrder ? 'Оклейщики (бонус — с части оклейки)' : (isTintOrder ? 'Тонировщики' : 'Мастера')) + '</div>' +
     '<div id="card-masters-summary" style="font-size:12px;font-weight:600;color:var(--accent);margin-bottom:5px;min-height:16px">' +
       (mastersList.length ? '✔ ' + mastersList.join(', ') : '<span style="color:var(--text3);font-weight:400">не выбрано</span>') + '</div>' +
     '<div style="max-height:118px;overflow:auto">' + masterChecks + '</div>' +
