@@ -10700,8 +10700,70 @@ function renderCardFinance_(order) {
     (Number(order['Бонус тонировщика']) > 0 ? finLine_('🎨 Бонус тонировщика', fmt(order['Бонус тонировщика']), '#e0559a') : '') +
     (Number(order['Бонус менеджера тонировки']) > 0 ? finLine_('🎨 Бонус менеджера (тонировка)', fmt(order['Бонус менеджера тонировки']), '#e0559a') : '') +
     (Number(order['Бонус администратора тонировки']) > 0 ? finLine_('🎨 Бонус админ. (тонировка)', fmt(order['Бонус администратора тонировки']), '#e0559a') : '') +
+    '<div style="margin:6px 0 0"><span id="card-bonus-calc-toggle" onclick="toggleBonusCalc_()" style="font-size:11px;color:var(--accent);cursor:pointer;user-select:none">▸ как посчитаны бонусы</span></div>' +
+    '<div id="card-bonus-calc" style="display:none">' + bonusBreakdownHtml_(order) + '</div>' +
     '<div style="border-top:2px solid var(--border);margin:8px 0"></div>' +
     finLine_('Маржинальная',    fmt(order['Маржинальная прибыль']), 'var(--success)', true);
+}
+
+function toggleBonusCalc_() {
+  var box = document.getElementById('card-bonus-calc');
+  var tog = document.getElementById('card-bonus-calc-toggle');
+  if (!box) return;
+  var open = box.style.display === 'none';
+  box.style.display = open ? 'block' : 'none';
+  if (tog) tog.textContent = (open ? '▾' : '▸') + ' как посчитаны бонусы';
+}
+
+// Пошаговая расшифровка расчёта бонусов (значения — из уже посчитанных полей заказа)
+function bonusBreakdownHtml_(o) {
+  var num = function(k){ return Number(o[k]) || 0; };
+  var f   = function(n){ return (Math.round((Number(n)||0)*100)/100).toLocaleString('ru'); };
+  var pct = function(part, base){ return base > 0 ? (Math.round(part / base * 1000) / 10) : 0; };
+  var cnt = function(k){ return String(o[k]||'').split(',').map(function(x){return x.trim();}).filter(Boolean).length; };
+
+  var price = num('Стоимость заказа'), mat = num('Итого материалы'), exp = num('Итого расходы');
+  var gross = num('Валовая прибыль');
+  var disc  = Math.max(0, price - mat - exp - gross);   // фактический −15%
+  var tintPrice = num('Стоимость тонировки');
+  var tintGross = (price > 0 && tintPrice > 0) ? gross * (tintPrice / price) : 0;
+  var wrapGross = gross - tintGross;
+  var isSplit   = tintPrice > 0;
+
+  var wMas = cnt('Оклейщики'), tMas = cnt('Тонировщики'), wMgr = cnt('Менеджер'), tMgr = cnt('Менеджер тонировки') || wMgr;
+  var masterPer = num('Бонус оклейщика'), mgrPer = num('Бонус менеджера'), admTot = num('Бонус администратора');
+  var tMasterPer = num('Бонус тонировщика'), tMgrPer = num('Бонус менеджера тонировки'), tAdmTot = num('Бонус администратора тонировки');
+  var masterPool = masterPer * wMas, mgrPool = mgrPer * wMgr, tMasterPool = tMasterPer * tMas, tMgrPool = tMgrPer * tMgr;
+
+  var css = 'font-size:11.5px;line-height:1.5;color:var(--text2);background:var(--bg-card2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-top:4px';
+  var step = function(t){ return '<div style="margin:2px 0">' + t + '</div>'; };
+  var b = function(t){ return '<b style="color:var(--text)">' + t + '</b>'; };
+  var head = function(t){ return '<div style="font-weight:700;color:var(--text);margin:6px 0 2px">' + t + '</div>'; };
+
+  var html = '<div style="' + css + '">';
+  html += step('1. Валовая = ' + f(price) + ' − ' + f(mat) + ' (мат.) − ' + f(exp) + ' (расх.)' + (disc > 0.5 ? ' − ' + f(disc) + ' (−15%)' : '') + ' = ' + b(f(gross)));
+
+  if (isSplit) {
+    html += head('2. Делим валовую по доле в цене');
+    html += step('• тонировка: ' + f(gross) + ' × (' + f(tintPrice) + ' / ' + f(price) + ') = ' + b(f(tintGross)));
+    html += step('• оклейка: ' + f(gross) + ' − ' + f(tintGross) + ' = ' + b(f(wrapGross)));
+  }
+
+  html += head((isSplit ? '3. ' : '2. ') + 'Бонусы' + (isSplit ? ' оклейки' : ''));
+  if (wMas) html += step('Мастер: ' + f(wrapGross) + ' × ' + pct(masterPool, wrapGross) + '% = ' + f(masterPool) + (wMas > 1 ? ' ÷ ' + wMas + ' = ' + b(f(masterPer)) + ' каждому' : ' = ' + b(f(masterPer)))) ;
+  if (wMgr) html += step('Менеджер: ' + f(wrapGross) + ' × ' + pct(mgrPool, wrapGross) + '% = ' + b(f(mgrPer)) + (wMgr > 1 ? ' ×' + wMgr : ''));
+  if (admTot) html += step('Админ: ' + f(wrapGross) + ' × ' + pct(admTot, wrapGross) + '% = ' + b(f(admTot)));
+
+  if (isSplit && (tMasterPool || tMgrPool || tAdmTot)) {
+    html += head('4. Бонусы тонировки (с ' + f(tintGross) + ')');
+    if (tMas) html += step('Тонировщик: ' + f(tintGross) + ' × ' + pct(tMasterPool, tintGross) + '% = ' + f(tMasterPool) + (tMas > 1 ? ' ÷ ' + tMas + ' = ' + b(f(tMasterPer)) : ' = ' + b(f(tMasterPer))));
+    if (tMgrPool) html += step('Менеджер: ' + f(tintGross) + ' × ' + pct(tMgrPool, tintGross) + '% = ' + b(f(tMgrPer)));
+    if (tAdmTot)  html += step('Админ: ' + f(tintGross) + ' × ' + pct(tAdmTot, tintGross) + '% = ' + b(f(tAdmTot)));
+  }
+
+  html += '<div style="margin-top:6px;color:var(--text3)">Показанные суммы бонусов — на одного человека. Ставки: мастер/менеджер/админ берутся из Настроек.</div>';
+  html += '</div>';
+  return html;
 }
 
 // Печать документа: сперва досохраняем правки (cvFlush_), затем генерируем.
