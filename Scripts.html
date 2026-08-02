@@ -3846,9 +3846,17 @@ function onSvcFilterChange_(){
   updateSvcFilterLabel_(); filterOrders();
 }
 function updateSvcFilterLabel_(){
-  var lbl = document.getElementById('ord-svc-filter-label'); if (!lbl) return;
+  var lbl = document.getElementById('ord-svc-filter-label');
+  var btn = document.getElementById('ord-svc-filter-btn');
   var sel = App._orderSvcFilter || [];
-  lbl.textContent = sel.length === 0 ? 'Все услуги' : (sel.length === 1 ? sel[0] : ('Услуги: ' + sel.length));
+  var active = sel.length > 0;
+  if (lbl) lbl.textContent = active ? (sel.length === 1 ? sel[0] : ('Услуги: ' + sel.length)) : 'Все услуги';
+  if (btn) {   // активный фильтр — подсвечиваем акцентом, чтобы сразу было видно
+    btn.style.borderColor = active ? 'var(--accent)' : '';
+    btn.style.color       = active ? 'var(--accent)' : '';
+    btn.style.background   = active ? 'rgba(14,165,183,.12)' : '';
+    btn.style.fontWeight   = active ? '700' : '';
+  }
 }
 // Закрытие меню при клике вне его
 try { document.addEventListener('click', function(e){ var w = document.getElementById('ord-svc-filter'); var m = document.getElementById('ord-svc-filter-menu'); if (m && w && !w.contains(e.target)) m.style.display = 'none'; }); } catch(e){}
