@@ -21,6 +21,15 @@ function getMaterials(serviceCode) {
       if (m['Активен'] === 'Нет') return false;
       if (serviceCode && m['Услуга'] !== 'Универсальная' && m['Услуга'] !== serviceCode) return false;
       return true;
+    }).map(function(m) {
+      // Обогащаем себест. м², если она пуста, но задана себест. пог.м и ширина рулона.
+      var sqm  = parseFloat(m['Себестоимость м²']);
+      var pm   = parseFloat(m['Цена']);
+      var roll = parseFloat(m['Ширина рулона']);
+      if ((!isFinite(sqm) || sqm === 0) && isFinite(pm) && pm !== 0 && isFinite(roll) && roll > 0) {
+        m['Себестоимость м²'] = Math.round(pm / roll * 100) / 100;
+      }
+      return m;
     });
   });
 }
@@ -73,7 +82,7 @@ function createMaterial(payload) {
     // Себестоимость может быть 0/пустой (перепродажа, неизвестна) — не блокируем создание
 
     const sheet   = getTab('DATABASE', 'MATERIALS');
-    ensureColumns_(sheet, ['Цена безнал', 'Цена постоянным']);   // тарифы продажи (авто-миграция)
+    ensureColumns_(sheet, ['Цена безнал', 'Цена постоянным', 'Себестоимость м²']);   // тарифы продажи + себест. м² (авто-миграция)
     const lastRow = sheet.getLastRow();
     const id      = 'МАТ-' + String(lastRow).padStart(4, '0');
     const tz      = Session.getScriptTimeZone();
@@ -87,6 +96,7 @@ function createMaterial(payload) {
       'Услуга':        payload.service     || 'Универсальная',
       'Единица':       payload.unit,
       'Цена':          Number(payload.price) || 0,
+      'Себестоимость м²': (payload.costSqm !== undefined && payload.costSqm !== '' && payload.costSqm !== null) ? Number(payload.costSqm) : '',
       'Ширина рулона': (payload.rollWidth !== undefined && payload.rollWidth !== '' && payload.rollWidth !== null) ? Number(payload.rollWidth) : '',
       'Длина рулона':  (payload.rollLength   !== undefined && payload.rollLength   !== '' && payload.rollLength   !== null) ? Number(payload.rollLength)   : '',
       'Цена за пог.м': (payload.sellPerMeter !== undefined && payload.sellPerMeter !== '' && payload.sellPerMeter !== null) ? Number(payload.sellPerMeter) : '',
@@ -111,7 +121,7 @@ function updateMaterial(id, payload) {
   return safeCall(function() {
     bumpDataVersion_();
     const sheet   = getTab('DATABASE', 'MATERIALS');
-    ensureColumns_(sheet, ['Цена безнал', 'Цена постоянным']);   // тарифы продажи (авто-миграция)
+    ensureColumns_(sheet, ['Цена безнал', 'Цена постоянным', 'Себестоимость м²']);   // тарифы продажи + себест. м² (авто-миграция)
     const data    = sheet.getDataRange().getValues();
     const headers = data[0];
     const idIdx   = headers.indexOf('ID');
@@ -127,6 +137,7 @@ function updateMaterial(id, payload) {
         'Услуга':        payload.service,
         'Единица':       payload.unit,
         'Цена':          payload.price !== undefined ? Number(payload.price) : undefined,
+        'Себестоимость м²': payload.costSqm !== undefined ? (payload.costSqm === '' ? '' : Number(payload.costSqm)) : undefined,
         'Ширина рулона': payload.rollWidth   !== undefined ? (payload.rollWidth   === '' ? '' : Number(payload.rollWidth))   : undefined,
         'Длина рулона':  payload.rollLength  !== undefined ? (payload.rollLength  === '' ? '' : Number(payload.rollLength))  : undefined,
         'Цена за пог.м': payload.sellPerMeter!== undefined ? (payload.sellPerMeter=== '' ? '' : Number(payload.sellPerMeter)): undefined,
@@ -222,6 +233,7 @@ function saveOrderMaterials(orderId, lines) {
     lines = lines || [];
 
     const sheet   = getTab('DATABASE', 'ORDER_MATERIALS');
+    ensureColumns_(sheet, ['Длина куска', 'Ширина куска']);   // размеры куска для расхода в м² (авто-миграция)
     const data    = sheet.getDataRange().getValues();
     const headers = data[0];
     const orderIdIdx = headers.indexOf('Заказ ID');
@@ -263,6 +275,8 @@ function saveOrderMaterials(orderId, lines) {
           'Название':      line.name        || '',
           'Единица':       unit,
           'Кол-во':        qty,
+          'Длина куска':   unit === 'м²' ? (Number(line.lenPiece) || '') : '',
+          'Ширина куска':  unit === 'м²' ? (Number(line.widPiece) || '') : '',
           'Ширина рулона': unit === 'пм' ? rollWidth : '',
           'Кол-во м²':     qtySqm,
           'Цена за м²':    price,

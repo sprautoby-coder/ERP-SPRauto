@@ -6004,7 +6004,7 @@ function renderMaterialsTable(list) {
   var tbody = document.getElementById('materials-tbody');
   if (!tbody) return;
   if (!list || list.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text3)">Материалы не добавлены. Нажмите «+ Добавить материал» или «⬇ Импорт из таблицы»</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;padding:32px;color:var(--text3)">Материалы не добавлены. Нажмите «+ Добавить материал» или «⬇ Импорт из таблицы»</td></tr>';
     return;
   }
   var esc = function(s){ return String(s == null ? '' : s).replace(/"/g,'&quot;'); };
@@ -6031,6 +6031,7 @@ function renderMaterialsTable(list) {
       '<td>' + sel(id, 'unit',     m['Единица']   || 'пм', MAT_UNITS) + '</td>' +
       '<td>' + inp(id, 'rollWidth',   matNum_(m['Ширина рулона']), ' mat-num') + '</td>' +
       '<td>' + inp(id, 'rollLength',  matNum_(m['Длина рулона']),  ' mat-num') + '</td>' +
+      '<td>' + inp(id, 'costSqm',     matNum_(m['Себестоимость м²']), ' mat-num mat-cost') + '</td>' +
       '<td>' + inp(id, 'price',       matNum_(m['Цена']),          ' mat-num mat-cost') + '</td>' +
       '<td>' + inp(id, 'sellPerMeter',matNum_(m['Цена за пог.м']),   ' mat-num') + '</td>' +
       '<td>' + inp(id, 'sellBeznal',  matNum_(m['Цена безнал']),     ' mat-num') + '</td>' +
@@ -6053,11 +6054,11 @@ function renderMaterialsTable(list) {
 
 // Названия колонок листа для локального обновления кэша
 var MAT_FIELD_COL = {
-  name:'Название', category:'Категория', service:'Услуга', unit:'Единица', price:'Цена',
+  name:'Название', category:'Категория', service:'Услуга', unit:'Единица', price:'Цена', costSqm:'Себестоимость м²',
   rollWidth:'Ширина рулона', rollLength:'Длина рулона', sellPerMeter:'Цена за пог.м', sellPerRoll:'Цена за рулон',
   sellBeznal:'Цена безнал', sellRegular:'Цена постоянным'
 };
-var MAT_NUM_FIELDS = { rollWidth:1, rollLength:1, price:1, sellPerMeter:1, sellPerRoll:1, sellBeznal:1, sellRegular:1 };
+var MAT_NUM_FIELDS = { rollWidth:1, rollLength:1, price:1, costSqm:1, sellPerMeter:1, sellPerRoll:1, sellBeznal:1, sellRegular:1 };
 
 // Сохранить одно поле материала прямо из таблицы (без перезагрузки всей таблицы)
 function inlineMatSave(id, field, value, el) {
@@ -6069,9 +6070,24 @@ function inlineMatSave(id, field, value, el) {
   var isNum = MAT_NUM_FIELDS[field];
   var val   = isNum ? (String(value).trim() === '' ? '' : Number(value)) : value;
   var m = (App._materials || []).find(function(x){ return String(x['ID']) === String(id); });
+  var payload = {}; payload[field] = val;
+
+  // Связка себестоимости: м² ↔ пог.м через ширину рулона (заполнил одну — вторая считается сама).
+  if (field === 'costSqm' || field === 'price') {
+    var roll = Number(m && m['Ширина рулона']) || 1.52;
+    var num  = (val === '' ? 0 : Number(val));
+    var pField, pVal;
+    if (field === 'costSqm') { pField = 'price';   pVal = Math.round(num * roll * 100) / 100; }        // пог.м = м² × ширина
+    else                     { pField = 'costSqm'; pVal = roll ? Math.round(num / roll * 100) / 100 : 0; } // м² = пог.м ÷ ширина
+    payload[pField] = pVal;
+    if (m) m[MAT_FIELD_COL[pField]] = pVal;
+    var tr  = el && el.closest ? el.closest('tr') : null;
+    var pEl = tr ? tr.querySelector('.mat-inp[data-field="' + pField + '"]') : null;
+    if (pEl) { pEl.value = pVal; pEl.dataset.orig = String(pVal); }
+  }
+
   if (m) m[MAT_FIELD_COL[field]] = val;                 // оптимистично в кэш
   if (el) { el.classList.remove('mat-err'); el.classList.add('mat-saving'); el.dataset.orig = String(el.value); }  // помечаем как «в процессе сохранения» → повторно не досохраняем
-  var payload = {}; payload[field] = val;
   google.script.run
     .withSuccessHandler(function(resp){
       if (el) el.classList.remove('mat-saving');
@@ -9230,7 +9246,8 @@ function removeTintFilmLine(i) {
 
 function blankMatRow_() {
   return { 'Материал ID':'', 'Название':'', 'Единица':'пм', 'Кол-во':0,
-    'Ширина рулона':1.52, 'Цена за м²':0, 'Тип':'расход', 'Кол-во м²':0, 'Стоимость':0 };
+    'Ширина рулона':1.52, 'Цена за м²':0, 'Тип':'расход', 'Кол-во м²':0, 'Стоимость':0,
+    'Длина куска':0, 'Ширина куска':0 };
 }
 
 // Построить строки таблицы материалов карточки из App._currentOrder.materials
@@ -9255,15 +9272,25 @@ function renderCardMatRows() {
     var matCell = hasRef
       ? '<select class="cardmat-mat" data-i="' + i + '" onchange="onCardMatSelect(' + i + ')" style="' + inp + ';min-width:150px">' + cardMatOptions_(m['Материал ID']) + '</select>'
       : '<input class="cardmat-name" data-i="' + i + '" value="' + String(m['Название']||'').replace(/"/g,'&quot;') + '" placeholder="название плёнки" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';min-width:150px">';
+    var unitSel = '<select class="cardmat-unit" data-i="' + i + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + '">' +
+        '<option value="пм"' + ((m['Единица']||'пм')==='пм'?' selected':'') + '>пм</option>' +
+        '<option value="м²"' + (m['Единица']==='м²'?' selected':'') + '>м²</option>' +
+      '</select>';
+    var qtyInner;
+    if (unitM === 'м²') {
+      // Мастера подают расход/остаток куском: длина × ширина → итого м² (можно ввести итого напрямую)
+      var Lp = Number(m['Длина куска']) || 0, Wp = Number(m['Ширина куска']) || 0;
+      qtyInner =
+        '<input class="cardmat-len" data-i="' + i + '" type="number" step="0.01" min="0" placeholder="длина" value="' + (Lp||'') + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:50px;text-align:left"> × ' +
+        '<input class="cardmat-wid" data-i="' + i + '" type="number" step="0.01" min="0" placeholder="ширина" value="' + (Wp||'') + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:50px;text-align:left"> = ' +
+        '<input class="cardmat-total" data-i="' + i + '" type="number" step="0.01" min="0" title="итого м²" value="' + qtyM + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:58px;text-align:left"> ' + unitSel;
+    } else {
+      qtyInner =
+        '<input class="cardmat-qty" data-i="' + i + '" type="number" step="0.01" min="0" value="' + qtyM + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:70px;text-align:left"> ' + unitSel;
+    }
     return '<tr>' +
       '<td>' + matCell + '</td>' +
-      '<td style="text-align:center;white-space:nowrap">' +
-        '<input class="cardmat-qty" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(m['Кол-во'])||0) + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:70px;text-align:left"> ' +
-        '<select class="cardmat-unit" data-i="' + i + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + '">' +
-          '<option value="пм"' + ((m['Единица']||'пм')==='пм'?' selected':'') + '>пм</option>' +
-          '<option value="м²"' + (m['Единица']==='м²'?' selected':'') + '>м²</option>' +
-        '</select>' +
-      '</td>' +
+      '<td style="text-align:center;white-space:nowrap">' + qtyInner + '</td>' +
       '<td style="text-align:center">' + sqm.toFixed(2) + ' м²</td>' +
       '<td style="text-align:center;white-space:nowrap">' +
         '<input class="cardmat-price" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(m['Цена за м²'])||0) + '" onchange="onCardMatEdit(' + i + ')" style="' + inp + ';width:72px;text-align:left"> ' + CUR + '/пог.м' +
@@ -9304,11 +9331,23 @@ function onCardMatEdit(i) {
   var t  = document.querySelector('.cardmat-type[data-i="'  + i + '"]');
   var nm = document.querySelector('.cardmat-name[data-i="'  + i + '"]');
   var pr = document.querySelector('.cardmat-price[data-i="' + i + '"]');
-  if (q)  m['Кол-во']    = Number(q.value) || 0;
+  var len = document.querySelector('.cardmat-len[data-i="'   + i + '"]');
+  var wid = document.querySelector('.cardmat-wid[data-i="'   + i + '"]');
+  var tot = document.querySelector('.cardmat-total[data-i="' + i + '"]');
   if (u)  m['Единица']   = u.value;
   if (t)  m['Тип']       = t.value;
   if (nm) m['Название']  = nm.value;
   if (pr) m['Цена за м²'] = Number(pr.value) || 0;
+  if (m['Единица'] === 'м²') {
+    // длина × ширина куска → итого м²; если размеры не заданы — берём введённое «итого»
+    if (len) m['Длина куска']  = Number(len.value) || 0;
+    if (wid) m['Ширина куска'] = Number(wid.value) || 0;
+    var L = Number(m['Длина куска']) || 0, W = Number(m['Ширина куска']) || 0;
+    if (L > 0 && W > 0)      m['Кол-во'] = Math.round(L * W * 100) / 100;
+    else if (tot)            m['Кол-во'] = Number(tot.value) || 0;
+  } else {
+    if (q) m['Кол-во'] = Number(q.value) || 0;
+  }
   refreshCardMats();
   matAutoSave();
 }
@@ -9325,8 +9364,8 @@ function onCardMatSelect(i) {
   m['Единица']       = (opt.dataset.unit) || 'пм';
   m['Цена за м²']    = Number(opt.dataset.price) || 0;
   m['Ширина рулона'] = Number(opt.dataset.roll) || 1.52;
-  // подхватываем введённое кол-во
-  var q = document.querySelector('.cardmat-qty[data-i="' + i + '"]');
+  // подхватываем введённое кол-во (поле «кол-во» для пм или «итого» для м²)
+  var q = document.querySelector('.cardmat-qty[data-i="' + i + '"]') || document.querySelector('.cardmat-total[data-i="' + i + '"]');
   if (q) m['Кол-во'] = Number(q.value) || 0;
   refreshCardMats();
   matAutoSave();
@@ -10096,7 +10135,7 @@ function matFlush_(cb) {
   var id = o['ID'];
   syncCardEditors_();
   var matLines = (o.materials || []).filter(function(m){ return (m['Материал ID'] || String(m['Название']||'').trim() || Number(m['Кол-во']) > 0); })
-    .map(function(m){ return { materialId:m['Материал ID']||'', name:m['Название']||'', unit:m['Единица']||'пм', qty:Number(m['Кол-во'])||0, rollWidth:Number(m['Ширина рулона'])||1.52, pricePerSqm:Number(m['Цена за м²'])||0, type:m['Тип']==='остаток'?'остаток':'расход', zone:m['Зона']||'', light:m['Светопропускаемость']||'' }; });
+    .map(function(m){ return { materialId:m['Материал ID']||'', name:m['Название']||'', unit:m['Единица']||'пм', qty:Number(m['Кол-во'])||0, rollWidth:Number(m['Ширина рулона'])||1.52, pricePerSqm:Number(m['Цена за м²'])||0, type:m['Тип']==='остаток'?'остаток':'расход', lenPiece:Number(m['Длина куска'])||0, widPiece:Number(m['Ширина куска'])||0, zone:m['Зона']||'', light:m['Светопропускаемость']||'' }; });
   var expLines = (o.expenses || []).filter(function(e){ return (String(e['Название']||'').trim()) || (Number(e['Сумма']) > 0); })
     .map(function(e){ return { name:e['Название']||'', amount:Number(e['Сумма'])||0 }; });
   matSetStatus_('сохранение…');
