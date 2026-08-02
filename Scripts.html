@@ -9885,6 +9885,7 @@ function renderCardPersonnel() {
       // Менеджер/админ тонировки — по умолчанию как в оклейке
       var tintMgrOpts = managerOptionsHtml_(String(o['Менеджер тонировки'] || o['Менеджер'] || ''), '— менеджер —');
       var tintAdmOpts = managerOptionsHtml_(String(o['Администратор тонировки'] || o['Администратор'] || ''), '— администратор —');
+      var tintMatVal  = (Number(o['Расход тонировки']) || '') === '' ? '' : Number(o['Расход тонировки']);
       mixedPart =
         '<label style="' + lbl + '">Менеджер</label>' +
         '<select id="card-tint-mgr" style="' + inp + ';margin:2px 0 8px" onchange="persAutoSave()">' + tintMgrOpts + '</select>' +
@@ -9893,6 +9894,9 @@ function renderCardPersonnel() {
         '<label style="' + lbl + '">Стоимость тонировки, руб</label>' +
         '<input id="card-tint-price" type="number" min="0" value="' + tintPriceVal + '" style="' + inp + ';margin:2px 0 8px" onchange="onTintPriceChange_()" title="Добавляется к общей стоимости заказа">' +
         '<div style="font-size:10px;color:var(--text3);margin-bottom:4px">Добавляется к общей сумме заказа</div>' +
+        '<label style="' + lbl + '">Расход плёнки (тонировка), руб</label>' +
+        '<input id="card-tint-material" type="number" min="0" value="' + tintMatVal + '" style="' + inp + ';margin:2px 0 4px" onchange="persAutoSave()" placeholder="0" title="Вычитается из тонировочной части (напр. перерасход атермальной плёнки). В документы не попадает.">' +
+        '<div style="font-size:10px;color:var(--text3);margin-bottom:4px">Вычитается из тонировки (перерасход плёнки). Не влияет на документы.</div>' +
         '<div style="' + lbl + '">Тонировщики (бонус — с части тонировки)</div>' +
         '<div style="max-height:100px;overflow:auto">' + tinterChecks + '</div>';
     }
@@ -9976,22 +9980,25 @@ function persFlush_(cb) {
   var tintLight = hasFilm ? ((document.getElementById('card-tint-light') || {}).value || '') : null;
   var tintPrice = hasMixed ? (Number(priceEl.value) || 0) : null;
   var tintMasters = null, tintMgr = null, tintAdm = null;
+  var tintMaterial = null;
   if (hasMixed) {
     var tm = [];
     document.querySelectorAll('.card-tinter-cb:checked').forEach(function(cb2){ tm.push(cb2.value); });
     tintMasters = tm.join(', ');
     tintMgr = (document.getElementById('card-tint-mgr')   || {}).value || '';
     tintAdm = (document.getElementById('card-tint-admin') || {}).value || '';
+    var tmEl = document.getElementById('card-tint-material');
+    if (tmEl) tintMaterial = Number(tmEl.value) || 0;
   }
   var st = function(t,c){ var e=document.getElementById('card-pers-status'); if(e){e.textContent=t; e.style.color=c||'var(--text3)';} };
   st('сохранение…');
   // обновим модель сразу (для документов/перерисовки)
   o['Менеджер'] = mgr; o['Оклейщики'] = masters.join(', '); o['Администратор'] = admin;
   if (hasFilm)  { o['Пленка'] = tintFilm; o['Светопропускаемость'] = tintLight; }
-  if (hasMixed) { o['Стоимость тонировки'] = tintPrice; o['Тонировщики'] = tintMasters; o['Менеджер тонировки'] = tintMgr; o['Администратор тонировки'] = tintAdm; }
+  if (hasMixed) { o['Стоимость тонировки'] = tintPrice; o['Тонировщики'] = tintMasters; o['Менеджер тонировки'] = tintMgr; o['Администратор тонировки'] = tintAdm; if (tintMaterial != null) o['Расход тонировки'] = tintMaterial; }
   var payload = { manager: mgr, masters: masters.join(', '), admin: admin };
   if (hasFilm)  { payload.film = tintFilm; payload.lightTransmission = tintLight; }
-  if (hasMixed) { payload.tintPrice = tintPrice; payload.tintMasters = tintMasters; payload.tintManager = tintMgr; payload.tintAdmin = tintAdm; }
+  if (hasMixed) { payload.tintPrice = tintPrice; payload.tintMasters = tintMasters; payload.tintManager = tintMgr; payload.tintAdmin = tintAdm; if (tintMaterial != null) payload.tintMaterialCost = tintMaterial; }
   var wrapEl = document.getElementById('card-wrap-price');
   if (wrapEl) payload.wrapPrice = Number(wrapEl.value) || 0;
   google.script.run
@@ -10726,9 +10733,16 @@ function bonusBreakdownHtml_(o) {
   var gross = num('Валовая прибыль');
   var disc  = Math.max(0, price - mat - exp - gross);   // фактический −15%
   var tintPrice = num('Стоимость тонировки');
-  var tintGross = (price > 0 && tintPrice > 0) ? gross * (tintPrice / price) : 0;
-  var wrapGross = gross - tintGross;
   var isSplit   = tintPrice > 0;
+  var wrapPrice = Math.max(0, price - tintPrice);
+  var tintShare = price > 0 ? tintPrice / price : 0, wrapShare = 1 - tintShare;
+  // Материал (плёнка оклейки) бьёт по оклейке; расход тонировочной плёнки — по тонировке; расходы и −15% — по доле цены.
+  var tintMat = num('Расход тонировки');
+  var wrapGross, tintGross;
+  if (isSplit) {
+    tintGross = tintPrice - tintMat - exp * tintShare - disc * tintShare;
+    wrapGross = wrapPrice - mat - exp * wrapShare - disc * wrapShare;
+  } else { tintGross = 0; wrapGross = gross; }
 
   var wMas = cnt('Оклейщики'), tMas = cnt('Тонировщики'), wMgr = cnt('Менеджер'), tMgr = cnt('Менеджер тонировки') || wMgr;
   var masterPer = num('Бонус оклейщика'), mgrPer = num('Бонус менеджера'), admTot = num('Бонус администратора');
@@ -10744,9 +10758,9 @@ function bonusBreakdownHtml_(o) {
   html += step('1. Валовая = ' + f(price) + ' − ' + f(mat) + ' (мат.) − ' + f(exp) + ' (расх.)' + (disc > 0.5 ? ' − ' + f(disc) + ' (−15%)' : '') + ' = ' + b(f(gross)));
 
   if (isSplit) {
-    html += head('2. Делим валовую по доле в цене');
-    html += step('• тонировка: ' + f(gross) + ' × (' + f(tintPrice) + ' / ' + f(price) + ') = ' + b(f(tintGross)));
-    html += step('• оклейка: ' + f(gross) + ' − ' + f(tintGross) + ' = ' + b(f(wrapGross)));
+    html += head('2. Валовая по услугам (плёнка оклейки → оклейка)');
+    html += step('• оклейка: ' + f(wrapPrice) + ' − ' + f(mat) + ' (плёнка)' + (exp > 0 ? ' − ' + f(exp * wrapShare) + ' (расх.)' : '') + (disc > 0.5 ? ' − ' + f(disc * wrapShare) + ' (−15%)' : '') + ' = ' + b(f(wrapGross)));
+    html += step('• тонировка: ' + f(tintPrice) + (tintMat > 0 ? ' − ' + f(tintMat) + ' (плёнка)' : '') + (exp > 0 ? ' − ' + f(exp * tintShare) + ' (расх.)' : '') + (disc > 0.5 ? ' − ' + f(disc * tintShare) + ' (−15%)' : '') + ' = ' + b(f(tintGross)));
   }
 
   html += head((isSplit ? '3. ' : '2. ') + 'Бонусы' + (isSplit ? ' оклейки' : ''));
