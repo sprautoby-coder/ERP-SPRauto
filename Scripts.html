@@ -112,6 +112,7 @@ function goPage(name) {
   // Досохраняем несохранённые правки карточки и инлайн-редакторов перед уходом
   if (typeof flushCard_ === 'function') flushCard_();
   if (typeof flushAllInline_ === 'function') flushAllInline_();
+  if (typeof flushMatEdits_ === 'function') flushMatEdits_();
   if (typeof flushServicesSave_ === 'function') flushServicesSave_();
   if (typeof flushComplexesSave_ === 'function') flushComplexesSave_();
   // Закрываем все открытые модальные окна при смене страницы
@@ -6009,7 +6010,7 @@ function renderMaterialsTable(list) {
   var esc = function(s){ return String(s == null ? '' : s).replace(/"/g,'&quot;'); };
   // инпут для инлайн-редактирования числового/текстового поля
   var inp = function(id, field, val, extra){
-    return '<input class="mat-inp' + (extra || '') + '" value="' + esc(val) + '"' +
+    return '<input class="mat-inp' + (extra || '') + '" data-field="' + field + '" data-orig="' + esc(val) + '" value="' + esc(val) + '"' +
       (extra && extra.indexOf('mat-num') >= 0 ? ' type="number" step="0.01"' : '') +
       ' onchange="inlineMatSave(\'' + id + '\',\'' + field + '\',this.value,this)">';
   };
@@ -6018,7 +6019,7 @@ function renderMaterialsTable(list) {
       var v = Array.isArray(op) ? op[0] : op, lbl = Array.isArray(op) ? op[1] : op;
       return '<option value="' + esc(v) + '"' + (String(val) === String(v) ? ' selected' : '') + '>' + lbl + '</option>';
     }).join('');
-    return '<select class="mat-inp mat-sel" onchange="inlineMatSave(\'' + id + '\',\'' + field + '\',this.value,this)">' + o + '</select>';
+    return '<select class="mat-inp mat-sel" data-field="' + field + '" data-orig="' + esc(val) + '" onchange="inlineMatSave(\'' + id + '\',\'' + field + '\',this.value,this)">' + o + '</select>';
   };
   tbody.innerHTML = list.map(function(m) {
     var active = m['Активен'] !== 'Нет';
@@ -6069,16 +6070,33 @@ function inlineMatSave(id, field, value, el) {
   var val   = isNum ? (String(value).trim() === '' ? '' : Number(value)) : value;
   var m = (App._materials || []).find(function(x){ return String(x['ID']) === String(id); });
   if (m) m[MAT_FIELD_COL[field]] = val;                 // оптимистично в кэш
-  if (el) { el.classList.remove('mat-err'); el.classList.add('mat-saving'); }
+  if (el) { el.classList.remove('mat-err'); el.classList.add('mat-saving'); el.dataset.orig = String(el.value); }  // помечаем как «в процессе сохранения» → повторно не досохраняем
   var payload = {}; payload[field] = val;
   google.script.run
     .withSuccessHandler(function(resp){
       if (el) el.classList.remove('mat-saving');
-      if (!resp || !resp.ok) { if (el) el.classList.add('mat-err'); toast('Ошибка сохранения: ' + (resp ? resp.error : ''), 'error'); return; }
+      if (!resp || !resp.ok) { if (el) { el.classList.add('mat-err'); el.dataset.orig = ' '; } toast('Ошибка сохранения: ' + (resp ? resp.error : ''), 'error'); return; }
       if (el) { el.classList.add('mat-ok'); setTimeout(function(){ el.classList.remove('mat-ok'); }, 900); }
     })
-    .withFailureHandler(function(e){ if (el) { el.classList.remove('mat-saving'); el.classList.add('mat-err'); } toast('Ошибка: ' + e.message, 'error'); })
+    .withFailureHandler(function(e){ if (el) { el.classList.remove('mat-saving'); el.classList.add('mat-err'); el.dataset.orig = ' '; } toast('Ошибка: ' + e.message, 'error'); })
     .updateMaterial(id, payload);
+}
+
+// Досохранение всех изменённых ячеек справочника при уходе со страницы:
+// событие change может не успеть сработать, если сразу переключить раздел.
+// Сверяем текущее значение каждой ячейки с исходным (data-orig) и сохраняем расхождения.
+function flushMatEdits_() {
+  var table = document.getElementById('materials-table');
+  if (!table) return;
+  var els = table.querySelectorAll('.mat-inp[data-field]');
+  Array.prototype.forEach.call(els, function(el){
+    var orig = (el.dataset.orig == null) ? '' : el.dataset.orig;
+    if (String(el.value) === String(orig)) return;   // без изменений
+    var tr = el.closest('tr');
+    var id = tr ? tr.getAttribute('data-mid') : '';
+    if (!id) return;
+    inlineMatSave(id, el.dataset.field, el.value, el);
+  });
 }
 
 /* ===================== ПРОДАЖИ МАТЕРИАЛОВ ===================== */
