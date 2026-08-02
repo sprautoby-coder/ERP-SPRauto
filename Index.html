@@ -390,13 +390,7 @@
         <button class="active" id="orders-view-table" onclick="setOrdersView('table')" title="Таблица">☰ Таблица</button>
         <button id="orders-view-kanban" onclick="setOrdersView('kanban')" title="Канбан-доска">▦ Канбан</button>
       </div>
-      <div class="search-wrap" style="flex:1;min-width:180px;">
-        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-        <input class="search-input" id="orders-search" type="text" placeholder="Клиент, авто, госномер, VIN..." oninput="filterOrders()">
-      </div>
-      <!-- Вкладки-фильтры по статусам генерируются из настраиваемых воронок -->
-      <div class="filter-tabs" id="orders-status-tabs"></div>
-      <!-- Фильтр услуг: несколько галочек (смешанные заказы находятся по каждой их услуге) -->
+      <!-- Фильтр услуг (мультивыбор галочками): смешанные заказы находятся по каждой их услуге -->
       <div id="ord-svc-filter" style="position:relative;flex:0 0 180px;width:180px">
         <button type="button" class="form-select" id="ord-svc-filter-btn" onclick="toggleSvcFilter_(event)"
           style="width:100%;height:38px;font-size:13px;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px">
@@ -404,10 +398,19 @@
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex:0 0 auto"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
             <span id="ord-svc-filter-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Все услуги</span>
           </span>
-          <span style="opacity:.55">▾</span>
+          <span style="display:flex;align-items:center;gap:4px;flex:0 0 auto">
+            <span id="ord-svc-filter-clear" onclick="clearSvcFilter_(event)" title="Сбросить фильтр услуг" style="display:none;width:18px;height:18px;line-height:16px;text-align:center;border-radius:50%;background:rgba(14,165,183,.18);cursor:pointer;font-size:12px">✕</span>
+            <span style="opacity:.55">▾</span>
+          </span>
         </button>
         <div id="ord-svc-filter-menu" style="display:none;position:absolute;z-index:60;top:42px;left:0;min-width:220px;max-height:320px;overflow:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.20);padding:6px"></div>
       </div>
+      <div class="search-wrap" style="flex:1;min-width:180px;">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <input class="search-input" id="orders-search" type="text" placeholder="Клиент, авто, госномер, VIN..." oninput="filterOrders()">
+      </div>
+      <!-- Вкладки-фильтры по статусам генерируются из настраиваемых воронок -->
+      <div class="filter-tabs" id="orders-status-tabs"></div>
       <select class="form-select" id="ord-period" onchange="onOrdPeriodChange()" style="width:150px;flex:0 0 150px;height:38px;font-size:13px" title="Период отображения заказов">
         <option value="all" selected>Всё время</option>
         <option value="today">Сегодня</option>
