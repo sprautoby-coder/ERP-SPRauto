@@ -6320,14 +6320,14 @@ function renderMaterialsTable(list) {
   var inp = function(id, field, val, extra){
     return '<input class="mat-inp' + (extra || '') + '" data-field="' + field + '" data-orig="' + esc(val) + '" value="' + esc(val) + '"' +
       (extra && extra.indexOf('mat-num') >= 0 ? ' type="number" step="0.01"' : '') +
-      ' onchange="inlineMatSave(\'' + id + '\',\'' + field + '\',this.value,this)">';
+      ' oninput="matCellInput_(this)" onchange="matCellFlush_(this)">';
   };
   var sel = function(id, field, val, opts){
     var o = opts.map(function(op){
       var v = Array.isArray(op) ? op[0] : op, lbl = Array.isArray(op) ? op[1] : op;
       return '<option value="' + esc(v) + '"' + (String(val) === String(v) ? ' selected' : '') + '>' + lbl + '</option>';
     }).join('');
-    return '<select class="mat-inp mat-sel" data-field="' + field + '" data-orig="' + esc(val) + '" onchange="inlineMatSave(\'' + id + '\',\'' + field + '\',this.value,this)">' + o + '</select>';
+    return '<select class="mat-inp mat-sel" data-field="' + field + '" data-orig="' + esc(val) + '" onchange="matCellFlush_(this)">' + o + '</select>';
   };
   tbody.innerHTML = list.map(function(m) {
     var active = m['Активен'] !== 'Нет';
@@ -6406,6 +6406,20 @@ function inlineMatSave(id, field, value, el) {
     .updateMaterial(id, payload);
 }
 
+// Автосохранение ячейки справочника прямо при вводе (debounce) — не требует клика вне ячейки.
+function matCellSave_(el){
+  var tr = el.closest ? el.closest('tr') : null;
+  var id = tr ? tr.getAttribute('data-mid') : '';
+  if (!id) return;
+  if (String(el.value) === String(el.dataset.orig == null ? '' : el.dataset.orig)) return;  // без изменений
+  inlineMatSave(id, el.dataset.field, el.value, el);
+}
+function matCellInput_(el){
+  clearTimeout(el._matTimer);
+  el._matTimer = setTimeout(function(){ matCellSave_(el); }, 500);   // сохраняем через 0.5с после остановки ввода
+}
+function matCellFlush_(el){ clearTimeout(el._matTimer); matCellSave_(el); }  // потеря фокуса / выбор в списке — сразу
+
 // Досохранение всех изменённых ячеек справочника при уходе со страницы:
 // событие change может не успеть сработать, если сразу переключить раздел.
 // Сверяем текущее значение каждой ячейки с исходным (data-orig) и сохраняем расхождения.
@@ -6422,6 +6436,8 @@ function flushMatEdits_() {
     inlineMatSave(id, el.dataset.field, el.value, el);
   });
 }
+// Backstop: перед перезагрузкой/закрытием вкладки досохраняем несохранённые правки справочника (best-effort)
+try { window.addEventListener('beforeunload', function(){ try { flushMatEdits_(); } catch(e){} }); } catch(e){}
 
 /* ===================== ПРОДАЖИ МАТЕРИАЛОВ ===================== */
 App._sales = App._sales || [];
