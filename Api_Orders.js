@@ -749,6 +749,62 @@ function getOrderCheckData(id, cat) {
   });
 }
 
+/** Отметить/снять проверку ВСЕГО заказа — каскадом на все 4 категории. */
+function setOrderVerifiedAll(id, verified) {
+  return safeCall(function() {
+    bumpDataVersion_();
+    if (!id) throw new Error('Нет ID заказа');
+    const want    = !!verified;
+    const sheet   = getTab('DATABASE', 'ORDERS');
+    ensureColumns_(sheet, ['Проверено', 'Проверки']);
+    const data    = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idIdx   = headers.indexOf('ID');
+    const chkIdx  = headers.indexOf('Проверки');
+    const verIdx  = headers.indexOf('Проверено');
+    const updIdx  = headers.indexOf('Обновлён');
+    const tz      = Session.getScriptTimeZone();
+    const nowStr  = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy HH:mm');
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][idIdx]) !== String(id)) continue;
+      let obj = {}; try { obj = JSON.parse(data[i][chkIdx] || '{}') || {}; } catch (e) { obj = {}; }
+      if (!obj.s) obj.s = {}; if (!obj.by) obj.by = {};
+      ORDER_CHECK_CATS_.forEach(function(c) { obj.s[c] = want ? 'ok' : ''; obj.by[c] = want ? nowStr : ''; });
+      sheet.getRange(i + 1, chkIdx + 1).setValue(JSON.stringify(obj));
+      if (verIdx >= 0) sheet.getRange(i + 1, verIdx + 1).setValue(want ? 'Да' : 'Нет');
+      if (updIdx >= 0) sheet.getRange(i + 1, updIdx + 1).setValue(nowStr);
+      logActivity(want ? 'Проверил заказ (все категории)' : 'Снял проверку заказа', 'Заказ', id, '', '');
+      return { id: id, checks: obj.s, verified: want, checksJson: JSON.stringify(obj) };
+    }
+    throw new Error('Заказ не найден: ' + id);
+  });
+}
+
+/** Сохранить список арматурных работ заказа (хранится в JSON «Проверки» → armItems). */
+function saveOrderArmature(id, items) {
+  return safeCall(function() {
+    bumpDataVersion_();
+    if (!id) throw new Error('Нет ID заказа');
+    items = (items || [])
+      .map(function(r) { return { work: String(r.work || ''), who: String(r.who || ''), sum: Number(r.sum) || 0 }; })
+      .filter(function(r) { return r.work || r.who || r.sum; });
+    const sheet   = getTab('DATABASE', 'ORDERS');
+    ensureColumns_(sheet, ['Проверки']);
+    const data    = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idIdx   = headers.indexOf('ID');
+    const chkIdx  = headers.indexOf('Проверки');
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][idIdx]) !== String(id)) continue;
+      let obj = {}; try { obj = JSON.parse(data[i][chkIdx] || '{}') || {}; } catch (e) { obj = {}; }
+      obj.armItems = items;
+      sheet.getRange(i + 1, chkIdx + 1).setValue(JSON.stringify(obj));
+      return { id: id, armItems: items, checksJson: JSON.stringify(obj) };
+    }
+    throw new Error('Заказ не найден: ' + id);
+  });
+}
+
 /**
  * Изменить статус заказа. Допустимые статусы берутся из настраиваемых воронок.
  */

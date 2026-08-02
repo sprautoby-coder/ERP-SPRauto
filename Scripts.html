@@ -4204,13 +4204,18 @@ function openCheckModal(orderId, cat){
     renderCheckBody_();
     return;
   }
-  google.script.run
-    .withSuccessHandler(function(resp){
-      App._chk.rows = (resp && resp.ok) ? (resp.data || []) : [];
-      renderCheckBody_();
-    })
-    .withFailureHandler(function(e){ toast('Ошибка загрузки: ' + e.message, 'error'); App._chk.rows = []; renderCheckBody_(); })
-    .getOrderCheckData(orderId, cat);
+  var fetchRows = function(){
+    google.script.run
+      .withSuccessHandler(function(resp){
+        App._chk.rows = (resp && resp.ok) ? (resp.data || []) : [];
+        renderCheckBody_();
+      })
+      .withFailureHandler(function(e){ toast('Ошибка загрузки: ' + e.message, 'error'); App._chk.rows = []; renderCheckBody_(); })
+      .getOrderCheckData(orderId, cat);
+  };
+  // Для материала нужен справочник плёнок (селекты выбора) — подгружаем, если не загружен
+  if (cat === 'mat' && typeof ensureMaterialsLoaded_ === 'function') ensureMaterialsLoaded_(fetchRows);
+  else fetchRows();
 }
 
 // Шапка окна: № заказа, дата, авто
@@ -4232,25 +4237,14 @@ function renderCheckBody_(){
   var cat  = App._chk.cat, rows = App._chk.rows;
   var s    = orderChecks_(App._chk.order);
   var notes= orderChecksObj_(App._chk.order).notes || {};
-  var inp  = 'padding:4px 7px;border:1px solid var(--border);border-radius:6px;background:var(--inp);color:var(--text);font-size:12px';
+  var inp  = CHK_INP_;
   var html = checkHeaderHtml_();
 
   if (cat === 'mat'){
     html += '<div style="overflow-x:auto"><table class="data-table" style="width:100%;font-size:12px"><thead><tr>' +
-      '<th>Материал</th><th style="text-align:center">Кол-во</th><th style="text-align:center">Ед.</th><th style="text-align:center">Цена/пог.м</th><th>Тип</th><th style="text-align:right">Стоимость</th></tr></thead><tbody>';
-    if (!rows.length) html += '<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:14px">Расход плёнки не заполнен</td></tr>';
-    rows.forEach(function(r, i){
-      var isOst = String(r['Тип']) === 'остаток';
-      html += '<tr>' +
-        '<td>' + escapeHtml_(r['Название'] || '') + '</td>' +
-        '<td style="text-align:center"><input class="chk-mat-qty" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(r['Кол-во'])||0) + '" oninput="chkMatRecalc_()" style="' + inp + ';width:66px"></td>' +
-        '<td style="text-align:center"><select class="chk-mat-unit" data-i="' + i + '" onchange="chkMatRecalc_()" style="' + inp + '"><option value="пм"' + ((r['Единица']||'пм')==='пм'?' selected':'') + '>пм</option><option value="м²"' + (r['Единица']==='м²'?' selected':'') + '>м²</option></select></td>' +
-        '<td style="text-align:center"><input class="chk-mat-price" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(r['Цена за м²'])||0) + '" oninput="chkMatRecalc_()" style="' + inp + ';width:70px"></td>' +
-        '<td><select class="chk-mat-type" data-i="' + i + '" onchange="chkMatRecalc_()" style="' + inp + '"><option value="расход"' + (!isOst?' selected':'') + '>расход</option><option value="остаток"' + (isOst?' selected':'') + '>остаток</option></select></td>' +
-        '<td style="text-align:right;white-space:nowrap" class="chk-mat-cost" data-i="' + i + '">' + (Number(r['Стоимость'])||0).toLocaleString('ru') + ' ' + CUR + '</td>' +
-      '</tr>';
-    });
-    html += '</tbody></table></div>' +
+      '<th>Материал</th><th style="text-align:center">Кол-во</th><th style="text-align:center">Ед.</th><th style="text-align:center">Цена/пог.м</th><th>Тип</th><th style="text-align:right">Стоимость</th><th></th></tr></thead>' +
+      '<tbody id="chk-mat-tbody">' + chkMatRows_(rows, inp) + '</tbody></table></div>' +
+      '<button class="btn btn-ghost" style="margin-top:6px;font-size:12px" onclick="chkMatAdd_()">+ Добавить плёнку</button>' +
       '<div style="text-align:right;margin-top:6px;font-size:13px">Итого материалы: <b id="chk-mat-total">' + rows.reduce(function(a,r){return a+(Number(r['Стоимость'])||0);},0).toLocaleString('ru') + ' ' + CUR + '</b></div>';
   }
   else if (cat === 'exp'){
@@ -4281,13 +4275,55 @@ function renderCheckBody_(){
     '<label style="font-size:12px;color:var(--text3);display:block;margin-bottom:4px">Замечание (необязательно)</label>' +
     '<input id="chk-note" value="' + escapeHtml_(curNote) + '" placeholder="что не так / комментарий" style="width:100%;' + inp + '">' +
   '</div>';
-  html += '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap">' +
+  html += '<div id="chk-actions" style="display:flex;gap:10px;justify-content:flex-end;align-items:center;margin-top:16px;flex-wrap:wrap">' +
     (curSt ? '<button class="btn btn-ghost" onclick="saveCheck_(\'\')" style="margin-right:auto">Снять отметку</button>' : '') +
     '<button class="btn" onclick="saveCheck_(\'err\')" style="background:var(--red-soft);color:var(--danger);font-weight:700;border:1px solid rgba(231,76,60,.3)">⚠ Ошибка</button>' +
     '<button class="btn btn-primary" onclick="saveCheck_(\'ok\')" style="background:var(--success)">✓ Проверено</button>' +
   '</div>';
   body.innerHTML = html;
 }
+
+// Общий стиль инпутов в окне проверки
+var CHK_INP_ = 'padding:4px 7px;border:1px solid var(--border);border-radius:6px;background:var(--inp);color:var(--text);font-size:12px';
+
+// Строки материала (с выбором плёнки из справочника + удалением)
+function chkMatRows_(rows, inp){
+  if (!rows.length) return '<tr><td colspan="7" style="text-align:center;color:var(--text3);padding:14px">Расход плёнки не заполнен — нажмите «+ Добавить плёнку»</td></tr>';
+  var hasRef = (App._materials || []).length > 0;
+  return rows.map(function(r, i){
+    var isOst = String(r['Тип']) === 'остаток';
+    var matCell = hasRef
+      ? '<select class="chk-mat-sel" data-i="' + i + '" onchange="chkMatSelect_(' + i + ')" style="' + inp + ';min-width:130px">' + cardMatOptions_(r['Материал ID']) + '</select>'
+      : '<input class="chk-mat-name" data-i="' + i + '" value="' + escapeHtml_(r['Название']||'') + '" placeholder="название плёнки" oninput="chkMatRecalc_()" style="' + inp + ';min-width:130px">';
+    return '<tr>' +
+      '<td>' + matCell + '</td>' +
+      '<td style="text-align:center"><input class="chk-mat-qty" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(r['Кол-во'])||0) + '" oninput="chkMatRecalc_()" style="' + inp + ';width:66px"></td>' +
+      '<td style="text-align:center"><select class="chk-mat-unit" data-i="' + i + '" onchange="chkMatRecalc_()" style="' + inp + '"><option value="пм"' + ((r['Единица']||'пм')==='пм'?' selected':'') + '>пм</option><option value="м²"' + (r['Единица']==='м²'?' selected':'') + '>м²</option></select></td>' +
+      '<td style="text-align:center"><input class="chk-mat-price" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(r['Цена за м²'])||0) + '" oninput="chkMatRecalc_()" style="' + inp + ';width:70px"></td>' +
+      '<td><select class="chk-mat-type" data-i="' + i + '" onchange="chkMatRecalc_()" style="' + inp + '"><option value="расход"' + (!isOst?' selected':'') + '>расход</option><option value="остаток"' + (isOst?' selected':'') + '>остаток</option></select></td>' +
+      '<td style="text-align:right;white-space:nowrap" class="chk-mat-cost" data-i="' + i + '">' + (Number(r['Стоимость'])||0).toLocaleString('ru') + ' ' + CUR + '</td>' +
+      '<td style="text-align:right"><button onclick="chkMatDel_(' + i + ')" title="Удалить" style="border:none;background:transparent;color:var(--text3);cursor:pointer">✕</button></td>' +
+    '</tr>';
+  }).join('');
+}
+function chkRenderMatBody_(){ var tb = document.getElementById('chk-mat-tbody'); if (tb) tb.innerHTML = chkMatRows_(App._chk.rows, CHK_INP_); }
+function chkMatSelect_(i){
+  chkMatRecalc_();                        // сначала фиксируем введённые кол-во/цену/тип
+  var sel = document.querySelector('.chk-mat-sel[data-i="' + i + '"]'); if (!sel) return;
+  var opt = sel.options[sel.selectedIndex]; var r = App._chk.rows[i]; if (!r) return;
+  r['Материал ID']   = opt.value || '';
+  r['Название']      = opt.value ? opt.textContent : '';
+  r['Единица']       = opt.dataset.unit || r['Единица'] || 'пм';
+  r['Цена за м²']    = Number(opt.dataset.price) || 0;
+  r['Ширина рулона'] = Number(opt.dataset.roll) || 1.52;
+  chkRenderMatBody_(); chkMatRecalc_();
+}
+function chkMatAdd_(){
+  chkMatRecalc_();
+  App._chk.rows.push({ 'Материал ID':'', 'Название':'', 'Единица':'пм', 'Кол-во':0, 'Ширина рулона':1.52, 'Цена за м²':0, 'Тип':'расход', 'Кол-во м²':0, 'Стоимость':0 });
+  chkRenderMatBody_();
+}
+function chkMatDel_(i){ chkMatRecalc_(); App._chk.rows.splice(i,1); chkRenderMatBody_(); chkMatRecalc_(); }
 
 function chkExpRows_(rows, inp){
   if (!rows.length) return '';
@@ -4319,6 +4355,8 @@ function chkMatRecalc_(){
     var u = document.querySelector('.chk-mat-unit[data-i="' + i + '"]');
     var p = document.querySelector('.chk-mat-price[data-i="' + i + '"]');
     var t = document.querySelector('.chk-mat-type[data-i="' + i + '"]');
+    var nm = document.querySelector('.chk-mat-name[data-i="' + i + '"]');
+    if (nm) r['Название'] = nm.value;
     if (q) r['Кол-во'] = Number(q.value)||0;
     if (u) r['Единица'] = u.value;
     if (p) r['Цена за м²'] = Number(p.value)||0;
@@ -4359,22 +4397,30 @@ function chkArmDel_(i){ chkArmSync_(); App._chk.rows.splice(i,1); document.getEl
 
 // Сохранить проверку: при необходимости — правки строк → пересчёт финансов → статус категории
 function saveCheck_(status){
-  if (!App._chk) return;
+  if (!App._chk || App._chk.busy) return;
+  App._chk.busy = true;
   var id = App._chk.id, cat = App._chk.cat;
   var note = (document.getElementById('chk-note') || {}).value || '';
+
+  // Видимый индикатор процесса (как при формировании договора)
+  var actLabel = status==='ok' ? 'Отмечаю проверенным…' : status==='err' ? 'Отмечаю ошибку…' : 'Снимаю отметку…';
+  var act = document.getElementById('chk-actions');
+  if (act) act.innerHTML = '<span style="display:inline-flex;align-items:center;gap:8px;color:var(--text2);font-weight:600"><span class="chk-spin"></span>' + actLabel + '</span>';
+  var restore = function(){ App._chk.busy = false; renderCheckBody_(); };
 
   // Финальный шаг: записать статус проверки и обновить строку заказа
   var doCheck = function(){
     google.script.run
       .withSuccessHandler(function(resp){
-        if (!resp || !resp.ok){ toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
+        App._chk.busy = false;
+        if (!resp || !resp.ok){ toast('Ошибка: ' + (resp?resp.error:''), 'error'); restore(); return; }
         var ord = (App.orders || []).find(function(x){ return String(x['ID'])===String(id); });
-        if (ord) ord['Проверки'] = resp.data.checksJson;   // оптимистично обновляем чипы/подсветку
+        if (ord) { ord['Проверки'] = resp.data.checksJson; ord['Проверено'] = resp.data.verified ? 'Да' : 'Нет'; }  // чипы + общий статус (зелёная строка, когда все 4 ok)
         if (typeof filterOrders === 'function') filterOrders();
         closeModal('modal-check');
         toast(status==='ok' ? 'Отмечено: проверено ✓' : status==='err' ? 'Отмечено: ошибка ⚠' : 'Отметка снята', status==='err'?'error':'success');
       })
-      .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
+      .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); restore(); })
       .setOrderCheck(id, cat, status, { note: note, items: (cat==='arm' ? App._chk.rows : undefined) });
   };
   // После правки строк — пересчитать итоги/бонусы заказа, затем зафиксировать статус
@@ -4394,11 +4440,11 @@ function saveCheck_(status){
   if (cat === 'mat'){
     chkMatRecalc_();
     var matLines = App._chk.rows.map(function(r){ return { materialId:r['Материал ID']||'', name:r['Название']||'', unit:r['Единица']||'пм', qty:Number(r['Кол-во'])||0, rollWidth:Number(r['Ширина рулона'])||1.52, pricePerSqm:Number(r['Цена за м²'])||0, type:r['Тип']==='остаток'?'остаток':'расход', lenPiece:Number(r['Длина куска'])||0, widPiece:Number(r['Ширина куска'])||0, zone:r['Зона']||'', light:r['Светопропускаемость']||'' }; });
-    google.script.run.withSuccessHandler(recalcThen).withFailureHandler(function(e){ toast('Ошибка сохранения расхода: ' + e.message, 'error'); }).saveOrderMaterials(id, matLines);
+    google.script.run.withSuccessHandler(recalcThen).withFailureHandler(function(e){ toast('Ошибка сохранения расхода: ' + e.message, 'error'); restore(); }).saveOrderMaterials(id, matLines);
   } else if (cat === 'exp'){
     chkExpSync_();
     var expLines = App._chk.rows.filter(function(r){ return String(r['Название']||'').trim() || Number(r['Сумма'])>0; }).map(function(r){ return { name:r['Название']||'', amount:Number(r['Сумма'])||0 }; });
-    google.script.run.withSuccessHandler(recalcThen).withFailureHandler(function(e){ toast('Ошибка сохранения расходов: ' + e.message, 'error'); }).saveOrderExpenses(id, expLines);
+    google.script.run.withSuccessHandler(recalcThen).withFailureHandler(function(e){ toast('Ошибка сохранения расходов: ' + e.message, 'error'); restore(); }).saveOrderExpenses(id, expLines);
   } else if (cat === 'arm'){
     chkArmSync_();
     App._chk.rows = App._chk.rows.filter(function(r){ return String(r.work||'').trim() || Number(r.sum)>0 || String(r.who||'').trim(); });
@@ -5012,7 +5058,7 @@ function inlineToggleVer(id) {
       else toast(resp.data.verified ? 'Отмечено как проверенное' : 'Проверка снята', 'success');
     })
     .withFailureHandler(function(e){ st.verified = prev; inlineRender(id); toast('Ошибка: ' + e.message, 'error'); })
-    .toggleOrderVerification(id);
+    .setOrderVerifiedAll(id, !prev);
 }
 
 App._inlineTimers = {};
@@ -7143,7 +7189,7 @@ function toggleOrderVerDash(id, btn) {
       if (trDash) trDash.classList.toggle('row-verified', prev);
       toast('Ошибка: ' + e.message, 'error');
     })
-    .toggleOrderVerification(id);
+    .setOrderVerifiedAll(id, willOn);
 }
 
 // Удаление заказа прямо с главной (дашборд) — мягкое, в Корзину (обратимо)
@@ -9151,6 +9197,18 @@ function renderOrderCard(order) {
           '<table class="data-table" style="border:none"><tbody id="card-exp-tbody">' + renderCardExpRows() + '</tbody></table>' +
         '</div>' +
 
+        // Арматурные работы (снятие/установка деталей) — редактируемые, для сверки директором
+        '<div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;overflow:hidden">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--border)">' +
+            '<span style="font-weight:600">Арматурные работы</span>' +
+            '<div style="display:flex;gap:10px;align-items:center">' +
+              '<span id="card-arm-status" style="font-size:11px;color:var(--text3)"></span>' +
+              '<button class="btn" onclick="addCardArmLine()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--bg-card2);color:var(--text);border:1px solid var(--border);border-radius:7px">+ Добавить</button>' +
+            '</div>' +
+          '</div>' +
+          '<table class="data-table" style="border:none"><thead><tr><th>Работа</th><th>Кто</th><th style="text-align:right">Сумма</th><th></th></tr></thead><tbody id="card-arm-tbody">' + renderCardArmRows() + '</tbody></table>' +
+        '</div>' +
+
       '</div>' +  // /левая колонка
 
       // ПРАВАЯ КОЛОНКА — персонал, оплата, финитог
@@ -9900,6 +9958,77 @@ function removeCardExpLine(i) {
   matAutoSave();
 }
 
+/* --- Карточка заказа: редактор арматурных работ (хранится в JSON «Проверки» заказа) --- */
+function cardArmInit_(){
+  var o = App._currentOrder; if (!o) return;
+  if (!o.arm){ try { o.arm = (JSON.parse(o['Проверки'] || '{}') || {}).armItems || []; } catch(e){ o.arm = []; } }
+}
+function renderCardArmRows() {
+  var o = App._currentOrder; if (!o) return '';
+  cardArmInit_();
+  if (!o.arm.length) return '<tr><td colspan="4" style="text-align:center;color:var(--text3);padding:12px">Арматурные работы не добавлены — «+ Добавить»</td></tr>';
+  var inp = 'padding:3px 7px;border:1px solid var(--border);border-radius:5px;background:var(--inp);color:var(--text);font-size:12px';
+  return o.arm.map(function(r, i) {
+    return '<tr>' +
+      '<td><input class="cardarm-work" data-i="' + i + '" value="' + escapeHtml_(r.work||'') + '" placeholder="напр. снятие бампера" oninput="onCardArmEdit(' + i + ')" style="' + inp + ';width:100%"></td>' +
+      '<td><input class="cardarm-who" data-i="' + i + '" value="' + escapeHtml_(r.who||'') + '" placeholder="кто" oninput="onCardArmEdit(' + i + ')" style="' + inp + ';width:130px"></td>' +
+      '<td style="text-align:right;white-space:nowrap"><input class="cardarm-sum" data-i="' + i + '" type="number" step="0.01" min="0" value="' + (Number(r.sum)||0) + '" oninput="onCardArmEdit(' + i + ')" style="' + inp + ';width:88px;text-align:left"> ' + CUR + '</td>' +
+      '<td style="text-align:right"><button onclick="removeCardArmLine(' + i + ')" title="Удалить" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:13px;padding:2px 4px">✕</button></td>' +
+    '</tr>';
+  }).join('');
+}
+function onCardArmEdit(i) {
+  var o = App._currentOrder; if (!o || !o.arm || !o.arm[i]) return;
+  var w  = document.querySelector('.cardarm-work[data-i="' + i + '"]');
+  var wh = document.querySelector('.cardarm-who[data-i="'  + i + '"]');
+  var s  = document.querySelector('.cardarm-sum[data-i="'  + i + '"]');
+  if (w)  o.arm[i].work = w.value;
+  if (wh) o.arm[i].who  = wh.value;
+  if (s)  o.arm[i].sum  = Number(s.value) || 0;
+  armAutoSave();
+}
+function addCardArmLine() {
+  var o = App._currentOrder; if (!o) return;
+  cardArmInit_();
+  o.arm.push({ work:'', who:'', sum:0 });
+  var tb = document.getElementById('card-arm-tbody');
+  if (tb) tb.innerHTML = renderCardArmRows();
+}
+function removeCardArmLine(i) {
+  var o = App._currentOrder; if (!o || !o.arm) return;
+  o.arm.splice(i, 1);
+  var tb = document.getElementById('card-arm-tbody');
+  if (tb) tb.innerHTML = renderCardArmRows();
+  armAutoSave();
+}
+function armAutoSave() {
+  clearTimeout(App._armTimer);
+  var st = document.getElementById('card-arm-status');
+  if (st) { st.textContent = '● не сохранено'; st.style.color = 'var(--warning)'; }
+  App._armTimer = setTimeout(function(){ armFlush_(); }, 900);
+}
+function armFlush_(cb) {
+  clearTimeout(App._armTimer);
+  var o = App._currentOrder;
+  if (!o || !o['ID'] || !o.arm) { if (cb) cb(); return; }
+  var id = o['ID'];
+  var st = document.getElementById('card-arm-status');
+  if (st) { st.textContent = 'сохранение…'; st.style.color = 'var(--text3)'; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (resp && resp.ok) {
+        o['Проверки'] = resp.data.checksJson;
+        for (var i = 0; i < (App.orders || []).length; i++) {
+          if (String(App.orders[i]['ID']) === String(id)) { App.orders[i]['Проверки'] = resp.data.checksJson; break; }
+        }
+        if (st) { st.textContent = '✓ сохранено'; st.style.color = 'var(--success)'; }
+      } else if (st) { st.textContent = 'ошибка'; st.style.color = 'var(--danger)'; }
+      if (cb) cb();
+    })
+    .withFailureHandler(function(){ if (st) { st.textContent = 'ошибка'; st.style.color = 'var(--danger)'; } if (cb) cb(); })
+    .saveOrderArmature(id, o.arm || []);
+}
+
 function saveCardExpenses() {
   var o = App._currentOrder;
   if (!o) return;
@@ -9944,7 +10073,7 @@ function verifyOrderCard(orderId) {
   if (o) o['Проверено'] = next ? 'Да' : 'Нет';
   if (wrap) wrap.innerHTML = verifyBannerHtml_(orderId, next);
 
-  // 2) Синхронизируем с сервером в фоне, при ошибке откатываем
+  // 2) Синхронизируем с сервером в фоне (каскад на все 4 категории), при ошибке откатываем
   google.script.run
     .withSuccessHandler(function(resp) {
       if (!resp || !resp.ok) {
@@ -9954,19 +10083,23 @@ function verifyOrderCard(orderId) {
         return;
       }
       var v = !!resp.data.verified;
-      if (o) o['Проверено'] = v ? 'Да' : 'Нет';
-      // обновляем кэш списка заказов
+      if (o) { o['Проверено'] = v ? 'Да' : 'Нет'; o['Проверки'] = resp.data.checksJson; }
+      // обновляем кэш списка заказов (и общий статус, и чипы категорий)
       for (var i = 0; i < (App.orders || []).length; i++) {
-        if (String(App.orders[i]['ID']) === String(orderId)) { App.orders[i]['Проверено'] = v ? 'Да' : 'Нет'; break; }
+        if (String(App.orders[i]['ID']) === String(orderId)) {
+          App.orders[i]['Проверено'] = v ? 'Да' : 'Нет';
+          App.orders[i]['Проверки']  = resp.data.checksJson;
+          break;
+        }
       }
-      toast(v ? 'Отмечено проверенным' : 'Проверка снята', 'success');
+      toast(v ? 'Заказ и все пункты отмечены проверенными' : 'Проверка снята со всех пунктов', 'success');
     })
     .withFailureHandler(function(e){
       if (o) o['Проверено'] = prev ? 'Да' : 'Нет';
       if (wrap) wrap.innerHTML = verifyBannerHtml_(orderId, prev);
       toast('Ошибка: ' + e.message, 'error');
     })
-    .toggleOrderVerification(orderId);
+    .setOrderVerifiedAll(orderId, next);
 }
 
 /* --- Карточка заказа: смена условий оплаты / срока --- */
@@ -10411,7 +10544,7 @@ function matFlush_(cb) {
 }
 
 // Общий флаш карточки (поля авто + плёнка/расходы + персонал) — перед печатью и уходом
-function flushCard_(cb) { cvFlush_(function(){ matFlush_(function(){ persFlush_(cb); }); }); }
+function flushCard_(cb) { cvFlush_(function(){ matFlush_(function(){ armFlush_(function(){ persFlush_(cb); }); }); }); }
 
 function finLine_(label, value, color, bold) {
   return '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:13px' + (bold?';font-weight:700':'') + '">' +

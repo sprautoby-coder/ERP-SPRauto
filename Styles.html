@@ -96,6 +96,8 @@
   transition:var(--t);
 }
 .chk-chip:hover { filter:brightness(1.08); transform:translateY(-1px); }
+.chk-spin { width:15px; height:15px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; display:inline-block; animation:chk-spin .7s linear infinite; }
+@keyframes chk-spin { to { transform:rotate(360deg); } }
 
 /* Выделенная чекбоксом строка (для группового удаления) */
 #orders-table tbody tr.row-selected td { background-image: linear-gradient(rgba(56,132,255,.18), rgba(56,132,255,.18)) !important; }
