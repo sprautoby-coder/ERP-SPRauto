@@ -3533,6 +3533,36 @@ function runFixOrderIds() {
     .fixDuplicateOrderIds();
 }
 
+// Разовая чистка дублей мастеров (в т.ч. «Саня, Саня» у чистой тонировки)
+function runCleanupMasterDupes() {
+  var btn = document.getElementById('cleanup-masters-btn');
+  var st  = document.getElementById('maintenance-status');
+  if (btn) { btn.disabled = true; btn.textContent = 'Чистим…'; }
+  if (st) { st.textContent = 'Убираем повторы мастеров и лишние поля тонировщиков…'; st.style.color = 'var(--text2)'; }
+  google.script.run
+    .withSuccessHandler(function(resp){
+      if (btn) { btn.disabled = false; btn.textContent = 'Убрать дубли мастеров'; }
+      if (!resp || !resp.ok) {
+        if (st) { st.textContent = 'Ошибка: ' + (resp?resp.error:''); st.style.color = 'var(--danger)'; }
+        toast('Ошибка: ' + (resp?resp.error:''), 'error');
+        return;
+      }
+      var n = (resp.data && resp.data.fixed) || 0;
+      if (st) {
+        st.textContent = n ? ('Исправлено заказов: ' + n + '. Повторы мастеров убраны, финансы пересчитаны.') : 'Дублей мастеров не найдено.';
+        st.style.color = 'var(--success)';
+      }
+      App.orders = []; App._cardCache = {}; App._dashCache = null;
+      toast(n ? ('Почищено заказов: ' + n) : 'Дублей не найдено', 'success');
+    })
+    .withFailureHandler(function(e){
+      if (btn) { btn.disabled = false; btn.textContent = 'Убрать дубли мастеров'; }
+      if (st) { st.textContent = 'Ошибка: ' + e.message; st.style.color = 'var(--danger)'; }
+      toast('Ошибка: ' + e.message, 'error');
+    })
+    .cleanupMasterDuplicates();
+}
+
 function runSetupWizardUI() {
   var btn = document.getElementById('setup-run-btn');
   var el  = document.getElementById('setup-status');

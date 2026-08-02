@@ -438,6 +438,67 @@ function createOrder(payload) {
  * Пересчитать финансы заказа после изменения материалов или расходов.
  * Вызывается из UI когда пользователь обновляет строки материалов/расходов.
  */
+/**
+ * Разовая чистка дублей мастеров в заказах.
+ * - У ВСЕХ заказов убирает повторы имён внутри полей «Оклейщики» и «Тонировщики».
+ * - У заказов ТОЛЬКО с тонировкой переносит имена из «Тонировщики» в «Оклейщики»
+ *   (основное поле, откуда идёт бонус для чистой тонировки) без повторов и очищает «Тонировщики».
+ * Никто не теряется; изменённым заказам пересчитываются финансы/бонусы.
+ */
+function cleanupMasterDuplicates() {
+  return safeCall(function() {
+    bumpDataVersion_();
+    const sheet   = getTab('DATABASE', 'ORDERS');
+    const data    = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idIdx   = headers.indexOf('ID');
+    const svcIdx  = headers.indexOf('Услуга');
+    const oklIdx  = headers.indexOf('Оклейщики');
+    const tntIdx  = headers.indexOf('Тонировщики');
+    if (oklIdx < 0) throw new Error('Нет колонки «Оклейщики»');
+
+    const uniq = function(str) {
+      const seen = {}, out = [];
+      String(str || '').split(',').forEach(function(n) {
+        n = n.trim();
+        const k = n.toLowerCase();
+        if (n && !seen[k]) { seen[k] = 1; out.push(n); }
+      });
+      return out;
+    };
+    const changed = [];
+    for (let i = 1; i < data.length; i++) {
+      const id = data[i][idIdx];
+      if (!id) continue;
+      const svc  = String(svcIdx >= 0 ? data[i][svcIdx] : '');
+      const hasT = /тонир|tint/i.test(svc);
+      const hasO = /оклей|ppf|антихром|полиров|керам|шумо|антикор|химч|защит/i.test(svc);
+      const tintOnly = hasT && !hasO;
+
+      const oklArr = uniq(data[i][oklIdx]);
+      const tntArr = tntIdx >= 0 ? uniq(data[i][tntIdx]) : [];
+      let newOkl = oklArr, newTnt = tntArr;
+      if (tintOnly) {                       // всё в «Оклейщики», «Тонировщики» очищаем
+        const merged = oklArr.slice();
+        const low = merged.map(function(x){ return x.toLowerCase(); });
+        tntArr.forEach(function(n){ if (low.indexOf(n.toLowerCase()) < 0) { merged.push(n); low.push(n.toLowerCase()); } });
+        newOkl = merged; newTnt = [];
+      }
+      const oldOkl = String(data[i][oklIdx] || '').trim();
+      const oldTnt = tntIdx >= 0 ? String(data[i][tntIdx] || '').trim() : '';
+      const nO = newOkl.join(', '), nT = newTnt.join(', ');
+      if (nO !== oldOkl || nT !== oldTnt) {
+        sheet.getRange(i + 1, oklIdx + 1).setValue(nO);
+        if (tntIdx >= 0) sheet.getRange(i + 1, tntIdx + 1).setValue(nT);
+        changed.push(String(id));
+      }
+    }
+    changed.forEach(function(id) { try { recalcOrderFinance(id); } catch (e) {} });
+    logActivity('Чистка дублей мастеров', 'Заказы', '', '', String(changed.length));
+    return { fixed: changed.length, ids: changed.slice(0, 50) };
+  });
+}
+
 function recalcOrderFinance(orderId) {
   return safeCall(function() {
     bumpDataVersion_();
