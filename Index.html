@@ -455,7 +455,7 @@
             <th style="min-width:70px;text-align:center">Оплата</th>
             <th style="min-width:90px;text-align:center" title="Способ оплаты (после оплаты)">Способ</th>
             <th style="min-width:100px;text-align:center">Статус</th>
-            <th style="min-width:84px;text-align:center" title="Проверено директором">✓ Пров.</th>
+            <th style="min-width:118px;text-align:center" title="Проверка директором: М — материал, Р — расходы, А — арматура, Б — безнал. Нажмите на букву, чтобы сверить.">✓ Пров.</th>
             <th style="min-width:100px">Менеджер</th>
             <th style="min-width:120px" title="Оклейщики / тонировщики">Мастера</th>
             <th style="width:40px"></th>
@@ -791,6 +791,19 @@
           <input class="form-input" id="stock-op-comment" placeholder="необязательно">
         </div>
         <button class="btn btn-primary" style="width:100%;margin-top:8px" id="stock-op-submit" onclick="submitStockOp()">Применить</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ПРОВЕРКА ДИРЕКТОРОМ (материал / расходы / арматура / безнал) -->
+  <div class="modal-dialog-bg" id="modal-check" onclick="closeModalOnOverlay(event)">
+    <div class="modal" style="max-width:720px">
+      <div class="modal-header">
+        <div class="modal-title" id="check-title">Проверка</div>
+        <button class="modal-close" onclick="closeModal('modal-check')">&#10005;</button>
+      </div>
+      <div class="modal-body" id="check-body">
+        <div style="text-align:center;color:var(--text3);padding:24px">Загрузка…</div>
       </div>
     </div>
   </div>

@@ -82,6 +82,21 @@
 #dash-orders-table tbody tr.row-verified td:last-child {
   box-shadow: inset -4px 0 0 var(--success);
 }
+/* Ошибка в проверке директора (материал/расходы/арматура/безнал) — красный слой + метка слева.
+   Перебивает любой платёжный тон строки, чтобы несовпадение сразу бросалось в глаза. */
+#orders-table tbody tr.row-check-err td {
+  background-image: linear-gradient(rgba(231,76,60,.22), rgba(231,76,60,.22)) !important;
+}
+#orders-table tbody tr.row-check-err td:first-child { box-shadow: inset 4px 0 0 var(--danger) !important; }
+/* Чипы покатегорийной проверки в колонке «Пров.» */
+.chk-chip {
+  display:inline-flex; align-items:center; justify-content:center; gap:1px;
+  min-width:22px; height:22px; padding:0 5px; border:1px solid var(--border);
+  border-radius:6px; font-size:11px; font-weight:800; cursor:pointer; line-height:1;
+  transition:var(--t);
+}
+.chk-chip:hover { filter:brightness(1.08); transform:translateY(-1px); }
+
 /* Выделенная чекбоксом строка (для группового удаления) */
 #orders-table tbody tr.row-selected td { background-image: linear-gradient(rgba(56,132,255,.18), rgba(56,132,255,.18)) !important; }
 #orders-table th.col-sel, #orders-table td.col-sel { padding-left: 6px; padding-right: 6px; }

@@ -679,6 +679,76 @@ function toggleOrderVerification(id) {
   });
 }
 
+/* ─── ПОКАТЕГОРИЙНАЯ ПРОВЕРКА ДИРЕКТОРОМ ──────────────────────────────────────
+   Директор сверяет заказ по 4 категориям: mat (расход плёнки), exp (расходы),
+   arm (арматурные работы), bez (безнал). Статусы хранятся JSON-ом в колонке
+   ORDERS «Проверки»: { s:{mat,exp,arm,bez}, notes:{...}, armItems:[...], by:{...} }.
+   Значение статуса: 'ok' | 'err' | '' (не проверено). Общий «Проверено» = Да,
+   когда все 4 категории 'ok'. Ошибка хотя бы в одной подсвечивает строку заказа. */
+var ORDER_CHECK_CATS_ = ['mat', 'exp', 'arm', 'bez'];
+
+/** Установить статус проверки по категории. payload: { note, items }. */
+function setOrderCheck(id, cat, status, payload) {
+  return safeCall(function() {
+    bumpDataVersion_();
+    if (!id) throw new Error('Нет ID заказа');
+    if (ORDER_CHECK_CATS_.indexOf(cat) < 0) throw new Error('Неизвестная категория проверки: ' + cat);
+    status  = (status === 'ok' || status === 'err') ? status : '';
+    payload = payload || {};
+
+    const sheet   = getTab('DATABASE', 'ORDERS');
+    ensureColumns_(sheet, ['Проверено', 'Проверки']);
+    const data    = sheet.getDataRange().getValues();
+    const headers = data[0];
+    const idIdx   = headers.indexOf('ID');
+    const chkIdx  = headers.indexOf('Проверки');
+    const verIdx  = headers.indexOf('Проверено');
+    const updIdx  = headers.indexOf('Обновлён');
+    const tz      = Session.getScriptTimeZone();
+    const nowStr  = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy HH:mm');
+
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][idIdx]) !== String(id)) continue;
+      let obj = {};
+      try { obj = JSON.parse(data[i][chkIdx] || '{}') || {}; } catch (e) { obj = {}; }
+      if (!obj.s)     obj.s = {};
+      if (!obj.notes) obj.notes = {};
+      if (!obj.by)    obj.by = {};
+      obj.s[cat] = status;
+      if (payload.note !== undefined) obj.notes[cat] = String(payload.note || '');
+      if (cat === 'arm' && payload.items !== undefined) obj.armItems = payload.items || [];
+      obj.by[cat] = status ? nowStr : '';
+
+      sheet.getRange(i + 1, chkIdx + 1).setValue(JSON.stringify(obj));
+
+      const allOk = ORDER_CHECK_CATS_.every(function(c) { return obj.s[c] === 'ok'; });
+      if (verIdx >= 0) sheet.getRange(i + 1, verIdx + 1).setValue(allOk ? 'Да' : 'Нет');
+      if (updIdx >= 0) sheet.getRange(i + 1, updIdx + 1).setValue(nowStr);
+      logActivity('Проверка ' + cat + ': ' + (status || 'снята'), 'Заказ', id, '', payload.note || '');
+      return { id: id, checks: obj.s, notes: obj.notes, armItems: obj.armItems || [], verified: allOk, checksJson: JSON.stringify(obj) };
+    }
+    throw new Error('Заказ не найден: ' + id);
+  });
+}
+
+/** Данные для окна сверки: mat/exp/bez — строки из соответствующих листов; arm берётся из JSON заказа на клиенте. */
+function getOrderCheckData(id, cat) {
+  return safeCall(function() {
+    if (cat === 'mat') {
+      return readSheetAsObjects('DATABASE', 'ORDER_MATERIALS').filter(function(r) { return String(r['Заказ ID']) === String(id); });
+    }
+    if (cat === 'exp') {
+      return readSheetAsObjects('DATABASE', 'ORDER_EXPENSES').filter(function(r) { return String(r['Заказ ID']) === String(id); });
+    }
+    if (cat === 'bez') {
+      return readSheetAsObjects('DATABASE', 'PAYMENTS').filter(function(r) {
+        return String(r['Заказ ID']) === String(id) && /безнал/i.test(String(r['Способ оплаты'] || ''));
+      });
+    }
+    return [];
+  });
+}
+
 /**
  * Изменить статус заказа. Допустимые статусы берутся из настраиваемых воронок.
  */
