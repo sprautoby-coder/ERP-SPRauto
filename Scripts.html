@@ -4167,10 +4167,12 @@ function statusBadge_(status) {
 
 // Мастера заказа для колонки таблицы: оклейщики + тонировщики через запятую
 function ordersMastersText_(o) {
-  var a = [];
-  var w = String(o['Оклейщики'] || '').trim(); if (w) a.push(w);
-  var t = String(o['Тонировщики'] || '').trim(); if (t) a.push(t);
-  return a.join(', ');
+  // Объединяем оклейщиков и тонировщиков без повторов (один человек может быть в обоих полях)
+  var names = [];
+  [String(o['Оклейщики'] || ''), String(o['Тонировщики'] || '')].forEach(function(f) {
+    f.split(',').forEach(function(n) { n = n.trim(); if (n && names.indexOf(n) < 0) names.push(n); });
+  });
+  return names.join(', ');
 }
 
 /* ─── ПРОВЕРКА ДИРЕКТОРОМ: 4 категории ───────────────────────────────────────
