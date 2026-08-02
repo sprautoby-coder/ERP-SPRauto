@@ -3816,7 +3816,8 @@ function filterOrders() {
       var av = String(o['Авто']     || '').toLowerCase();
       var gn = String(o['Госномер'] || '').toLowerCase();
       var ph = String(o['Телефон']  || '').toLowerCase();
-      if (!cl.includes(q) && !av.includes(q) && !gn.includes(q) && !ph.includes(q)) return false;
+      var vn = String(o['VIN']      || '').toLowerCase();
+      if (!cl.includes(q) && !av.includes(q) && !gn.includes(q) && !ph.includes(q) && !vn.includes(q)) return false;
     }
     return true;
   });
