@@ -1688,15 +1688,8 @@ function fillServiceDropdowns() {
     return '<label class="svc-chip"><input type="checkbox" class="ord-extra-svc" value="' + s.code + '" onchange="updateOrderTintBlock_()"> ' + (s.icon ? s.icon + ' ' : '') + s.name + '</label>';
   }).join('');
 
-  // Фильтр заказов — value = название (в заказах хранится название услуги)
-  var filt = document.getElementById('orders-service-filter');
-  if (filt) {
-    var cur = filt.value;
-    filt.innerHTML = '<option value="">Все услуги</option>' + active.map(function(s){
-      return '<option value="' + s.name + '">' + s.name + '</option>';
-    }).join('');
-    filt.value = cur;
-  }
+  // Фильтр заказов по услугам (мультивыбор галочками) — значение = название услуги (в заказах хранится название)
+  populateSvcFilter_();
 
   // Услуга материала (создание и редактирование) — value = код (+ «Универсальная»)
   ['mat-service', 'edit-mat-service'].forEach(function(mid){
@@ -3826,16 +3819,56 @@ function onOrdPeriodChange() {
   filterOrders();
 }
 
+/* ── Фильтр заказов по услугам (мультивыбор) ─────────────────────────────────
+   Пустой выбор = все услуги. Заказ проходит, если ЛЮБАЯ из его услуг выбрана
+   (смешанный «Оклейка PPF, Тонировка» находится и по оклейке, и по тонировке). */
+App._orderSvcFilter = App._orderSvcFilter || [];
+function populateSvcFilter_() {
+  var menu = document.getElementById('ord-svc-filter-menu'); if (!menu) return;
+  var services = ((App.config && App.config.services) || []).filter(function(s){ return s.active !== false; });
+  var sel = App._orderSvcFilter || [];
+  var row = function(inner){ return '<label style="display:flex;align-items:center;gap:8px;padding:5px 8px;cursor:pointer;font-size:13px;border-radius:6px" onmouseover="this.style.background=\'var(--bg-hover,rgba(120,140,170,.1))\'" onmouseout="this.style.background=\'\'">' + inner + '</label>'; };
+  var html = row('<input type="checkbox" id="ord-svc-all"' + (sel.length === 0 ? ' checked' : '') + ' onchange="svcFilterAll_(this)"> <b>Все услуги</b>') +
+    '<div style="border-top:1px solid var(--border);margin:4px 0"></div>';
+  html += services.map(function(s){
+    var on = sel.indexOf(s.name) >= 0;
+    return row('<input type="checkbox" class="ord-svc-cb" value="' + String(s.name).replace(/"/g,'&quot;') + '"' + (on ? ' checked' : '') + ' onchange="onSvcFilterChange_()"> ' + (s.icon ? s.icon + ' ' : '') + s.name);
+  }).join('');
+  menu.innerHTML = html;
+  updateSvcFilterLabel_();
+}
+function toggleSvcFilter_(e){ if (e) e.stopPropagation(); var m = document.getElementById('ord-svc-filter-menu'); if (!m) return; m.style.display = (m.style.display === 'block') ? 'none' : 'block'; }
+function svcFilterAll_(cb){ if (cb.checked) { App._orderSvcFilter = []; document.querySelectorAll('.ord-svc-cb').forEach(function(x){ x.checked = false; }); } updateSvcFilterLabel_(); filterOrders(); }
+function onSvcFilterChange_(){
+  var arr = []; document.querySelectorAll('.ord-svc-cb:checked').forEach(function(x){ arr.push(x.value); });
+  App._orderSvcFilter = arr;
+  var all = document.getElementById('ord-svc-all'); if (all) all.checked = (arr.length === 0);
+  updateSvcFilterLabel_(); filterOrders();
+}
+function updateSvcFilterLabel_(){
+  var lbl = document.getElementById('ord-svc-filter-label'); if (!lbl) return;
+  var sel = App._orderSvcFilter || [];
+  lbl.textContent = sel.length === 0 ? 'Все услуги' : (sel.length === 1 ? sel[0] : ('Услуги: ' + sel.length));
+}
+// Закрытие меню при клике вне его
+try { document.addEventListener('click', function(e){ var w = document.getElementById('ord-svc-filter'); var m = document.getElementById('ord-svc-filter-menu'); if (m && w && !w.contains(e.target)) m.style.display = 'none'; }); } catch(e){}
+// Заказ содержит одну из выбранных услуг?
+function orderMatchesSvcFilter_(o){
+  var sel = App._orderSvcFilter || [];
+  if (!sel.length) return true;
+  var tokens = String(o['Услуга'] || '').split(',').map(function(x){ return x.trim(); }).filter(Boolean);
+  return sel.some(function(s){ return tokens.indexOf(s) >= 0; });
+}
+
 function filterOrders() {
   var search  = (document.getElementById('orders-search')         || {}).value || '';
-  var service = (document.getElementById('orders-service-filter') || {}).value || '';
   var range   = getPeriodRangeFromUI('ord');   // {from,to} ISO или пусто (Всё время)
   var fromMs  = range.from ? new Date(range.from).getTime() : null;
   var toMs    = range.to   ? new Date(range.to).getTime()   : null;
   // База периода: период + услуга + поиск (БЕЗ вкладки статуса) — для KPI и счётчиков
   var periodBase = App.orders.filter(function(o) {
     if (!o['ID']) return false;
-    if (service && o['Услуга'] !== service) return false;
+    if (!orderMatchesSvcFilter_(o)) return false;
     if (fromMs || toMs) {
       var od = parseOrdDate_(o['Дата']);
       if (od != null) { if (fromMs && od < fromMs) return false; if (toMs && od > toMs) return false; }

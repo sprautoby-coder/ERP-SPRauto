@@ -396,15 +396,15 @@
       </div>
       <!-- Вкладки-фильтры по статусам генерируются из настраиваемых воронок -->
       <div class="filter-tabs" id="orders-status-tabs"></div>
-      <select class="form-select" id="orders-service-filter" onchange="filterOrders()" style="width:180px;flex:0 0 180px;height:38px;font-size:13px;">
-        <option value="">Все услуги</option>
-        <option value="Оклейка PPF">Оклейка PPF</option>
-        <option value="Тонировка">Тонировка</option>
-        <option value="Полировка">Полировка</option>
-        <option value="Керамика">Керамика</option>
-        <option value="Антихром">Антихром</option>
-        <option value="Шумоизоляция">Шумоизоляция</option>
-      </select>
+      <!-- Фильтр услуг: несколько галочек (смешанные заказы находятся по каждой их услуге) -->
+      <div id="ord-svc-filter" style="position:relative;flex:0 0 180px;width:180px">
+        <button type="button" class="form-select" id="ord-svc-filter-btn" onclick="toggleSvcFilter_(event)"
+          style="width:100%;height:38px;font-size:13px;text-align:left;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:6px">
+          <span id="ord-svc-filter-label" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Все услуги</span>
+          <span style="opacity:.55">▾</span>
+        </button>
+        <div id="ord-svc-filter-menu" style="display:none;position:absolute;z-index:60;top:42px;left:0;min-width:220px;max-height:320px;overflow:auto;background:var(--bg-card);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 28px rgba(0,0,0,.20);padding:6px"></div>
+      </div>
       <select class="form-select" id="ord-period" onchange="onOrdPeriodChange()" style="width:150px;flex:0 0 150px;height:38px;font-size:13px" title="Период отображения заказов">
         <option value="all" selected>Всё время</option>
         <option value="today">Сегодня</option>
