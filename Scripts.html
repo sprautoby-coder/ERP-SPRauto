@@ -3825,11 +3825,14 @@ function filterOrders() {
   var filtered = (App._orderFilter && App._orderFilter !== 'all')
     ? periodBase.filter(function(o){ return o['Статус'] === App._orderFilter; })
     : periodBase.slice();
-  // Новые заказы — сверху: по дате (новее выше), затем по ID (последний созданный выше)
+  // Сортировка по дате: по умолчанию убывание (новые сверху); клик по заголовку меняет направление.
+  var asc = App._orderSortDir === 'asc';
   filtered.sort(function(a, b){
     var da = parseOrdDate_(a['Дата']) || 0, db = parseOrdDate_(b['Дата']) || 0;
-    if (db !== da) return db - da;
-    return String(b['ID'] || '').localeCompare(String(a['ID'] || ''), undefined, { numeric: true });
+    if (db !== da) return asc ? (da - db) : (db - da);
+    // при равной дате — по ID (последний созданный ближе к «новее»)
+    var cmp = String(a['ID'] || '').localeCompare(String(b['ID'] || ''), undefined, { numeric: true });
+    return asc ? cmp : -cmp;
   });
   App._ordersFiltered = filtered;
   loadOrdersKpi();   // KPI/счётчики — по периоду (использует App._ordersPeriodBase)
@@ -3839,6 +3842,15 @@ function filterOrders() {
 
 function renderOrders(orders) {
   renderOrdersTable(orders);
+}
+
+// Переключить направление сортировки заказов по дате (↓ новые сверху ⇄ ↑ старые сверху)
+App._orderSortDir = App._orderSortDir || 'desc';
+function toggleOrderDateSort() {
+  App._orderSortDir = (App._orderSortDir === 'asc') ? 'desc' : 'asc';
+  var ind = document.getElementById('ord-date-sort');
+  if (ind) ind.textContent = (App._orderSortDir === 'asc') ? '↑' : '↓';
+  filterOrders();
 }
 
 // Переключение Таблица / Канбан

@@ -446,7 +446,7 @@
             <th class="col-sel" style="width:34px;text-align:center"><input type="checkbox" id="orders-sel-all" onclick="toggleAllOrderSel(this)" title="Выбрать все"></th>
             <th style="width:96px"></th>
             <th style="min-width:110px">Договор</th>
-            <th style="min-width:80px">Дата</th>
+            <th style="min-width:80px;cursor:pointer;user-select:none" onclick="toggleOrderDateSort()" title="Сортировать по дате">Дата <span id="ord-date-sort" style="color:var(--accent);font-weight:700">↓</span></th>
             <th style="min-width:150px">Клиент</th>
             <th style="min-width:130px">Авто / Госномер</th>
             <th style="min-width:110px">Услуга</th>
