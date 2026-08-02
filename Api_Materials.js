@@ -51,24 +51,32 @@ function ensureMaterialIds_() {
   const nameIdx = headers.indexOf('Название');
   if (idIdx < 0) return;
 
+  // Максимальный существующий номер (для новых уникальных ID)
   let maxN = 0;
-  const missing = [];
   for (let i = 1; i < data.length; i++) {
-    const id = String(data[i][idIdx] || '').trim();
-    if (id) {
-      const m = id.match(/(\d+)\s*$/);
-      if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
-    } else if (nameIdx < 0 || String(data[i][nameIdx] || '').trim()) {
-      missing.push(i);   // без ID, но с названием (не пустая строка)
-    }
+    const m = String(data[i][idIdx] || '').trim().match(/(\d+)\s*$/);
+    if (m) maxN = Math.max(maxN, parseInt(m[1], 10));
   }
-  if (!missing.length) return;
+
+  // Строкам без ID И дубликатам (коллизии старой генерации по номеру строки) выдаём новый уникальный ID.
+  // Дубликаты критичны: updateMaterial находит ПЕРВУЮ строку с таким ID → правки уходят не туда.
+  const seen = {};
+  const fixes = [];
+  for (let i = 1; i < data.length; i++) {
+    const hasName = nameIdx < 0 || String(data[i][nameIdx] || '').trim();
+    if (!hasName) continue;
+    let id = String(data[i][idIdx] || '').trim();
+    if (!id || seen[id]) {
+      maxN += 1;
+      id = 'МАТ-' + String(maxN).padStart(4, '0');
+      fixes.push({ row: i, id: id });
+    }
+    seen[id] = true;
+  }
+  if (!fixes.length) return;
 
   bumpDataVersion_();
-  missing.forEach(function(rowIdx) {
-    maxN += 1;
-    sheet.getRange(rowIdx + 1, idIdx + 1).setValue('МАТ-' + String(maxN).padStart(4, '0'));
-  });
+  fixes.forEach(function(f) { sheet.getRange(f.row + 1, idIdx + 1).setValue(f.id); });
 }
 
 /**
@@ -83,10 +91,20 @@ function createMaterial(payload) {
 
     const sheet   = getTab('DATABASE', 'MATERIALS');
     ensureColumns_(sheet, ['Цена безнал', 'Цена постоянным', 'Себестоимость м²']);   // тарифы продажи + себест. м² (авто-миграция)
-    const lastRow = sheet.getLastRow();
-    const id      = 'МАТ-' + String(lastRow).padStart(4, '0');
     const tz      = Session.getScriptTimeZone();
     const now     = Utilities.formatDate(new Date(), tz, 'dd.MM.yyyy HH:mm');
+
+    // Уникальный ID: max существующего номера + 1 (генерация по номеру строки давала коллизии после удалений)
+    const allData = sheet.getDataRange().getValues();
+    const idIdxC  = allData[0].indexOf('ID');
+    let   maxN    = 0;
+    if (idIdxC >= 0) {
+      for (let i = 1; i < allData.length; i++) {
+        const mm = String(allData[i][idIdxC] || '').trim().match(/(\d+)\s*$/);
+        if (mm) maxN = Math.max(maxN, parseInt(mm[1], 10));
+      }
+    }
+    const id = 'МАТ-' + String(maxN + 1).padStart(4, '0');
 
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     const data = {

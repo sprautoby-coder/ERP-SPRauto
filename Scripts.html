@@ -5576,7 +5576,14 @@ function addMaterialLine(asLeftover) {
   var idx = App._orderMaterials.length;
   var type = asLeftover ? 'остаток' : 'расход';
   var unit = asLeftover ? 'м²' : 'пм';   // остаток обычно меряют в м²
-  App._orderMaterials.push({ materialId:'', name:'', unit:unit, qty:0, rollWidth:1.52, pricePerSqm:0, type:type, cost:0 });
+  var m = { materialId:'', name:'', unit:unit, qty:0, rollWidth:1.52, pricePerSqm:0, type:type, cost:0 };
+  var lm = (!asLeftover) ? matById_(lastMatId_()) : null;   // расход — подставляем последний выбранный материал
+  if (lm) {
+    m.materialId = lm['ID'] || ''; m.name = lm['Название'] || '';
+    m.unit = lm['Единица'] || 'пм'; m.rollWidth = Number(lm['Ширина рулона']) || 1.52;
+    m.pricePerSqm = matSebestM2_(lm); unit = m.unit;
+  }
+  App._orderMaterials.push(m);
 
   var list  = document.getElementById('ord-materials-list');
   var empty = document.getElementById('ord-materials-empty');
@@ -5601,7 +5608,8 @@ function addMaterialLine(asLeftover) {
     '<button class="line-item-remove" onclick="removeMaterialLine(' + idx + ')">✕</button>';
 
   list.appendChild(row);
-  fillMaterialSelect(row.querySelector('.mat-select'), '');
+  fillMaterialSelect(row.querySelector('.mat-select'), m.materialId || '');
+  if (m.materialId) onMaterialChange(idx);   // сразу пересчитать превью с подставленным материалом
 }
 
 function onMaterialSelect(sel, idx) {
@@ -5615,6 +5623,7 @@ function onMaterialSelect(sel, idx) {
   if (m.type !== 'остаток') m.unit = opt.dataset.unit || 'пм';
   m.pricePerSqm = Number(opt.dataset.price)     || 0;
   m.rollWidth   = Number(opt.dataset.rollWidth)  || 1.52;
+  setLastMatId_(m.materialId);   // запоминаем последний выбранный материал
 
   var row     = document.getElementById('mat-row-' + idx);
   var unitSel = row ? row.querySelector('.line-item-unit') : null;
@@ -9602,10 +9611,24 @@ function removeTintFilmLine(i) {
   matAutoSave();
 }
 
+// Последний выбранный материал (обычно используется один и тот же) — запоминаем и подставляем в новые строки
+function lastMatId_(){ try { return localStorage.getItem('spr-last-mat') || ''; } catch(e){ return ''; } }
+function setLastMatId_(id){ try { if (id) localStorage.setItem('spr-last-mat', String(id)); } catch(e){} }
+function matById_(id){ return (App._materials || []).find(function(m){ return String(m['ID']) === String(id); }); }
+
 function blankMatRow_() {
-  return { 'Материал ID':'', 'Название':'', 'Единица':'пм', 'Кол-во':0,
+  var row = { 'Материал ID':'', 'Название':'', 'Единица':'пм', 'Кол-во':0,
     'Ширина рулона':1.52, 'Цена за м²':0, 'Тип':'расход', 'Кол-во м²':0, 'Стоимость':0,
     'Длина куска':0, 'Ширина куска':0 };
+  var lm = matById_(lastMatId_());   // подставляем ранее выбранный материал (меняют его редко)
+  if (lm) {
+    row['Материал ID']   = lm['ID'] || '';
+    row['Название']      = lm['Название'] || '';
+    row['Единица']       = lm['Единица'] || 'пм';
+    row['Ширина рулона'] = Number(lm['Ширина рулона']) || 1.52;
+    row['Цена за м²']    = matSebestM2_(lm);
+  }
+  return row;
 }
 
 // Построить строки таблицы материалов карточки из App._currentOrder.materials
@@ -9721,6 +9744,7 @@ function onCardMatSelect(i) {
   m['Единица']       = (opt.dataset.unit) || 'пм';
   m['Цена за м²']    = Number(opt.dataset.price) || 0;
   m['Ширина рулона'] = Number(opt.dataset.roll) || 1.52;
+  setLastMatId_(m['Материал ID']);   // запоминаем для будущих заказов
   // подхватываем введённое кол-во (поле «кол-во» для пм или «итого» для м²)
   var q = document.querySelector('.cardmat-qty[data-i="' + i + '"]') || document.querySelector('.cardmat-total[data-i="' + i + '"]');
   if (q) m['Кол-во'] = Number(q.value) || 0;
