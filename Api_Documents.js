@@ -711,6 +711,84 @@ function buildRassrochkaSection_(d, totalPrice) {
     'досрочной оплаты всей оставшейся суммы по настоящему договору.</p>';
 }
 
+/**
+ * Разбивка заказа по услугам для рассрочки. Логика: платежи и плановые взносы гасят
+ * БОЛЕЕ ДЕШЁВУЮ услугу первой (тонировка обычно закрывается сразу, оклейка — в рассрочку).
+ * Возвращает по выбранной услуге: {price, paid, remaining, schedule:[{n,date,amount}]}.
+ */
+function serviceSplit_(d, serviceMode) {
+  var o = d.order;
+  var total     = Number(o['Стоимость заказа'])   || 0;
+  var tintPrice = Number(o['Стоимость тонировки']) || 0;
+  var wrapPrice = Math.max(0, total - tintPrice);
+
+  var svcs = [];
+  if (wrapPrice > 0) svcs.push({ key: 'wrap', price: wrapPrice });
+  if (tintPrice > 0) svcs.push({ key: 'tint', price: tintPrice });
+  if (!svcs.length) svcs.push({ key: serviceMode, price: total });
+  svcs.sort(function(a, b){ return a.price - b.price; });   // дешёвую — первой
+
+  // Фактически оплачено всего по заказу
+  var paid = 0;
+  try {
+    readSheetAsObjects('DATABASE', 'PAYMENTS').forEach(function(p){
+      if (String(p['Заказ ID']) === String(o['ID'])) paid += Number(p['Сумма']) || 0;
+    });
+  } catch (e) {}
+  var rem = paid;
+  svcs.forEach(function(s){ var give = Math.min(rem, s.price); s.paid = give; s.remaining = round2_(s.price - give); rem -= give; });
+
+  // Плановый график разбиваем по услугам тем же порядком (дешёвая закрывается первой)
+  var bal = {}; svcs.forEach(function(s){ bal[s.key] = s.price; });
+  var perSvc = {}; svcs.forEach(function(s){ perSvc[s.key] = []; });
+  (d.schedule || []).forEach(function(r){
+    var amt = Number(r['Сумма']) || 0, dt = String(r['Дата'] || '').trim();
+    svcs.forEach(function(s){
+      if (amt <= 0.001) return;
+      var give = Math.min(amt, bal[s.key]);
+      if (give > 0.001) { perSvc[s.key].push({ n: perSvc[s.key].length + 1, date: dt, amount: round2_(give) }); bal[s.key] -= give; amt = round2_(amt - give); }
+    });
+  });
+
+  var t = svcs.filter(function(s){ return s.key === serviceMode; })[0];
+  if (!t) { var p = (serviceMode === 'tint') ? tintPrice : wrapPrice; t = { key: serviceMode, price: p, paid: 0, remaining: p }; }
+  return { price: t.price, paid: t.paid || 0, remaining: (t.remaining != null ? t.remaining : t.price), schedule: perSvc[serviceMode] || [] };
+}
+
+/** Блок рассрочки для ОТДЕЛЬНОГО документа услуги: график этой услуги + строка «внесено/остаток». */
+function buildRassrochkaSectionForService_(ss) {
+  var rows = ss.schedule || [];
+  var tableRows = '';
+  rows.forEach(function(r){
+    tableRows += '<tr><td class="center">' + r.n + '</td><td class="center">' + (r.date || '____________') +
+      '</td><td class="right">' + Number(r.amount).toFixed(2) + ' руб.</td><td>' + numToWords_(r.amount) + '</td></tr>';
+  });
+  if (!rows.length) {
+    for (var i = 0; i < 3; i++) tableRows += '<tr><td class="center">' + (i + 1) + '</td><td class="center">____________</td><td class="right">____________</td><td>____________</td></tr>';
+  }
+  var paidLine = (ss.paid > 0.01)
+    ? '<p>2.4.1. На дату заключения настоящего договора Заказчиком внесено <b>' + ss.paid.toFixed(2) + ' руб.</b> (' + numToWords_(ss.paid) + '). Остаток к оплате составляет <b>' + ss.remaining.toFixed(2) + ' руб.</b> (' + numToWords_(ss.remaining) + ') и вносится согласно графику ниже.</p>'
+    : '';
+  return '' +
+    '<p>2.4. Оплата стоимости работ, указанной в п.2.2, производится Заказчиком в <b>рассрочку</b> ' +
+    'согласно графику платежей, установленному настоящим пунктом. При оплате в рассрочку условия п.3.2.1 ' +
+    'настоящего договора о порядке предоплаты не применяются.</p>' + paidLine +
+    '<table><thead><tr><th style="width:70px">№ платежа</th><th style="width:110px">Срок оплаты</th>' +
+    '<th style="width:110px">Сумма</th><th>Сумма прописью</th></tr></thead>' +
+    '<tbody>' + tableRows + '</tbody>' +
+    '<tfoot><tr><td class="right" colspan="2"><b>Итого по договору:</b></td>' +
+    '<td class="right"><b>' + Number(ss.price).toFixed(2) + ' руб.</b></td><td><b>' + numToWords_(ss.price) + '</b></td></tr></tfoot>' +
+    '</table>' +
+    '<p>2.5. Каждый платёж вносится не позднее даты, указанной в графике. Датой оплаты считается дата ' +
+    'поступления денежных средств Исполнителю (в кассу либо на расчётный счёт).</p>' +
+    '<p>2.6. Заказчик вправе досрочно погасить оставшуюся сумму полностью или частично без взимания ' +
+    'дополнительных комиссий и штрафов.</p>' +
+    '<p>2.7. В случае просрочки любого из платежей более чем на 5 (пять) календарных дней Заказчик ' +
+    'уплачивает Исполнителю пеню в размере 0,1% от суммы просроченного платежа за каждый день просрочки. ' +
+    'При просрочке платежа более чем на 30 (тридцать) календарных дней Исполнитель вправе потребовать ' +
+    'досрочной оплаты всей оставшейся суммы по настоящему договору.</p>';
+}
+
 /** Фамилия + инициалы: «Иванов Иван Иванович» → «Иванов И.И.» */
 function surnameInitials_(fio) {
   var p = String(fio || '').trim().split(/\s+/);
@@ -793,8 +871,16 @@ function buildDocPlaceholders_(d, serviceMode) {
   var auto  = String(o['Авто'] || '').trim();
   var marka = auto.split(/\s+/)[0] || '';
   var model = auto.split(/\s+/).slice(1).join(' ');
-  var film  = (d.materials[0] || {})['Название'] || o['Пленка'] || '';
   var tintFilm = String(o['Пленка'] || '').trim();   // выбранная ТОНИРОВОЧНАЯ плёнка заказа (для тонир-документов)
+  // Плёнка ОКЛЕЙКИ = первая НЕтонировочная строка расхода (тонировочную o['Пленка'] сюда не подставляем!).
+  var wrapFilm = '';
+  (d.materials || []).forEach(function(m){
+    var isTintRow = String(m['Зона'] || '').trim() ||
+                    String(m['Светопропускаемость'] == null ? '' : m['Светопропускаемость']).trim() ||
+                    /тонир/i.test(String(m['Категория'] || ''));
+    if (!isTintRow && !wrapFilm) wrapFilm = String(m['Название'] || '').trim();
+  });
+  var film = wrapFilm || ((d.materials[0] || {})['Название'] || '');   // плёнка оклейки для договора/акта/протокола
   var usedFilm = d.materials.reduce(function(s, m){ return s + (Number(m['Кол-во']) || 0); }, 0);
   var get = function(k, def){ return (co[k] != null && co[k] !== '') ? co[k] : def; };
 
@@ -847,9 +933,18 @@ function buildDocPlaceholders_(d, serviceMode) {
   // ИЛИ у заказа уже есть график платежей (устойчиво к сбою поля «Тип оплаты»).
   var payTypeCond = String(o['Тип оплаты'] || '').trim();
   var hasSchedule = !!(d.schedule && d.schedule.length);
-  var rassrochkaBlock = ((payTypeCond === 'Рассрочка' || hasSchedule) && serviceMode !== 'wrap' && serviceMode !== 'tint')
-    ? buildRassrochkaSection_(d, Number(o['Стоимость заказа']) || price)
-    : '';
+  var isRassrochka = (payTypeCond === 'Рассрочка' || hasSchedule);
+  var rassrochkaBlock = '';
+  if (isRassrochka) {
+    if (serviceMode === 'wrap' || serviceMode === 'tint') {
+      // Отдельный документ услуги: платежи гасят более дешёвую услугу первой.
+      // Рассрочку показываем только если у ЭТОЙ услуги остался долг.
+      var ss = serviceSplit_(d, serviceMode);
+      rassrochkaBlock = (ss.remaining > 0.01) ? buildRassrochkaSectionForService_(ss) : '';
+    } else {
+      rassrochkaBlock = buildRassrochkaSection_(d, Number(o['Стоимость заказа']) || price);
+    }
+  }
   return {
     '_rassrochkaBlock': rassrochkaBlock,
     'Номер договора':  o['Номер договора'] || '',
@@ -982,16 +1077,16 @@ function docWrap_(title, bodyHtml, logoUrl, asWatermark) {
   var logo = (logoUrl && !asWatermark) ? '<img src="' + logoUrl + '" alt="logo" style="height:64px;width:auto;display:block;margin:0 auto 6px">' : '';
   var wm   = (logoUrl && asWatermark) ? '<img class="watermark" src="' + logoUrl + '" alt="">' : '';
   return '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>' + title + '</title><style>' +
-    '@page{size:A4;margin:12mm 14mm}' +
+    '@page{size:A4;margin:9mm 12mm}' +
     '*{box-sizing:border-box}' +
-    'body{font-family:"Times New Roman",serif;font-size:10.5pt;line-height:1.18;color:#000;margin:0}' +
+    'body{font-family:"Times New Roman",serif;font-size:9pt;line-height:1.1;color:#000;margin:0}' +
     '.watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);width:60%;max-width:150mm;opacity:.07;z-index:0;pointer-events:none;-webkit-print-color-adjust:exact;print-color-adjust:exact}' +
-    '.doc{max-width:180mm;margin:0 auto;position:relative;z-index:1}' +
-    'h2{text-align:center;font-size:12pt;margin:2px 0;font-weight:bold}' +
-    'h3{font-size:10.5pt;margin:6px 0 2px;font-weight:bold}' +
-    'p{margin:2px 0;text-align:justify}' +
-    'table{width:100%;border-collapse:collapse;margin:4px 0}' +
-    'td,th{border:1px solid #000;padding:2px 5px;font-size:9.5pt;vertical-align:top}th{background:#eee;font-weight:bold}' +
+    '.doc{max-width:186mm;margin:0 auto;position:relative;z-index:1}' +
+    'h2{text-align:center;font-size:11pt;margin:2px 0;font-weight:bold}' +
+    'h3{font-size:9.5pt;margin:4px 0 1px;font-weight:bold}' +
+    'p{margin:1px 0;text-align:justify}' +
+    'table{width:100%;border-collapse:collapse;margin:3px 0}' +
+    'td,th{border:1px solid #000;padding:1px 4px;font-size:8.5pt;vertical-align:top}th{background:#eee;font-weight:bold}' +
     '.blank{display:inline-block;min-width:90px;border-bottom:1px solid #000;line-height:1}' +
     '.de{border:1px solid #9bb;border-radius:4px;padding:1px 4px;font:inherit;width:62px;text-align:right;background:#f4fbfe}' +
     '@media print{.de{border:none;padding:0;background:transparent;-webkit-print-color-adjust:exact}}' +

@@ -11053,8 +11053,13 @@ function printGroupDoc(orderId, kind, btn) {
 }
 
 // Определение состава услуг заказа
-function orderHasTint_(o){ return /тонир|tint/i.test(String((o||{})['Услуга'] || '')); }
-function orderHasWrap_(o){ return /оклейк|ppf|полиров|керам|антихром|шумо|химч/i.test(String((o||{})['Услуга'] || '')); }
+function orderHasTint_(o){ return /тонир|tint/i.test(String((o||{})['Услуга'] || '')) || (Number((o||{})['Стоимость тонировки']) || 0) > 0; }
+function orderHasWrap_(o){
+  if (/оклейк|ppf|полиров|керам|антихром|шумо|химч/i.test(String((o||{})['Услуга'] || ''))) return true;
+  // тонировка + остаток суммы (оклейка/др.) → есть и «оклеечная» часть
+  var tot = Number((o||{})['Стоимость заказа']) || 0, tnt = Number((o||{})['Стоимость тонировки']) || 0;
+  return tnt > 0 && tot > tnt + 0.01;
+}
 function orderMultiService_(o){ return orderHasTint_(o) && orderHasWrap_(o); }
 
 // Кнопки документов: для мультиуслуги — отдельные договор/наряд на каждую услугу
