@@ -100,7 +100,8 @@ function getKassa(dateStr) {
       var oid = String(p['Заказ ID'] || '');
       var o = orderById[oid] || {};
       var carPart = o['Авто'] || o['Клиент'] || '';
-      var oidShort = oid.replace(/^\D+/, '') || oid;   // ID = номер заказа без буквенного префикса (ЗАК-00065 → 00065)
+      var oidNum   = oid.replace(/^\D+/, '');          // без буквенного префикса (ЗАК-00065 → 00065)
+      var oidShort = /^\d+$/.test(oidNum) ? String(parseInt(oidNum, 10)).padStart(3, '0') : (oidNum || oid);   // лишние нули убираем: 00065 → 065
       var desc = (oid ? 'ID ' + oidShort + ' ' : '') + carPart + (o['Услуга'] ? ' | ' + o['Услуга'] : '');
       desc = desc.trim() || (p['Комментарий'] || 'Платёж');
 
@@ -190,7 +191,8 @@ function getKassaRange(fromStr, toStr) {
       var isBez  = String(p['Способ оплаты']) === 'Безнал';
       var oid = String(p['Заказ ID'] || ''); var o = orderById[oid] || {};
       var carPart = o['Авто'] || o['Клиент'] || '';
-      var oidShort = oid.replace(/^\D+/, '') || oid;   // ID = номер заказа без буквенного префикса (ЗАК-00065 → 00065)
+      var oidNum   = oid.replace(/^\D+/, '');          // без буквенного префикса (ЗАК-00065 → 00065)
+      var oidShort = /^\d+$/.test(oidNum) ? String(parseInt(oidNum, 10)).padStart(3, '0') : (oidNum || oid);   // лишние нули убираем: 00065 → 065
       var desc = (oid ? 'ID ' + oidShort + ' ' : '') + carPart + (o['Услуга'] ? ' | ' + o['Услуга'] : '');
       desc = desc.trim() || (p['Комментарий'] || 'Платёж');
       if (!isBez) {
