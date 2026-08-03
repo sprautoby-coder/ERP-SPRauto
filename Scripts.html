@@ -9720,6 +9720,8 @@ function renderCardMatRows() {
   // если плёнок нет — сразу показываем одну пустую строку для заполнения (пустые не сохранятся)
   if (App._currentOrder && (!App._currentOrder.materials || !App._currentOrder.materials.length)) {
     App._currentOrder.materials = [ blankMatRow_() ];
+    // подставленный по умолчанию материал (плёнка оклейки) — сохранить при печати/уходе, чтобы попал в документы
+    if (App._currentOrder.materials[0]['Материал ID']) App._matDirty = true;
   }
   var mats = (App._currentOrder && App._currentOrder.materials) || [];
   var inp = 'padding:3px 6px;border:1px solid var(--border);border-radius:5px;background:var(--inp);color:var(--text);font-size:12px';

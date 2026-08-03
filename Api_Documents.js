@@ -880,7 +880,7 @@ function buildDocPlaceholders_(d, serviceMode) {
                     /тонир/i.test(String(m['Категория'] || ''));
     if (!isTintRow && !wrapFilm) wrapFilm = String(m['Название'] || '').trim();
   });
-  var film = wrapFilm || ((d.materials[0] || {})['Название'] || '');   // плёнка оклейки для договора/акта/протокола
+  var film = wrapFilm || '________';   // плёнка оклейки; если расход не заполнен — прочерк для ручного заполнения (не тонировочная!)
   var usedFilm = d.materials.reduce(function(s, m){ return s + (Number(m['Кол-во']) || 0); }, 0);
   var get = function(k, def){ return (co[k] != null && co[k] !== '') ? co[k] : def; };
 

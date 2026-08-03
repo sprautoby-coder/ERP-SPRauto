@@ -100,7 +100,8 @@ function getKassa(dateStr) {
       var oid = String(p['Заказ ID'] || '');
       var o = orderById[oid] || {};
       var carPart = o['Авто'] || o['Клиент'] || '';
-      var desc = (oid ? 'ID ' + oid + ' ' : '') + carPart + (o['Услуга'] ? ' | ' + o['Услуга'] : '');
+      var oidShort = oid.replace(/^\D+/, '') || oid;   // ID = номер заказа без буквенного префикса (ЗАК-00065 → 00065)
+      var desc = (oid ? 'ID ' + oidShort + ' ' : '') + carPart + (o['Услуга'] ? ' | ' + o['Услуга'] : '');
       desc = desc.trim() || (p['Комментарий'] || 'Платёж');
 
       if (!isBeznal) {
@@ -189,7 +190,8 @@ function getKassaRange(fromStr, toStr) {
       var isBez  = String(p['Способ оплаты']) === 'Безнал';
       var oid = String(p['Заказ ID'] || ''); var o = orderById[oid] || {};
       var carPart = o['Авто'] || o['Клиент'] || '';
-      var desc = (oid ? 'ID ' + oid + ' ' : '') + carPart + (o['Услуга'] ? ' | ' + o['Услуга'] : '');
+      var oidShort = oid.replace(/^\D+/, '') || oid;   // ID = номер заказа без буквенного префикса (ЗАК-00065 → 00065)
+      var desc = (oid ? 'ID ' + oidShort + ' ' : '') + carPart + (o['Услуга'] ? ' | ' + o['Услуга'] : '');
       desc = desc.trim() || (p['Комментарий'] || 'Платёж');
       if (!isBez) {
         allIn += amount;
