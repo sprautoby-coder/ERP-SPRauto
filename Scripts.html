@@ -11077,14 +11077,14 @@ function renderDocButtons_(o) {
       b('📋 Наряд · Оклейка',     "printOrderNarad('wrap',this)") +
       b('📋 Наряд · Тонировка',   "printOrderNarad('tint',this)") +
       b('Акт',         "printOrderAct('',this)") +
-      b('✍ Акт приёма (элементы)', "printOrderAcceptAct(this)") +
+      b('✍ Акт приёма авто', "printOrderAcceptAct(this)") +
       b('Карта работ', "printWorkCard(this)");
   } else {
     box.innerHTML =
       b('Договор',      "printOrderContract('',this)") +
       b('Заказ-наряд',  "printOrderNarad('',this)") +
       b('Акт',          "printOrderAct('',this)") +
-      (orderHasWrap_(o) ? b('✍ Акт приёма (элементы)', "printOrderAcceptAct(this)") : '') +
+      (orderHasWrap_(o) ? b('✍ Акт приёма авто', "printOrderAcceptAct(this)") : '') +
       b('Карта работ',  "printWorkCard(this)");
   }
 }
