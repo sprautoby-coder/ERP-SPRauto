@@ -10908,6 +10908,7 @@ function printOrderContract(service, btn) { printDoc_('generateContractHtml',   
 function printOrderNarad(service, btn)    { printDoc_('generateOrderNaradHtml',  service, btn); }
 function printWorkCard(btn)               { printDoc_('generateWorkCardHtml', '', btn); }
 function printOrderAct(service, btn)      { printDoc_('generateActHtml',         service, btn); }
+function printOrderAcceptAct(btn)         { printDoc_('generateAcceptanceActHtml', '', btn); }
 
 /* ── Групповой договор: несколько авто на одно юрлицо ── */
 App._groupParentId = null;
@@ -11076,12 +11077,14 @@ function renderDocButtons_(o) {
       b('📋 Наряд · Оклейка',     "printOrderNarad('wrap',this)") +
       b('📋 Наряд · Тонировка',   "printOrderNarad('tint',this)") +
       b('Акт',         "printOrderAct('',this)") +
+      b('✍ Акт приёма (элементы)', "printOrderAcceptAct(this)") +
       b('Карта работ', "printWorkCard(this)");
   } else {
     box.innerHTML =
       b('Договор',      "printOrderContract('',this)") +
       b('Заказ-наряд',  "printOrderNarad('',this)") +
       b('Акт',          "printOrderAct('',this)") +
+      (orderHasWrap_(o) ? b('✍ Акт приёма (элементы)', "printOrderAcceptAct(this)") : '') +
       b('Карта работ',  "printWorkCard(this)");
   }
 }
