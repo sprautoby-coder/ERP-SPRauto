@@ -3878,6 +3878,12 @@ function orderMatchesSvcFilter_(o){
   return sel.some(function(s){ return tokens.indexOf(s) >= 0; });
 }
 
+// Ввод в поиске: фильтруем; если заказов в памяти нет (сброс кэша/ошибка загрузки) — подгружаем с сервера
+function onOrdersSearch_() {
+  filterOrders();
+  if (!App.orders || !App.orders.length) loadOrders(true);
+}
+
 function filterOrders() {
   var search  = (document.getElementById('orders-search')         || {}).value || '';
   var range   = getPeriodRangeFromUI('ord');   // {from,to} ISO или пусто (Всё время)
@@ -4227,11 +4233,14 @@ var PAY_METHOD_STYLE_ = {
   'Отсрочка':    { c: 'var(--warning)', bg: 'var(--yellow-soft)' },
   'Рассрочка':   { c: 'var(--blue)',    bg: 'var(--blue-soft)' }
 };
-function payMethodBadge_(m) {
+// Подпись способа оплаты: у ФИЗЛИЦА «Безнал» = оплата картой (значение в базе не меняется — бонусы считаются как прежде).
+function payMethodLabel_(m, isLegal) { return (m === 'Безнал' && !isLegal) ? 'Оплата картой' : m; }
+
+function payMethodBadge_(m, isLegal) {
   if (!m) return '<span style="color:var(--text3)">—</span>';
   var s = PAY_METHOD_STYLE_[m] || { c: 'var(--text2)', bg: 'var(--bg-card2)' };
   return '<span style="display:inline-block;font-size:11px;font-weight:600;color:' + s.c +
-         ';background:' + s.bg + ';padding:1px 9px;border-radius:10px;white-space:nowrap">' + m + '</span>';
+         ';background:' + s.bg + ';padding:1px 9px;border-radius:10px;white-space:nowrap">' + payMethodLabel_(m, isLegal) + '</span>';
 }
 
 // Бейдж статуса заказа: тёмный читаемый текст + цветная рамка/подложка.
@@ -4668,7 +4677,7 @@ function renderOrdersTable(orders) {
       '<td style="text-align:right;font-weight:600">' + price.toLocaleString('ru') + ' ' + CUR + '</td>' +
       '<td style="text-align:right;font-size:12px;color:var(--text2)">' + costCell + '</td>' +
       '<td style="text-align:center">' + payBadge + payDates + '</td>' +
-      '<td style="text-align:center">' + payMethodBadge_(o._payMethod) + '</td>' +
+      '<td style="text-align:center">' + payMethodBadge_(o._payMethod, o._clientType === 'юр') + '</td>' +
       '<td style="text-align:center">' + statusBadge_(status) + '</td>' +
       '<td style="text-align:center">' + verCell + '</td>' +
       '<td style="font-size:12px;color:var(--text-secondary)">' + (o['Менеджер'] || '—') + '</td>' +
@@ -8551,6 +8560,18 @@ function openPayOrderModal(orderId, clientName, price, currentDueDate) {
   document.querySelectorAll('#modal-pay-order .ctype-btn').forEach(function(b){ b.classList.remove('active'); });
   var nalBtn = document.getElementById('pay-type-nal');
   if (nalBtn) nalBtn.classList.add('active');
+  // Способ «Безнал» у физлица = оплата картой (подпись; значение и логика −15% прежние)
+  try {
+    var _po = (App.orders || []).find(function(x){ return String(x['ID']) === String(orderId); });
+    var _legalPay = _po && _po._clientType === 'юр';
+    var bnkBtn = document.getElementById('pay-type-bnk');
+    if (bnkBtn) {
+      var sp = bnkBtn.querySelectorAll('span');
+      if (sp[0]) sp[0].textContent = _legalPay ? '🏦' : '💳';
+      if (sp[1]) sp[1].textContent = _legalPay ? 'Безнал' : 'Оплата картой';
+      if (sp[2]) sp[2].textContent = _legalPay ? 'на р/счёт, −15% ЗП' : 'картой, −15% ЗП';
+    }
+  } catch (e) {}
   var certRow = document.getElementById('pay-cert-row'); if (certRow) certRow.style.display = 'none';   // сброс выбора сертификата
 
   // Загружаем историю платежей и остаток
@@ -9153,7 +9174,7 @@ function renderOrderCard(order) {
   // История платежей: способ оплаты меняется прямо здесь → авто-пересчёт (касса/счёт + −15% ЗП)
   var payMethodOpts_ = function(cur){
     return ['Нал','Нал с чеком','Безнал'].map(function(m){
-      return '<option value="' + m + '"' + (String(cur||'') === m ? ' selected' : '') + '>' + m + '</option>';
+      return '<option value="' + m + '"' + (String(cur||'') === m ? ' selected' : '') + '>' + payMethodLabel_(m, isLegal) + '</option>';
     }).join('');
   };
   var payHistory = (order.payments && order.payments.length)
@@ -9171,11 +9192,19 @@ function renderOrderCard(order) {
       }).join('')
     : '<div style="font-size:12px;color:var(--text3);padding:4px 0">Платежей пока нет</div>';
 
-  // Опции типа оплаты
+  // Опции типа оплаты (для физлица «Безнал» отображается как «Оплата картой»)
   var payTypeOpts = ['','Нал','Нал с чеком','Безнал','Смешанная','Отсрочка','Рассрочка'].map(function(t){
-    var label = t === '' ? '— не указано —' : t;
+    var label = t === '' ? '— не указано —' : payMethodLabel_(t, isLegal);
     return '<option value="' + t + '"' + (t===payType?' selected':'') + '>' + label + '</option>';
   }).join('');
+  // Разбивка фактической оплаты по способам (напр. «Нал: 1500 · Оплата картой: 1000»)
+  var payByMethod = {};
+  (order.payments || []).forEach(function(p){ var m = String(p['Способ оплаты']||'').trim() || '—'; payByMethod[m] = (payByMethod[m]||0) + (Number(p['Сумма'])||0); });
+  var payBreakdown = (paid > 0 && Object.keys(payByMethod).length)
+    ? '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px">' + Object.keys(payByMethod).map(function(m){
+        return '<span style="font-size:11.5px;background:var(--bg-card2);border:1px solid var(--border);border-radius:20px;padding:2px 10px">' + payMethodLabel_(m, isLegal) + ': <b>' + fmt(payByMethod[m]) + '</b></span>';
+      }).join('') + '</div>'
+    : '';
   // История платежей + график + срок — только для рассрочки/отсрочки/смешанной (иначе не нужны)
   var showPaySchedule = ['Рассрочка','Отсрочка','Смешанная'].indexOf(payType) >= 0;
 
@@ -9303,10 +9332,12 @@ function renderOrderCard(order) {
                   '<button class="btn" onclick="addCardMatLine()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--bg-card2);color:var(--text);border:1px solid var(--border);border-radius:7px">+ Добавить</button>' +
                 '</div>' +
               '</div>' +
-              '<table class="data-table" style="border:none">' +
-                '<thead><tr><th>Материал</th><th style="text-align:center">Кол-во</th><th style="text-align:center">м²</th><th style="text-align:center">Цена/м²</th><th>Тип</th><th style="text-align:right">Стоимость</th></tr></thead>' +
-                '<tbody id="card-mat-tbody">' + matRows + '</tbody>' +
-              '</table>' +
+              '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch">' +
+                '<table class="data-table" style="border:none;min-width:640px">' +
+                  '<thead><tr><th>Материал</th><th style="text-align:center">Кол-во</th><th style="text-align:center">м²</th><th style="text-align:center">Цена/м²</th><th>Тип</th><th style="text-align:right">Стоимость</th></tr></thead>' +
+                  '<tbody id="card-mat-tbody">' + matRows + '</tbody>' +
+                '</table>' +
+              '</div>' +
             '</div>') +
 
         // Расходы (редактируемые)
@@ -9330,7 +9361,7 @@ function renderOrderCard(order) {
               '<button class="btn" onclick="addCardArmLine()" style="padding:4px 10px;font-size:12px;font-weight:600;background:var(--bg-card2);color:var(--text);border:1px solid var(--border);border-radius:7px">+ Добавить</button>' +
             '</div>' +
           '</div>' +
-          '<table class="data-table" style="border:none"><thead><tr><th>Работа</th><th>Кто</th><th style="text-align:right">Сумма</th><th></th></tr></thead><tbody id="card-arm-tbody">' + renderCardArmRows() + '</tbody></table>' +
+          '<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="data-table" style="border:none;min-width:520px"><thead><tr><th>Работа</th><th>Кто</th><th style="text-align:right">Сумма</th><th></th></tr></thead><tbody id="card-arm-tbody">' + renderCardArmRows() + '</tbody></table></div>' +
         '</div>' +
 
       '</div>' +  // /левая колонка
@@ -9364,6 +9395,7 @@ function renderOrderCard(order) {
               finBox_('Оплачено', fmt(paid), 'var(--success)') +
               finBox_('Остаток', fmt(remaining), remaining>0?'var(--danger)':'var(--success)') +
             '</div>' +
+            payBreakdown +
             (showPaySchedule
               ? '<div style="font-size:11px;color:var(--text3);margin:4px 0;font-weight:600;text-transform:uppercase;letter-spacing:.05em">История платежей</div>' + payHistory
               : '') +
