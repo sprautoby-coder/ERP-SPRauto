@@ -2076,7 +2076,7 @@ function printKassaReport_() {
     '.tot div{display:flex;justify-content:space-between;padding:2px 0}' +
     '@media print{.noprint{display:none}}' +
     '</style></head><body>' +
-    '<div class="noprint" style="text-align:right;margin:8px 14px"><button onclick="window.print()" style="padding:8px 20px;font-size:13px;cursor:pointer">🖨 Распечатать</button></div>' +
+    reportSaveBar_('Отчёт по кассе ' + periodLabel) +
     wm + '<div class="doc">' +
       (logo ? '<img src="' + logo + '" style="height:56px;display:block;margin:0 auto 6px">' : '') +
       '<h2>' + (brand.companyName || 'Касса') + '</h2>' +
@@ -2155,7 +2155,7 @@ function printKassa() {
     '<style>body{font-family:Arial;font-size:12px;margin:15mm;color:#111}h2{text-align:center;margin-bottom:2px}.period{text-align:center;color:#555;margin-bottom:12px}' +
     'table{width:100%;border-collapse:collapse;margin-bottom:12px}td,th{border:1px solid #ccc;padding:4px 7px}th{background:#f0f0f0;text-align:left}' +
     '.sum td{border:none;padding:2px 0}@media print{.no-print{display:none}}</style></head><body>' +
-    '<div class="no-print"><button onclick="window.print()">Печать</button></div>' +
+    reportSaveBar_('Отчёт кассы ' + periodLbl) +
     '<h2>КАССА (наличные)</h2><div class="period">' + (isR ? 'Период: ' : 'День: ') + periodLbl + '</div>' +
     '<table class="sum">' +
       '<tr><td>Было на начало ' + (isR ? 'периода' : 'дня') + '</td><td style="text-align:right"><b>' + f(k.opening) + '</b></td></tr>' +
@@ -7478,7 +7478,7 @@ function printFinanceReport() {
     '<style>body{font-family:Arial;font-size:12px;margin:15mm;color:#111}h2{text-align:center;margin-bottom:2px}.period{text-align:center;color:#555;margin-bottom:14px}' +
     'table{width:100%;border-collapse:collapse;margin-bottom:14px}td,th{border:1px solid #ccc;padding:4px 7px}th{background:#f0f0f0;text-align:left}h3{font-size:13px;margin:10px 0 4px}' +
     '@media print{.no-print{display:none}}</style></head><body>' +
-    '<div class="no-print"><button onclick="window.print()">Печать</button></div>' +
+    reportSaveBar_('Финансовый отчёт ' + (lbl || '')) +
     '<h2>ФИНАНСОВЫЙ ОТЧЁТ</h2><div class="period">' + (lbl || '') + '</div>' +
     '<h3>Прибыль</h3><table>' +
       row('Выручка', d.revenue) + '<tr><td colspan="2" style="color:#777">в т.ч. нал ' + f(d.revenueNal) + ' · безнал ' + f(d.revenueBeznal) + '</td></tr>' +
@@ -7811,7 +7811,7 @@ function printExpensesReport_() {
     'td,th{border:1px solid #000;padding:3px 6px;font-size:10pt}th{background:#eee}' +
     '@media print{.noprint{display:none}}' +
     '</style></head><body>' +
-    '<div class="noprint" style="text-align:right;margin:8px 14px"><button onclick="window.print()" style="padding:8px 20px;font-size:13px;cursor:pointer">🖨 Распечатать</button></div>' +
+    reportSaveBar_('Отчёт по расходам ' + periodLabel) +
     wm + '<div class="doc">' +
       (logo ? '<img src="' + logo + '" style="height:56px;display:block;margin:0 auto 6px">' : '') +
       '<h2>' + (brand.companyName || 'Расходы') + '</h2>' +
@@ -8710,7 +8710,7 @@ function printDDS() {
     'table{width:100%;border-collapse:collapse;margin:6px 0}td,th{border:1px solid #ccc;padding:3px 5px}' +
     'th{background:#f0f0f0}.pos{color:green}.neg{color:red}' +
     '@media print{.no-print{display:none}}</style></head><body>' +
-    '<div class="no-print"><button onclick="window.print()">Печать</button></div>' +
+    reportSaveBar_('ДДС — движение денежных средств') +
     '<h2>ДВИЖЕНИЕ ДЕНЕЖНЫХ СРЕДСТВ</h2>' +
     '<h3>Итого за период</h3>' +
     '<table><tr><td>Приход нал</td><td class="pos" style="text-align:right">' + fmt(s.totalNal) + '</td></tr>' +
@@ -8965,7 +8965,7 @@ function openSalarySlip_(empId) {
     '@media print{.no-print{display:none}body{padding:0}.pg{max-width:none}}' +
     '</style></head><body>' + watermark +
     '<div class="pg">' +
-      '<div class="no-print" style="text-align:right;margin-bottom:8px"><button onclick="window.print()" style="padding:8px 20px;cursor:pointer">🖨 Печать</button></div>' +
+      reportSaveBar_('Расчётный лист — ' + e.name + ' ' + period) +
       '<div class="hdr"><div><h1>Расчётный лист</h1><div class="sub">' + esc(company) + ' · период: ' + esc(period) + '</div></div>' +
         '<div style="text-align:right"><div class="emp">' + esc(e.name) + '</div><div class="pos">' + esc(e.position) + '</div></div></div>' +
       '<table class="sum">' +
@@ -9011,7 +9011,7 @@ function printSalary() {
     '.period{text-align:center;color:#555;font-size:11px;margin-bottom:10px}' +
     'table{width:100%;border-collapse:collapse}td,th{border:1px solid #ccc;padding:3px 5px}th{background:#f0f0f0}' +
     '@media print{.no-print{display:none}}</style></head><body>' +
-    '<div class="no-print"><button onclick="window.print()">Печать</button></div>' +
+    reportSaveBar_('Расчёт заработной платы') +
     '<h2>РАСЧЁТ ЗАРАБОТНОЙ ПЛАТЫ</h2>' +
     (lbl ? '<div class="period">Период: ' + lbl + '</div>' : '') +
     '<table><thead><tr><th>Сотрудник</th><th>Должность</th><th>Заказов</th><th>Оклад ½</th><th>Бонус (мен.)</th><th>Бонус (мастер)</th><th>Бонус (админ.)</th><th>ИТОГО</th></tr></thead>' +
@@ -10883,6 +10883,20 @@ function bonusBreakdownHtml_(o) {
 // service: '' | 'wrap' (оклейка) | 'tint' (тонировка) — для отдельных документов мультиуслуги.
 // Делает открытый документ РЕДАКТИРУЕМЫМ: весь текст можно править прямо во вкладке,
 // сверху — панель с кнопкой печати (она не попадает в печать). Правки видны при печати/сохранении в PDF.
+// Панель клиентских отчётов (расчётный лист, отчёт кассы и т.п.): кнопки «Скачать» + «Печать/PDF».
+// «Скачать» сохраняет самодостаточный HTML-файл (открывается и печатается в PDF в любом браузере).
+function reportSaveBar_(filename) {
+  var fn = JSON.stringify(String(filename || 'Документ'));
+  return '<div id="rpt-bar" class="no-print noprint" style="text-align:right;margin-bottom:8px">' +
+      '<button onclick="__rptSave()" style="padding:8px 16px;font-size:13px;cursor:pointer;margin-right:6px">💾 Скачать</button>' +
+      '<button onclick="window.print()" style="padding:8px 16px;font-size:13px;cursor:pointer">🖨 Печать / PDF</button>' +
+    '</div>' +
+    '<script>function __rptSave(){var t=' + fn + '.split("/").join("_").split(":").join("_");var bar=document.getElementById("rpt-bar");if(bar)bar.remove();' +
+      'var h="<!DOCTYPE html>"+document.documentElement.outerHTML;if(bar)document.body.insertBefore(bar,document.body.firstChild);' +
+      'var b=new Blob([h],{type:"text/html;charset=utf-8"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=t+".html";document.body.appendChild(a);a.click();' +
+      'setTimeout(function(){a.remove();URL.revokeObjectURL(a.href);},200);}<\/script>';
+}
+
 function makeDocEditable_(w) {
   try {
     var d = w.document;
@@ -10905,8 +10919,21 @@ function makeDocEditable_(w) {
       'font:600 13px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;' +
       'box-shadow:0 2px 10px rgba(0,0,0,.22)';
     bar.innerHTML =
-      '<span style="flex:1">✏️ Документ можно редактировать — правьте текст прямо здесь, затем печатайте.</span>' +
+      '<span style="flex:1">✏️ Документ можно редактировать — правьте текст прямо здесь, затем печатайте или сохраните.</span>' +
+      '<button onclick="__docSave()" style="background:#fff;color:#0ea5b7">💾 Скачать</button>' +
       '<button onclick="window.print()" style="background:#fff;color:#0ea5b7">🖨️ Печать / PDF</button>';
+
+    // Функция сохранения документа файлом (самодостаточный HTML — открывается и печатается в PDF)
+    var scr = d.createElement('script');
+    scr.textContent = 'function __docSave(){' +
+      'var t=(document.title||"Документ").split("/").join("_").split(":").join("_");' +
+      'var bar=document.querySelector(".doc-editbar");var mt=document.body.style.marginTop;var ce=document.body.getAttribute("contenteditable");' +
+      'if(bar)bar.remove();document.body.style.marginTop="";document.body.removeAttribute("contenteditable");' +
+      'var h="<!DOCTYPE html>"+document.documentElement.outerHTML;' +
+      'if(bar)document.body.insertBefore(bar,document.body.firstChild);document.body.style.marginTop=mt;if(ce)document.body.setAttribute("contenteditable",ce);' +
+      'var b=new Blob([h],{type:"text/html;charset=utf-8"});var a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=t+".html";document.body.appendChild(a);a.click();' +
+      'setTimeout(function(){a.remove();URL.revokeObjectURL(a.href);},200);}';
+    d.body.appendChild(scr);
 
     d.body.setAttribute('contenteditable', 'true');
     d.body.setAttribute('spellcheck', 'false');
