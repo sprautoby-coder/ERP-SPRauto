@@ -3718,22 +3718,27 @@ function loadOrders(force) {
     filterOrders();      // учитывает текущий фильтр/поиск
     loadOrdersKpi();
     if (cacheFresh_('orders')) return;   // свежий кэш — фоновую дозагрузку пропускаем
-  } else {
+  } else if (!hasCache) {
     tbody.innerHTML = '<tr><td colspan="11" class="ct-loading"><div class="kpi-skeleton" style="min-height:48px;margin:4px 0"></div><div class="kpi-skeleton" style="min-height:48px;margin:4px 0"></div></td></tr>';
   }
 
+  if (App._ordersLoading) return;   // запрос уже в пути — не спамим сервер (иначе тормозит)
+  App._ordersLoading = true;
   google.script.run
     .withSuccessHandler(function(resp) {
+      App._ordersLoading = false;
       if (!resp || !resp.ok) {
         if (!hasCache) { if (err) { err.style.display='flex'; document.getElementById('orders-error-text').textContent = resp ? resp.error : 'Нет ответа'; } tbody.innerHTML = ''; }
         return;
       }
       App.orders = resp.data || [];
       markLoaded_('orders');
-      filterOrders();
+      if (App.orders.length) filterOrders();   // есть данные — обычная фильтрация/отрисовка
+      else renderOrdersTable([]);              // реально пусто — «не найдено», без повторной filterOrders (иначе петля)
       loadOrdersKpi();
     })
     .withFailureHandler(function(e) {
+      App._ordersLoading = false;
       if (!hasCache) { if (err) { err.style.display='flex'; document.getElementById('orders-error-text').textContent = e.message; } tbody.innerHTML = ''; }
     })
     .getOrders({});
@@ -3878,13 +3883,15 @@ function orderMatchesSvcFilter_(o){
   return sel.some(function(s){ return tokens.indexOf(s) >= 0; });
 }
 
-// Ввод в поиске: фильтруем; если заказов в памяти нет (сброс кэша/ошибка загрузки) — подгружаем с сервера
-function onOrdersSearch_() {
-  filterOrders();
-  if (!App.orders || !App.orders.length) loadOrders(true);
-}
+// Ввод в поиске просто фильтрует (загрузку при пустом кэше инициирует сам filterOrders)
+function onOrdersSearch_() { filterOrders(); }
 
 function filterOrders() {
+  // Заказов в памяти нет (сброс кэша мутацией/ошибка) → подгружаем и ждём (без спама и петли)
+  if ((!App.orders || !App.orders.length) && App.currentPage === 'orders') {
+    if (!App._ordersLoading) loadOrders(true);   // guard внутри loadOrders не даст дублей
+    return;
+  }
   var search  = (document.getElementById('orders-search')         || {}).value || '';
   var range   = getPeriodRangeFromUI('ord');   // {from,to} ISO или пусто (Всё время)
   var fromMs  = range.from ? new Date(range.from).getTime() : null;
@@ -8893,9 +8900,23 @@ function renderBonusAudit_(data) {
 }
 
 // Имя для обращения (ФИО → Имя, второе слово)
+// Распространённые имена — чтобы взять именно ИМЯ независимо от порядка (Фамилия Имя Отчество ИЛИ Имя Фамилия)
+var COMMON_FIRST_NAMES_ = (function(){
+  var m = {};
+  ('александр алексей анатолий андрей антон аркадий артём артем богдан борис вадим валентин валерий василий виктор виталий владимир владислав вячеслав геннадий георгий григорий даниил денис дмитрий евгений егор иван игорь илья кирилл константин леонид максим марк матвей михаил никита николай олег павел пётр петр роман руслан сергей станислав степан тимофей тимур фёдор федор эдуард юрий ярослав ' +
+   'анна алёна алена алина алла анастасия ангелина валентина валерия вера вероника виктория галина дарья диана евгения екатерина елена елизавета жанна инна ирина карина кристина ксения лариса лидия любовь людмила маргарита марина мария надежда наталья наталия нина оксана ольга полина раиса светлана снежана софия софья таисия тамара татьяна ульяна юлия яна ' +
+   'саня саша леха лёха женя').split(/\s+/).forEach(function(n){ if(n) m[n]=1; });
+  return m;
+})();
+
 function getFirstName_(fullName) {
-  var parts = String(fullName || '').trim().split(/\s+/);
-  return parts.length >= 2 ? parts[1] : (parts[0] || 'коллега');
+  var parts = String(fullName || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return 'коллега';
+  // Приоритет — реально известное имя (обычно второе слово «Фамилия Имя Отчество», но бывает и первым)
+  for (var i = 0; i < parts.length; i++) {
+    if (COMMON_FIRST_NAMES_[parts[i].toLowerCase()]) return parts[i];
+  }
+  return parts.length >= 2 ? parts[1] : parts[0];   // запасной вариант — второе слово (стандарт Фамилия Имя)
 }
 
 // Печатный расчётный лист сотрудника: разбивка ЗП, все заказы с затратами, водяной знак, благодарность
