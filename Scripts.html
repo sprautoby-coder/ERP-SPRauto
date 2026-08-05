@@ -10564,9 +10564,18 @@ function toggleAddServiceMenu_(ev) {
 function closeAddSvcMenu_(){ var m = document.getElementById('card-add-svc-menu'); if (m) m.style.display = 'none'; document.removeEventListener('click', closeAddSvcMenu_); }
 function addOrderService(orderId, name) {
   var o = App._currentOrder; if (!o) return;
-  var cur = String(o['Услуга'] || '').split(',').map(function(s){ return s.trim(); }).filter(Boolean);
+  var before = String(o['Услуга'] || '');
+  var cur = before.split(',').map(function(s){ return s.trim(); }).filter(Boolean);
   if (cur.indexOf(name) < 0) cur.push(name);
-  saveOrderServices_(orderId, cur.join(', '));
+  // Новая услуга добавляется с ценой 0, а существующая сохраняет всю текущую сумму.
+  var total = Number(o['Стоимость заказа']) || 0;
+  var addingTint = svcHasTint_(name), addingWrap = svcHasOkl_(name);
+  var wasTintOnly = svcHasTint_(before) && !svcHasOkl_(before);
+  var wasWrapOnly = svcHasOkl_(before) && !svcHasTint_(before);
+  var extra = {};
+  if (wasTintOnly && addingWrap && !addingTint)      { extra.tintPrice = total; extra.wrapPrice = 0; }  // была тонировка → она и остаётся на всю сумму, оклейка = 0
+  else if (wasWrapOnly && addingTint && !addingWrap) { extra.wrapPrice = total; extra.tintPrice = 0; }  // была оклейка → остаётся, тонировка = 0
+  saveOrderServices_(orderId, cur.join(', '), extra);
 }
 function removeOrderService(orderId, name) {
   var o = App._currentOrder; if (!o) return;
@@ -10575,8 +10584,13 @@ function removeOrderService(orderId, name) {
   if (!cur.length) { toast('В заказе должна остаться хотя бы одна услуга', 'error'); return; }
   saveOrderServices_(orderId, cur.join(', '));
 }
-function saveOrderServices_(orderId, servicesStr) {
+function saveOrderServices_(orderId, servicesStr, extra) {
   var o = App._currentOrder; if (o) o['Услуга'] = servicesStr;   // оптимистично
+  var payload = { services: servicesStr };
+  if (extra) {
+    if (extra.tintPrice !== undefined) payload.tintPrice = extra.tintPrice;
+    if (extra.wrapPrice !== undefined) payload.wrapPrice = extra.wrapPrice;
+  }
   google.script.run
     .withSuccessHandler(function(resp){
       if (!resp || !resp.ok) { toast('Ошибка: ' + (resp?resp.error:''), 'error'); return; }
@@ -10585,7 +10599,7 @@ function saveOrderServices_(orderId, servicesStr) {
       reopenCard(orderId);
     })
     .withFailureHandler(function(e){ toast('Ошибка: ' + e.message, 'error'); })
-    .updateOrder(orderId, { services: servicesStr });
+    .updateOrder(orderId, payload);
 }
 
 function infoLine_(label, value) {
