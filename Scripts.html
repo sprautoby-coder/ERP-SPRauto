@@ -9396,8 +9396,8 @@ function renderOrderCard(order) {
               finBox_('Остаток', fmt(remaining), remaining>0?'var(--danger)':'var(--success)') +
             '</div>' +
             payBreakdown +
-            (showPaySchedule
-              ? '<div style="font-size:11px;color:var(--text3);margin:4px 0;font-weight:600;text-transform:uppercase;letter-spacing:.05em">История платежей</div>' + payHistory
+            ((order.payments && order.payments.length)
+              ? '<div style="font-size:11px;color:var(--text3);margin:8px 0 4px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">История платежей</div>' + payHistory
               : '') +
           '</div>' +
         '</div>' +

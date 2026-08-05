@@ -756,6 +756,12 @@ function updateOrder(id, payload) {
         setCell('Маржинальная прибыль', financeResult.marginalProfit);
       }
 
+      // Изменилась сумма заказа (правка цены / добавление услуги) → пересчитываем статус оплаты
+      // и остаток: если оплачено меньше новой суммы — появляется долг и кнопка «Принять оплату».
+      if (payload.price !== undefined || payload.wrapPrice !== undefined || payload.tintPrice !== undefined) {
+        try { updateOrderPaymentStatus_(id); } catch (e) {}
+      }
+
       setCell('Обновлён', nowStr);
       logActivity('Редактировал', 'Заказ', id, '', '');
       return { id: id, finance: financeResult };
